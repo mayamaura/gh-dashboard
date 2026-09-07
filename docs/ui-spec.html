@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UI 仕様 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>UI 仕様</h1>
+<p class="lede">2 タブの画面構成と、各要素が何を表示し何を断定しないか。要求 5.9 / 6.3 / 6.9 の実装形。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/ui-spec.md</code></span></div>
+<h2 id="0.-全体の原則">0. 全体の原則</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>原則</th><th>実装への影響</th></tr></thead>
+<tbody>
+<tr><td><strong>推測を事実として見せない</strong></td><td>推定値・フォールバック照合・区別できない状態には必ずラベルを出す (NFR-40〜42)</td></tr>
+<tr><td><strong>取れないものは「取れない」と出す</strong></td><td>0% のゲージや空欄で埋めない。「何をすれば取れるか」を添える (FR-C-83)</td></tr>
+<tr><td><strong>画面を見ていないときのコストをゼロにする</strong></td><td>タブ離脱・最小化ですべてのタイマーが止まる (NFR-12)</td></tr>
+<tr><td><strong>タブ切替で進行中の処理が「消えて」見えない</strong></td><td>進行状態は <code>appStore</code> に置く (FR-C-161)</td></tr>
+<tr><td><strong>切替時は即描画してから裏で最新化</strong></td><td>スナップショットキャッシュ (FR-C-164 / FR-P-86)</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="1.-シェル">1. シェル</h2>
+<div class="ascii">┌──────────────────────────────────────────────────────────────┐
+│ [ Copilot ] [ プロジェクト ]        最終インデックス: 12 秒前   │
+│                                     利用枠: SDK / 2 分前  [更新] │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│                        タブの中身                              │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘</div>
+<p>ヘッダーの内容はタブごとに変わる。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>タブ</th><th>ヘッダー</th></tr></thead>
+<tbody>
+<tr><td>Copilot</td><td>最終インデックス (相対時刻) / 利用枠の取得経路と最終取得時刻 / 更新ボタン (FR-C-160)</td></tr>
+<tr><td>プロジェクト</td><td>最終スキャン (相対時刻) / すべて停止 / 更新 (FR-P-85)</td></tr>
+</tbody></table></div>
+<p>「インデックス中」バッジは<strong>手動更新のときだけ</strong>出す。自動実行では出さず、「最終インデックス: N 秒前」の更新を鮮度の保証とする (FR-C-60)。10 秒ごとの点滅は視覚ノイズになる。</p>
+<hr />
+<h2 id="2.-copilot-タブ">2. Copilot タブ</h2>
+<div class="ascii">┌─ 稼働サマリー ────────────────────────────────────────────┐
+│  稼働中セッション 3   稼働中サブエージェント 5   IDE 2        │  FR-C-61
+└──────────────────────────────────────────────────────────┘
+
+┌─ 利用枠 ──────────────────────────────────────────────────┐
+│  月次 AI Credits   ████████░░░░  $6.20 / $10.00 (62%)  実値  │  FR-C-89
+│  Premium quota     ██████████░░  820 / 1000 (82%)  実値       │
+│  コンテキスト       ███░░░░░░░░░  38%                実値      │
+│  ※ 金額は概算。請求額の正は GitHub の課金画面       2 分前     │  NFR-45 / FR-C-87
+└──────────────────────────────────────────────────────────┘
+
+┌─ 本日の使用状況 ───────────────────────────────────────────┐
+│  入出力 128k / キャッシュ読込 2.1M / ターン 84 / 3.2 credits  │  FR-C-100
+│  ▁▂▃▅▇▅▃▂▁  時間帯別 (入出力のみ)                            │  FR-C-101
+│  上位フォルダ: gh-dashboard 62% / notes 21% / ...              │  FR-C-102
+└──────────────────────────────────────────────────────────┘
+
+┌─ 稼働中セッション ─────────────────────────────────────────┐
+│ ● gh-dashboard  [CLI]  差分インデックスの実装                  │
+│   生成中 · claude-opus · 12 分 · 3 秒前 · ctx 38% · 0.42 cr   │
+│   ▸ サブエージェント 2                                        │  FR-C-53
+└──────────────────────────────────────────────────────────┘
+
+┌─ セッション履歴 ───────────────────────────────────────────┐
+│ [検索________]  □ サブエージェントを使ったもののみ             │  FR-C-110/111
+│ ...                                                          │
+└──────────────────────────────────────────────────────────┘</div>
+<h3 id="2.1-利用枠ゲージ-fr-c-80-95">2.1 利用枠ゲージ (FR-C-80〜95)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>要素</th><th>規則</th></tr></thead>
+<tbody>
+<tr><td>出所ラベル</td><td><code>実値</code> / <code>推定</code> / <code>取得不可</code> を<strong>必ず</strong>出す (FR-C-81)</td></tr>
+<tr><td>「推定」の説明</td><td>「過去実績との相対値であり、提供元が課金している実際の消費率ではない」を添える (FR-C-82)</td></tr>
+<tr><td>「取得不可」</td><td>何をすれば取れるか (認証が必要 / SDK が見つからない / 対象プランでない) を出す (FR-C-83)</td></tr>
+<tr><td>金額</td><td>率だけでなく額も併記 (<code>$6.20 / $10.00 (62%)</code>) (FR-C-89)</td></tr>
+<tr><td>超過</td><td><strong>100% でクランプしない。</strong>超過額を別建てで明示 (FR-C-90)</td></tr>
+<tr><td>無制限</td><td><code>entitlement = -1</code> は率ではなく「無制限」(FR-C-131)</td></tr>
+<tr><td>色</td><td>90% 以上 = 危険 / 70% 以上 = 警告 / それ未満 = 通常 (FR-C-88)</td></tr>
+<tr><td>鮮度</td><td>観測からの経過時間を表示。15 分超で警告色 (FR-C-87)</td></tr>
+<tr><td>リセット</td><td>月次は日付、短期は残り時間 (FR-C-91)</td></tr>
+</tbody></table></div>
+<p><strong>枠ごとに独立して評価する。</strong>ある枠が実値でも、取れなかった別の枠に推定を混ぜない (FR-C-84)。</p>
+<h3 id="2.2-セッションカード-fr-c-53">2.2 セッションカード (FR-C-53)</h3>
+<p>出す情報: フォルダ名 / エントリポイントバッジ / タイトル / 活動状態ドット / モデル名 / 稼働時間 / 最終活動 (相対時刻) / コンテキストウィンドウ使用率 / セッション消費クレジット / サブエージェント数バッジ。</p>
+<p>活動状態の 5 値と表示:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>値</th><th>ドット</th><th>文言</th><th>補足</th></tr></thead>
+<tbody>
+<tr><td><code>generating</code></td><td>動</td><td>生成中</td><td></td></tr>
+<tr><td><code>tool_running</code></td><td>動</td><td><strong>ツール実行中</strong></td><td><strong>「許可待ちかもしれない」はツールチップに書く。文言で断定しない (FR-C-46 / NFR-42)</strong></td></tr>
+<tr><td><code>waiting_input</code></td><td>静</td><td>入力待ち</td><td></td></tr>
+<tr><td><code>subagent_running</code></td><td>動</td><td>サブエージェント実行中</td><td></td></tr>
+<tr><td><code>unknown</code></td><td>静</td><td>不明</td><td>空欄にしない</td></tr>
+</tbody></table></div>
+<div class="table-wrap"><table>
+<thead><tr><th>規則</th><th>詳細</th></tr></thead>
+<tbody>
+<tr><td>タイトルのフォールバック</td><td>インデックス済みタイトル → セッションストア / 状態ファイル由来の名前 (FR-C-54)</td></tr>
+<tr><td>30 分以上アイドル</td><td>既定で非表示。トグルで表示 (FR-C-55)</td></tr>
+<tr><td>「指示を出したら再表示」</td><td><strong>状態を持たない。</strong>最終活動時刻の判定が自然に戻ることで満たす (FR-C-55)</td></tr>
+<tr><td>展開</td><td>インラインで系統図。<strong>サブエージェント稼働中は自動展開</strong> (FR-C-56)</td></tr>
+<tr><td>自動展開の抑止</td><td>手動で閉じた場合と取得に失敗した場合。<strong>抑止が無いと 2 秒ループになる</strong> (FR-C-56)</td></tr>
+<tr><td>未インデックス</td><td>「まだ記録がありません」と穏やかに表示。<strong>赤いエラーを出さない</strong> (FR-C-57)</td></tr>
+<tr><td>サブエージェント数</td><td><strong>ライブ集合の length。</strong>別カウントを持たない (FR-C-51)</td></tr>
+</tbody></table></div>
+<h3 id="2.3-系統図とガント-fr-c-112-118">2.3 系統図とガント (FR-C-112〜118)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>規則</th><th>詳細</th></tr></thead>
+<tbody>
+<tr><td>木の構築</td><td><code>parent_agent_id</code> を辿る。<strong>孤児はルート直下。循環をガード</strong> (FR-C-113)</td></tr>
+<tr><td>深さ</td><td>生データの <code>depth</code> を信じない (FR-C-114)</td></tr>
+<tr><td>行の並び</td><td><strong>系統図とガントで同じ木構築結果を使う</strong> (FR-C-114)</td></tr>
+<tr><td>ライブ側の稼働判定</td><td><strong>ライブ集合を優先。</strong>照合できない行 (拒否済み・メタ未読) は DB の状態にフォールバック (FR-C-115)</td></tr>
+<tr><td>ライブ側の折りたたみ</td><td>完了したエージェントを各階層で 1 行に畳む。<strong>稼働中の子孫を持つノードは畳まない (祖先保護)</strong> (FR-C-116)</td></tr>
+<tr><td>稼働中が 0 件のとき</td><td>折りたたみは維持し「稼働中のエージェントはありません」と明示 (FR-C-116)</td></tr>
+<tr><td>振り返り側</td><td><strong>全件表示</strong> (ライブ集合を渡さない限り表示が変わらない設計) (FR-C-117)</td></tr>
+<tr><td>ガントの横軸</td><td>セッションの開始〜終了 (稼働中なら現在時刻)。利用枠到達イベントを縦マーカーで重畳 (FR-C-118)</td></tr>
+<tr><td>mtime 由来の遅れ</td><td>最大 N 秒の遅れがあることを既知の制約として受け入れ、<strong>UI で断定しない</strong> (FR-C-52)</td></tr>
+</tbody></table></div>
+<h3 id="2.4-本文ビューア-fr-c-119-120">2.4 本文ビューア (FR-C-119/120)</h3>
+<ul>
+<li>タイムライン上限 1000 件。初期 150 件、「もっと見る」で 150 件ずつ</li>
+<li><strong>行クリックでその 1 レコードだけをシーク読み</strong>して整形表示</li>
+<li>上限 512KB。オフセットがファイル範囲外なら「インデックスを再実行してください」と案内</li>
+<li>系統図・ガント・ビューアの選択とホバーを相互連動 (FR-C-121)</li>
+</ul>
+<hr />
+<h2 id="3.-プロジェクトタブ">3. プロジェクトタブ</h2>
+<div class="ascii">┌─ [検索____] 種別▾ □非表示も □アーカイブ隠す □起動中のみ ──────┐
+│                     最終スキャン: 3 分前  [すべて停止] [更新]    │
+├──────────────────────────────────────────────────────────────┤
+│ ● ◆ gh-dashboard        main ● Tauri   3 分前  http://…:5173  ⏹ ⋮│
+│ ○   notes-app  [非表示]  dev    Next.js  昨日   npm run dev   ▶ ⋮│
+│ ○   old-thing  [アーカイブ]  —  その他   —      起動不可       ⋮│
+├──────────────────────────────────────────────────────────────┤
+│ 詳細パネル                                                     │
+└──────────────────────────────────────────────────────────────┘</div>
+<p>2 ペイン構成 (一覧 + 詳細)。<strong>絞り込みはすべてフロント側で完結</strong>させ、バックエンドに再問い合わせしない (FR-P-81)。</p>
+<h3 id="3.1-一覧行-fr-p-83">3.1 一覧行 (FR-P-83)</h3>
+<p>出す情報: dev 状態ドット / Copilot 稼働中バッジ / 表示名 (+ 非表示・アーカイブバッジ) / git ブランチと未コミット変更ドット / 種別 / 最終利用日時 (相対表示) / 稼働中の URL または起動コマンド / 起動・停止ボタン / 外部ツールメニュー。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>規則</th><th>詳細</th></tr></thead>
+<tbody>
+<tr><td>並べ替え</td><td>最終利用日時 (既定。<strong>履歴なしは末尾に沈める</strong>) / 名前 / 種別。同率は表示名昇順 (FR-P-82)</td></tr>
+<tr><td>種別「その他」</td><td><strong>一覧から隠さない</strong> (FR-P-13)</td></tr>
+<tr><td>起動不可</td><td>隠さず、ボタンを無効化して<strong>理由を表示</strong> (FR-P-22)</td></tr>
+<tr><td>行内メニュー</td><td>クリック位置から座標計算して固定配置で描く。<strong>横スクロールコンテナの overflow クリッピングを避ける</strong> (FR-P-88)</td></tr>
+</tbody></table></div>
+<h3 id="3.2-詳細パネル-fr-p-84">3.2 詳細パネル (FR-P-84)</h3>
+<p>パス / 種別 / 作業ディレクトリ / 起動コマンド候補 / 外部ツールボタン列 / dev サーバー状態と操作とログ / git 状態 / Copilot 利用状況 / 起動不可の理由 / 手動調整フォーム。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>要素</th><th>規則</th></tr></thead>
+<tbody>
+<tr><td>dev 状態</td><td><code>停止中 / 起動中 / 稼働中(URL, PID, 開始時刻) / 終了(終了コード) / 失敗(理由)</code> の 5 状態 (FR-P-60)</td></tr>
+<tr><td>ログ</td><td>メモリ上 500 行のみ。200〜300ms バッファで流れてくる (FR-P-64/65)</td></tr>
+<tr><td>git</td><td><code>.git</code> が無ければ「git 情報なし」。detached HEAD はブランチ名なし (FR-P-41/42)</td></tr>
+<tr><td>Copilot 利用状況</td><td>履歴が無ければ<strong>セクションごと出さない。</strong>空欄で埋めない (FR-P-58)</td></tr>
+<tr><td>フォールバック照合</td><td><strong>「旧パスの履歴 (フォルダ名で照合)」と明示する</strong> (FR-P-53 / NFR-41)</td></tr>
+<tr><td>手動調整</td><td>表示名 / 起動コマンド上書き / 作業ディレクトリ上書き / 並び順 / 非表示 / アーカイブ (FR-P-30)</td></tr>
+<tr><td>作業ディレクトリ上書き</td><td>保存時に実在検証。通らなければ<strong>拒否して保存しない</strong> (FR-P-32)</td></tr>
+</tbody></table></div>
+<h3 id="3.3-外部ツール-fr-p-70">3.3 外部ツール (FR-P-70)</h3>
+<p>VS Code で開く / エクスプローラーで開く / ターミナルで開く / Copilot CLI をそのディレクトリで起動 / (稼働中かつ URL 検出済みなら) ブラウザで開く。</p>
+<p>失敗時は「PATH に無い」等の<strong>具体的な対処</strong>を案内する (FR-P-73)。</p>
+<hr />
+<h2 id="4.-更新と鮮度">4. 更新と鮮度</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>タブ</th><th>定期処理</th></tr></thead>
+<tbody>
+<tr><td>Copilot</td><td>2 秒: <code>live_status_get</code> のみ / 10 秒下限: 未取り込みがあれば自動インデックス / 5 分以上: 利用枠</td></tr>
+<tr><td>プロジェクト</td><td><strong>なし。</strong>ユーザー操作駆動のみ</td></tr>
+</tbody></table></div>
+<p><strong>すべてタブ表示中かつウィンドウ非最小化のときだけ動く</strong> (FR-C-41/43 / NFR-12)。</p>
+<hr />
+<h2 id="5.-アニメーション-fr-c-162-163">5. アニメーション (FR-C-162/163)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>設定</th><th>挙動</th></tr></thead>
+<tbody>
+<tr><td><code>自動</code> (既定)</td><td>OS の「動きを減らす」設定 (<code>prefers-reduced-motion</code>) に追随</td></tr>
+<tr><td><code>入</code></td><td>常に有効</td></tr>
+<tr><td><code>切</code></td><td>常に無効</td></tr>
+</tbody></table></div>
+<p>設定は永続化する。アニメーションは <code>transform</code> / <code>opacity</code> / <code>stroke-dashoffset</code> / <code>filter</code> に限定 (GPU 合成される)。常時稼働時の UI プロセスの CPU 増分は 1 コア換算 +2 ポイント以内 (NFR-05)。</p>
+<hr />
+<h2 id="6.-文言のルール">6. 文言のルール</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>状況</th><th>使う</th><th>使わない</th></tr></thead>
+<tbody>
+<tr><td>ツール実行中か許可待ちか不明</td><td>「ツール実行中」</td><td>「許可待ち」「応答待ち」(断定)</td></tr>
+<tr><td>フォルダ名で照合した履歴</td><td>「旧パスの履歴 (フォルダ名で照合)」</td><td>何も書かない</td></tr>
+<tr><td>推定した消費率</td><td>「推定 (過去実績比)」</td><td>「62%」だけ</td></tr>
+<tr><td>取得できなかった</td><td>「取得できませんでした — 認証が必要です」</td><td>「0%」「—」だけ</td></tr>
+<tr><td>保持されているセッション数</td><td>「保持されているセッション 128 件」</td><td>「累計セッション 128 件」(NFR-44)</td></tr>
+<tr><td>集計から除外があった</td><td>「12 件を読み飛ばしました」</td><td>無言で欠落 (NFR-43)</td></tr>
+<tr><td>金額</td><td>「$6.20 (概算)」+ 注記</td><td>「$6.20」だけ (NFR-45)</td></tr>
+</tbody></table></div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>用語集 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>用語集</h1>
+<p class="lede">要求仕様 3 章の用語に、実装で使う語を足したもの。<strong>同じものを別の名前で呼ばない</strong>ための表。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/glossary.md</code></span></div>
+<h2 id="1.-copilot-側の概念">1. Copilot 側の概念</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>用語</th><th>定義</th><th>コード上の名前</th></tr></thead>
+<tbody>
+<tr><td><strong>セッション</strong></td><td>Copilot の 1 回の対話セッション。一意な session id を持つ</td><td><code>session_id</code></td></tr>
+<tr><td><strong>エントリポイント</strong></td><td>セッションを起動した経路</td><td><code>entrypoint</code>: <code>cli_interactive</code> / <code>cli_background</code> / <code>vscode</code> / <code>coding_agent</code> / <code>unknown</code></td></tr>
+<tr><td><strong>サブエージェント実行</strong></td><td>セッションが起動した下位エージェント・委任タスクの 1 実行。親子関係を持ち N 段の木を成す</td><td><code>subagent_runs</code> の 1 行</td></tr>
+<tr><td><strong>ターン (レコード)</strong></td><td>セッションログの 1 行 = 1 イベント</td><td><code>turn_index</code> の 1 行</td></tr>
+<tr><td><strong>トランスクリプト</strong></td><td>セッションの発話・ツール呼び出し・ツール出力が記録された JSONL 形式のログ</td><td><code>events.jsonl</code></td></tr>
+<tr><td><strong>AI Credit</strong></td><td>Copilot の従量課金の単位。トークン消費 × モデル別レートで消費される</td><td><code>credits</code></td></tr>
+<tr><td><strong>nano-AIU</strong></td><td>Copilot SDK がコストを報告する単位。<strong>10⁹ で割ると AI Credit</strong></td><td><code>nano_aiu</code> / <code>total_nano_aiu</code></td></tr>
+<tr><td><strong>クォータ</strong></td><td>プラン契約に含まれる利用枠。SDK の <code>account.getQuota</code> が返す <code>quotaSnapshots</code> の単位</td><td><code>QuotaGauge.kind</code></td></tr>
+<tr><td><strong>コンテキストウィンドウ</strong></td><td>1 セッションが保持できるトークンの上限</td><td><code>context_used</code> / <code>context_limit</code></td></tr>
+<tr><td><strong>利用枠到達イベント</strong></td><td>クレジット枯渇・レート制限・セッション上限に達した記録</td><td><code>quota_events</code></td></tr>
+</tbody></table></div>
+<h2 id="2.-プロジェクト側の概念">2. プロジェクト側の概念</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>用語</th><th>定義</th><th>コード上の名前</th></tr></thead>
+<tbody>
+<tr><td><strong><code>path_key</code></strong></td><td>正規化済みパス (小文字化 + 区切りを `` に統一 + 末尾区切り除去)。<strong>プロジェクトの一意キー</strong></td><td><code>path_key</code></td></tr>
+<tr><td><strong><code>root_path</code></strong></td><td>プロジェクトのルート。<strong>git の判定対象はこちら</strong> (FR-P-44)</td><td><code>root_path</code></td></tr>
+<tr><td><strong><code>working_dir</code></strong></td><td>起動コマンドを実行するディレクトリ。ルートと異なることがある (FR-P-12)</td><td><code>working_dir</code></td></tr>
+<tr><td><strong>種別</strong></td><td>マニフェストの存在有無だけで決まるプロジェクト分類</td><td><code>ProjectKind</code></td></tr>
+<tr><td><strong>手動調整 (override)</strong></td><td>表示名 / 起動コマンド / 作業ディレクトリ / 並び順 / 非表示 / アーカイブ の上書き</td><td><code>project_overrides</code></td></tr>
+<tr><td><strong>スキャン対象フォルダ</strong></td><td>直下 1 階層を走査する対象。ユーザーが登録する</td><td><code>project_scan_folders</code></td></tr>
+<tr><td><strong>dev サーバー</strong></td><td>プロジェクトの開発サーバー。本アプリが起動 / 停止する唯一のプロセス</td><td><code>DevState</code></td></tr>
+<tr><td><strong>フォルダ名フォールバック</strong></td><td>完全一致が無いとき、3 条件すべて成立時に限りフォルダ名で履歴を照合する仕組み</td><td><code>matched_by: 'folder_name_fallback'</code></td></tr>
+</tbody></table></div>
+<h2 id="3.-実装用語">3. 実装用語</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>用語</th><th>定義</th></tr></thead>
+<tbody>
+<tr><td><strong>差分インデックス</strong></td><td>ファイルの記録済みバイトオフセット以降だけをパースする仕組み。系統 (2)</td></tr>
+<tr><td><strong>ライブ監視</strong></td><td>2 秒ポーリングで稼働状況だけを見る仕組み。系統 (1)。<strong>永続化しない</strong></td></tr>
+<tr><td><strong>利用枠取得</strong></td><td>SDK / REST から枠を取る仕組み。系統 (3)。<strong>唯一ネットワークを使う</strong></td></tr>
+<tr><td><strong>末尾断片</strong></td><td>改行で終わらない書きかけの最終行。確定分から除外する (FR-C-05)</td></tr>
+<tr><td><strong>全再パース</strong></td><td>ファイルサイズが記録より小さくなったときの、先頭からのやり直し (FR-C-06)</td></tr>
+<tr><td><strong>観測時刻 (<code>observed_at</code>)</strong></td><td><strong>値が変化したときだけ更新される時刻。</strong>鮮度判定はこれを使う (FR-C-86)</td></tr>
+<tr><td><strong>取得時刻 (<code>received_at</code>)</strong></td><td>取得しに行った時刻。<strong>鮮度判定に使ってはいけない</strong></td></tr>
+<tr><td><strong>出所 (source)</strong></td><td>値がどこから来たか。<code>実値 (sdk/rest)</code> / <code>推定</code> / <code>取得不可</code> の 3 状態</td></tr>
+<tr><td><strong>降格</strong></td><td>利用枠の取得経路を A → B → C と落としていくこと</td></tr>
+<tr><td><strong>祖先保護</strong></td><td>折りたたみ時に、稼働中の子孫を持つノードを畳まない規則 (FR-C-116)</td></tr>
+<tr><td><strong>孤児</strong></td><td>親が見つからないサブエージェント行。<strong>捨てずにルート直下に置く</strong> (FR-C-113)</td></tr>
+<tr><td><strong>スナップショット</strong></td><td>ある時点の状態一式。タブ切替時の即描画に使う (FR-C-164)</td></tr>
+<tr><td><strong>プローブ</strong></td><td>実データ・実 API に対して数字を出すだけの読み取り専用スクリプト (NFR-52)</td></tr>
+</tbody></table></div>
+<h2 id="4.-紛らわしい対の区別">4. 紛らわしい対の区別</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>A</th><th>B</th><th>違い</th></tr></thead>
+<tbody>
+<tr><td><strong>拒否 (<code>declined</code>)</strong></td><td><strong>失敗 (<code>completed</code>)</strong></td><td>親が呼び出しを拒否した / 実際に起動して終わった (FR-C-27)</td></tr>
+<tr><td><strong>暫定応答</strong></td><td><strong>完了通知</strong></td><td>「起動しました」という即時の返り / 本当の終了通知。<strong>暫定を完了扱いしない</strong> (FR-C-24)</td></tr>
+<tr><td><strong><code>root_path</code></strong></td><td><strong><code>working_dir</code></strong></td><td>git を見る場所 / コマンドを実行する場所 (FR-P-44 / FR-P-12)</td></tr>
+<tr><td><strong><code>received_at</code></strong></td><td><strong><code>observed_at</code></strong></td><td>取りに行った時刻 / 値が変わった時刻。<strong>鮮度は後者</strong> (FR-C-86)</td></tr>
+<tr><td><strong>実値</strong></td><td><strong>推定</strong></td><td>SDK / API 由来 / 過去実績との相対値。<strong>同じ枠で混ぜない</strong> (FR-C-84)</td></tr>
+<tr><td><strong>ツール実行中</strong></td><td><strong>許可待ち</strong></td><td><strong>区別できない。</strong>UI で断定しない (FR-C-46)</td></tr>
+<tr><td><strong>累計セッション数</strong></td><td><strong>保持されているセッション数</strong></td><td>前者は自動削除があると原理的に取れない (NFR-44)</td></tr>
+<tr><td><strong>稼働中サブエージェントの集合</strong></td><td><strong>その件数</strong></td><td><strong>集合が正。件数は length で導出する</strong> (FR-C-51)</td></tr>
+<tr><td><strong>非表示 (hidden)</strong></td><td><strong>アーカイブ (archived)</strong></td><td>一覧から隠す / 終わったものとして畳む。別のフラグ</td></tr>
+</tbody></table></div>
+<h2 id="5.-使わない言葉">5. 使わない言葉</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>使わない</th><th>理由</th><th>代わりに</th></tr></thead>
+<tbody>
+<tr><td>「同期する」</td><td>Copilot 側へ書き込む印象を与える。<strong>読み取り専用が不変条件</strong></td><td>「読み込む」「インデックスする」</td></tr>
+<tr><td>「キャッシュを更新」 (利用枠について)</td><td>鮮度の主語が取得時刻に見える</td><td>「観測を更新」</td></tr>
+<tr><td>「エラー」 (未インデックスのセッションについて)</td><td>正常系である (FR-C-57)</td><td>「まだ記録がありません」</td></tr>
+<tr><td>「累計」 (セッション数について)</td><td>取得できない可能性がある (NFR-44)</td><td>「保持されている」</td></tr>
+<tr><td>「消費率」だけの表示</td><td>従量課金では額が判断単位 (FR-C-89)</td><td>「率 + 額」</td></tr>
+</tbody></table></div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

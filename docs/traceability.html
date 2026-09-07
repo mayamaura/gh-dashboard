@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>要求トレーサビリティ | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>要求トレーサビリティ</h1>
+<p class="lede">要求 ID → 実装モジュール → テスト の対応表。タスクを完了したらここを埋める。空欄は「まだ実装されていない」という意味であって、「対応不要」ではない。</p>
+<div class="doc-meta"><span>進行中</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/traceability.md</code></span></div>
+<h2 id="使い方">使い方</h2>
+<ul>
+<li>実装したら「実装」列にファイルを、「テスト」列にテスト名を書く</li>
+<li><strong>要求を実装しないと決めたら、空欄のままにせず「見送り (理由)」と書く</strong></li>
+<li>新しい要求 ID が増えたら行を足す。<strong>削除した ID は再利用しない</strong> (要求 0.1)</li>
+</ul>
+<p>凡例: <strong>済</strong> = 実装 + テストあり / <strong>部分</strong> = 一部のみ / <strong>保留</strong> = OQ 待ち / 空欄 = 未着手</p>
+<hr />
+<h2 id="プロジェクト機能-fr-p">プロジェクト機能 (FR-P)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-01</span></td><td>直下 1 階層のみ走査</td><td><code>projects/scan.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-02</span></td><td>既定フォルダを DB に書かない</td><td><code>projects/scan.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-03</span></td><td>読めないフォルダはスキップ</td><td><code>projects/scan.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-04</span></td><td>スキャン結果を永続化しない</td><td><code>state.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-05</span></td><td>プロセス内キャッシュ</td><td><code>state.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-06</span></td><td>UI スレッドを塞がない</td><td><code>projects/commands.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-10〜14</td><td>種別判定 (純粋)</td><td><code>projects/detect.rs</code></td><td><code>detect::tests</code></td><td>済</td></tr>
+<tr><td>FR-P-20〜23</td><td>起動コマンドの解決</td><td><code>projects/detect.rs</code></td><td><code>detect::tests::command_*</code></td><td>部分</td></tr>
+<tr><td>FR-P-30〜33</td><td>手動調整</td><td><code>projects/overrides.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-40〜47</td><td>git 状態</td><td><code>projects/git.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-50〜58</td><td>Copilot 利用状況の紐付け</td><td><code>projects/copilot_link.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-60〜68</td><td>dev サーバー</td><td><code>projects/dev_server.rs</code>, <code>platform/win_job.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-63</span></td><td>URL 自動検出 (純粋)</td><td><code>util/url_detect.rs</code></td><td><code>url_detect::tests</code></td><td>済</td></tr>
+<tr><td>FR-P-70〜74</td><td>外部ツール連携</td><td><code>projects/external.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-80〜88</td><td>一覧 UI</td><td><code>pages/ProjectsPage.tsx</code></td><td><code>lib/projectList.test.ts</code></td><td></td></tr>
+</tbody></table></div>
+<h2 id="copilot-ダッシュボード-fr-c">Copilot ダッシュボード (FR-C)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>FR-C-01〜02</td><td>全期間 / 本文を複製しない</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-03/05/06</td><td>差分判定・末尾断片 (純粋)</td><td><code>copilot/delta.rs</code></td><td><code>delta::tests</code></td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-04</span></td><td>オフセット更新はトランザクション最後</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-07</span></td><td>UNIQUE で二重適用を防ぐ</td><td><code>db/migrations.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-08〜09</td><td>ストリーミング / バッチコミット</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-10〜11</td><td>バックグラウンド / 進捗通知</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-12〜13</td><td>防御的パース</td><td><code>copilot/record.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-14</span></td><td>無期限保持</td><td><code>db/migrations.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-20</span></td><td>セッション集計</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-21〜29</td><td>サブエージェント系統</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-40〜43</td><td>ライブ監視の起動と停止</td><td><code>copilot/live.rs</code>, <code>hooks/useLivePoll.ts</code></td><td></td><td></td></tr>
+<tr><td>FR-C-44〜46</td><td>活動状態の合成 (純粋)</td><td><code>copilot/activity.rs</code></td><td><code>activity::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-47〜49</td><td>末尾シーク読みとキャッシュ</td><td><code>copilot/live.rs</code>, <code>util/tail.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-50〜52</td><td>稼働中サブエージェント集合</td><td><code>copilot/live.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-53〜57</td><td>セッションカード</td><td><code>components/SessionCard.tsx</code></td><td></td><td></td></tr>
+<tr><td>FR-C-58〜60</td><td>自動インデックスの発火</td><td><code>pages/CopilotPage.tsx</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-61</span></td><td>稼働サマリー</td><td><code>components/LiveSummary.tsx</code></td><td></td><td></td></tr>
+<tr><td>FR-C-70〜72</td><td>IDE ワークスペース</td><td><code>copilot/live.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-80〜95</td><td>利用枠ゲージ (純粋部分)</td><td><code>copilot/quota.rs</code></td><td><code>quota::tests</code></td><td>部分</td></tr>
+<tr><td>FR-C-100〜105</td><td>本日の使用状況</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-110〜111</td><td>セッション検索</td><td><code>copilot/commands.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-112〜118</td><td>系統図・ガント (木構築は純粋)</td><td><code>copilot/tree.rs</code></td><td><code>tree::tests</code></td><td>部分</td></tr>
+<tr><td>FR-C-119〜121</td><td>本文ビューア</td><td><code>components/TurnViewer.tsx</code></td><td></td><td></td></tr>
+<tr><td>FR-C-130〜144</td><td>利用枠の取得経路</td><td><code>copilot/quota.rs</code></td><td></td><td>保留 (OQ-06)</td></tr>
+<tr><td>FR-C-160〜164</td><td>表示・設定</td><td><code>App.tsx</code>, <code>store/appStore.ts</code></td><td></td><td></td></tr>
+</tbody></table></div>
+<h2 id="データ要求-dr">データ要求 (DR)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">DR-01</span></td><td>単一ローカル DB</td><td><code>db/mod.rs</code></td><td></td><td>済</td></tr>
+<tr><td><span class="chip id">DR-02</span></td><td>導出データを永続化しない</td><td>(スキーマに存在しないこと)</td><td><code>migrations::tests::no_derived_tables</code></td><td>済</td></tr>
+<tr><td><span class="chip id">DR-03</span></td><td>例外は索引のみ</td><td><code>db/migrations.rs</code></td><td></td><td>済</td></tr>
+<tr><td><span class="chip id">DR-04</span></td><td>バージョン付きマイグレーション</td><td><code>db/migrations.rs</code></td><td><code>migrations::tests</code></td><td>部分</td></tr>
+<tr><td><span class="chip id">DR-05</span></td><td>他アプリの DB は読み取り専用</td><td></td><td></td><td>保留 (OQ-05)</td></tr>
+<tr><td><span class="chip id">DR-06</span></td><td>トークンを DB に保存しない</td><td>(スキーマに存在しないこと)</td><td></td><td>済</td></tr>
+<tr><td><span class="chip id">DR-07</span></td><td>保持期間を設けるなら書き込みも実装</td><td></td><td></td><td></td></tr>
+</tbody></table></div>
+<h2 id="インタフェース要求-ir">インタフェース要求 (IR)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>IR-01〜06</td><td>プロジェクト系コマンド</td><td><code>projects/commands.rs</code>, <code>ipc/commands.ts</code></td><td></td><td></td></tr>
+<tr><td>IR-10〜19</td><td>Copilot 系コマンド</td><td><code>copilot/commands.rs</code>, <code>ipc/commands.ts</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">IR-30</span></td><td>引数名のケース固定</td><td>全コマンドの <code>rename_all</code></td><td><code>tests/ipc_naming.rs</code></td><td></td></tr>
+<tr><td><span class="chip id">IR-31</span></td><td>型付きラッパーに集約</td><td><code>ipc/commands.ts</code></td><td></td><td>部分</td></tr>
+<tr><td><span class="chip id">IR-32</span></td><td>変更系の統一パターン</td><td><code>projects/commands.rs</code></td><td></td><td></td></tr>
+<tr><td>IR-40〜46</td><td>イベント</td><td><code>ipc/events.ts</code></td><td></td><td>部分</td></tr>
+</tbody></table></div>
+<h2 id="非機能要求-nfr">非機能要求 (NFR)</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>要求</th><th>内容</th><th>どう確かめるか</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-01</span></td><td>初回インデックス 5 秒以内</td><td>実データで計測 (段階 4 の完了条件)</td><td></td></tr>
+<tr><td><span class="chip id">NFR-02</span></td><td>2 回目 1 秒未満・新規 0 件</td><td>同上 + DB テスト</td><td></td></tr>
+<tr><td><span class="chip id">NFR-03</span></td><td>2 秒ポーリングのコスト</td><td>コードレビュー (INV-4) + 実測</td><td></td></tr>
+<tr><td><span class="chip id">NFR-04</span></td><td>インデックス中 CPU 15% 以下</td><td>実測</td><td></td></tr>
+<tr><td><span class="chip id">NFR-05</span></td><td>アニメーション時 CPU +2pt 以内</td><td>実測</td><td></td></tr>
+<tr><td><span class="chip id">NFR-06</span></td><td>スキャンが待たされない</td><td>実機確認</td><td></td></tr>
+<tr><td><span class="chip id">NFR-07</span></td><td>利用枠取得が操作をブロックしない</td><td>実機確認 (ネットワーク切断)</td><td></td></tr>
+<tr><td><span class="chip id">NFR-10</span></td><td>常駐の軽さ</td><td>ADR-0001 で判断済み。依存追加時に再確認</td><td>済</td></tr>
+<tr><td><span class="chip id">NFR-11</span></td><td>常駐ポーリングループを作らない</td><td>コードレビュー</td><td>済 (ADR-0004)</td></tr>
+<tr><td><span class="chip id">NFR-12</span></td><td>見ていないときのコストをゼロに</td><td>実機確認 (段階 5)</td><td></td></tr>
+<tr><td><span class="chip id">NFR-20</span></td><td>UI スレッドで重い処理をしない</td><td>コードレビュー</td><td></td></tr>
+<tr><td><span class="chip id">NFR-21</span></td><td>UI 応答性の watchdog</td><td>T-X.2</td><td></td></tr>
+<tr><td><span class="chip id">NFR-22</span></td><td>ログのローテーション</td><td>T-X.1</td><td></td></tr>
+<tr><td><span class="chip id">NFR-23</span></td><td>防御的な外部データ読み取り</td><td><code>copilot/record.rs</code></td><td></td></tr>
+<tr><td><span class="chip id">NFR-24</span></td><td>1 件の失敗が全体を落とさない</td><td>各所 + テスト</td><td></td></tr>
+<tr><td><span class="chip id">NFR-25</span></td><td>デバッグシンボル</td><td>T-X.4</td><td></td></tr>
+<tr><td>NFR-30〜33</td><td>セキュリティ / プライバシー</td><td><strong>INV-1〜3 としてレビュー項目化</strong></td><td>済 (規約)</td></tr>
+<tr><td>NFR-40〜45</td><td>表示の正直さ</td><td>UI 仕様 6 節の文言ルール + レビュー</td><td>部分</td></tr>
+<tr><td><span class="chip id">NFR-50</span></td><td>純粋関数として切り出す 8 つ</td><td>下表</td><td>部分</td></tr>
+<tr><td><span class="chip id">NFR-51</span></td><td>実データの例外をテストに</td><td>テスト戦略 7 節</td><td>進行中</td></tr>
+<tr><td><span class="chip id">NFR-52</span></td><td>読み取り専用プローブ</td><td><code>tools/probe/</code></td><td>部分</td></tr>
+<tr><td><span class="chip id">NFR-53</span></td><td>実機確認で完了とする</td><td>テスト戦略 5 節のチェックリスト</td><td>済 (規約)</td></tr>
+<tr><td><span class="chip id">NFR-54</span></td><td>合成イベントを使わない</td><td>コードレビュー</td><td>済 (規約)</td></tr>
+</tbody></table></div>
+<h3 id="nfr-50-が名指しする-8-つ">NFR-50 が名指しする 8 つ</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ロジック</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>種別判定</td><td><code>projects/detect.rs</code></td><td><code>detect::tests</code></td><td>済</td></tr>
+<tr><td>パス正規化</td><td><code>util/path_key.rs</code></td><td><code>path_key::tests</code></td><td>済</td></tr>
+<tr><td>差分判定</td><td><code>copilot/delta.rs</code></td><td><code>delta::tests</code></td><td>済</td></tr>
+<tr><td>末尾断片の切り捨て</td><td><code>copilot/delta.rs</code></td><td><code>delta::tests</code></td><td>済</td></tr>
+<tr><td>木構築</td><td><code>copilot/tree.rs</code></td><td><code>tree::tests</code></td><td>済</td></tr>
+<tr><td>URL 抽出</td><td><code>util/url_detect.rs</code></td><td><code>url_detect::tests</code></td><td>済</td></tr>
+<tr><td>活動状態の合成</td><td><code>copilot/activity.rs</code></td><td><code>activity::tests</code></td><td>済</td></tr>
+<tr><td>利用枠ビューの降格判定</td><td><code>copilot/quota.rs</code></td><td><code>quota::tests</code></td><td>済</td></tr>
+</tbody></table></div>
+<h2 id="不変条件-inv">不変条件 (INV)</h2>
+<p>CLAUDE.md の INV-1〜10。<strong>コードレビューの必須確認項目</strong>であり、自動テストで完全には担保できない。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>内容</th><th>担保の仕方</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">INV-1</span></td><td>Copilot 側に書き込まない</td><td>レビュー + プローブが読み取り専用であることの確認</td></tr>
+<tr><td><span class="chip id">INV-2</span></td><td>認証情報を読まない・DTO に定義しない</td><td><strong>型定義に <code>headers</code> / <code>token</code> 等が無いことをレビューで確認</strong></td></tr>
+<tr><td><span class="chip id">INV-3</span></td><td>内容を外部送信しない</td><td>レビュー (ネットワーク呼び出しは <code>quota.rs</code> のみ)</td></tr>
+<tr><td><span class="chip id">INV-4</span></td><td>2 秒経路にネットワーク・外部プロセスを入れない</td><td>レビュー + <code>live.rs</code> の import 制限</td></tr>
+<tr><td><span class="chip id">INV-5</span></td><td>導出データを永続化しない</td><td>スキーマのテスト (<code>no_derived_tables</code>)</td></tr>
+<tr><td><span class="chip id">INV-6</span></td><td>セッション本文を DB に複製しない</td><td>同上</td></tr>
+<tr><td><span class="chip id">INV-7</span></td><td>推定を実測として表示しない</td><td><code>QuotaSource</code> 型が 3 状態を強制</td></tr>
+<tr><td><span class="chip id">INV-8</span></td><td><code>unsafe</code> は 1 ファイルのみ</td><td><code>#![forbid(unsafe_code)]</code> + <code>#[allow]</code> の位置</td></tr>
+<tr><td><span class="chip id">INV-9</span></td><td>git 操作等を実装しない</td><td>レビュー</td></tr>
+<tr><td><span class="chip id">INV-10</span></td><td>UI スレッドで重い処理をしない</td><td>レビュー</td></tr>
+</tbody></table></div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

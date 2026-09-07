@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>未決事項 (OQ) | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>未決事項 (OQ)</h1>
+<p class="lede">着手前に実測で確定させる項目。要求 付録 B の写しに、この環境での初期観測を足したもの。<strong>推測で埋めて実装を進めない。</strong></p>
+<div class="doc-meta"><span>進行中</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/open-questions.md</code></span></div>
+<h2 id="扱い方">扱い方</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>状態</th><th>意味</th></tr></thead>
+<tbody>
+<tr><td><strong>未調査</strong></td><td>何も分かっていない。これに依存する実装に着手しない</td></tr>
+<tr><td><strong>調査中</strong></td><td>プローブは書いた。数字が出ていない</td></tr>
+<tr><td><strong>一部判明</strong></td><td>分かった範囲を「観測」に書いた。<strong>残りを推測で埋めない</strong></td></tr>
+<tr><td><strong>確定</strong></td><td>結論と根拠が書かれ、影響を受ける ADR / タスクが更新済み</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>OQ を推測で埋めて実装を進めるのが、この計画で最も高くつく間違い。</strong> 確認できないなら「取得不可」を返す実装にして、ここに残す。それが NFR-40 (推定を実測として表示しない) の実装でもある。</p>
+</div>
+<hr />
+<h2 id="この環境での初期観測-2026-09-08">この環境での初期観測 (2026-09-08)</h2>
+<p><code>~/.copilot/</code> を<strong>読み取り専用で</strong>一覧しただけの、ごく浅い観測。プローブ (T-0.1〜0.6) の代わりにはならない。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>観測</th><th>内容</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td><code>~/.copilot/</code> の中身</td><td><code>config.json</code> / <code>ide/</code> / <code>logs/</code> の 3 つのみ。<strong><code>session-state/</code> が存在しない</strong></td><td>OQ-01 / OQ-02 の調査に<strong>先立って、CLI セッションを実際に作る必要がある</strong>。段階 0 の前提作業</td></tr>
+<tr><td><code>~/.copilot/ide/*.lock</code></td><td>JSON。キーは <code>socketPath</code> / <code>scheme</code> / <strong><code>headers</code></strong> / <code>pid</code> / <code>ideName</code> / <code>timestamp</code> / <code>workspaceFolders</code> / <code>isTrusted</code>。1 ファイル 357 バイト</td><td><strong><code>headers</code> は認証情報を含みうる。読まない・DTO に定義しない (INV-2 / FR-C-72)。</strong><code>pid</code> / <code>ideName</code> / <code>workspaceFolders</code> は FR-C-70 にそのまま使える</td></tr>
+<tr><td><code>~/.copilot/logs/process-&lt;epoch_ms&gt;-&lt;pid&gt;.log</code></td><td>1 行 = <code>ISO8601 [LEVEL] メッセージ</code> のテキスト。「CLI server ready (stdio mode)」等</td><td>ファイル名の PID が稼働検出の手掛かりになる (OQ-04)。<strong>ただしファイル名の数字は epoch ミリ秒で、要求が書く <code>{timestamp}</code> と一致する</strong></td></tr>
+<tr><td>VS Code <code>workspaceStorage</code></td><td>20 ワークスペースのうち <strong>15 に <code>chatSessions/</code> が存在</strong></td><td>OQ-03 の調査対象がこの環境に十分ある。ハッシュ再計算と cwd 逆引きの両方を試せる</td></tr>
+</tbody></table></div>
+<p><strong>この 4 行以外は何も分かっていない。</strong></p>
+<p>この観測は <code>node tools/probe/copilot-layout.mjs</code> (T-0.1) の出力から取っている。同じ数字は <code>tools/probe-out/copilot-layout.json</code> に残るが、<strong>コミットしない</strong> (個人のセッション内容を含みうる)。</p>
+<hr />
+<h2 id="oq-01-events.jsonl-のレコードスキーマ">OQ-01 — <code>events.jsonl</code> のレコードスキーマ</h2>
+<p><strong>状態</strong>: 未調査 (前提作業あり)</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>レコード種別 / ロール / タイムスタンプ / トークン usage / クレジット消費 / ツール呼び出し / サブエージェント・委任タスクの表現</td></tr>
+<tr><td>確認方法</td><td>実データを分類集計するスクリプト (T-0.3) で、種別ごとの件数・サイズ・出現位置・フィールド出現率を出す</td></tr>
+<tr><td>影響範囲</td><td>FR-C-01〜28 のほぼ全部</td></tr>
+<tr><td><strong>前提</strong></td><td>この環境には <code>session-state/</code> がまだ無い。<strong>Copilot CLI で数セッション動かしてから</strong>調査する</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="oq-02-1-レコード-1-行か-設計の分水嶺">OQ-02 — 1 レコード = 1 行か (設計の分水嶺)</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>events.jsonl</code> が <strong>1 レコード = 1 行 / 行内に生の改行を含まない / BOM なし</strong> か</td></tr>
+<tr><td>確認方法</td><td>T-0.2。全ファイルを走査して、行数とレコード数の一致、<code>n</code> を含む文字列値の有無、先頭 3 バイトを検査する</td></tr>
+<tr><td>影響範囲</td><td>FR-C-02〜08</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>成立しなければバイトオフセット方式が使えず、索引の設計が根本から変わる (ADR-0003)。</strong> 崩れた場合の代替は 2 つ。(a) レコード境界を別に記録する / (b) <code>session-store.db</code> を読む (OQ-05)。 <strong>どちらを採るかを決めてから段階 4 に着手する。</strong></p>
+</div>
+<hr />
+<h2 id="oq-03-vs-code-chatsessions-とハッシュの導出">OQ-03 — VS Code <code>chatSessions</code> とハッシュの導出</h2>
+<p><strong>状態</strong>: 未調査 (対象は実在。20 ワークスペース中 15 に <code>chatSessions/</code> あり)</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>%APPDATA%CodeUserworkspaceStorage&lt;hash&gt;chatSessions</code> の中身と、<code>&lt;hash&gt;</code> の導出アルゴリズム</td></tr>
+<tr><td>確認方法</td><td>T-0.5。ハッシュを再計算して照合できるか / セッションの中身から作業ディレクトリを逆引きできるか、の<strong>両方</strong>を試す</td></tr>
+<tr><td>影響範囲</td><td>FR-P-50〜58</td></tr>
+<tr><td>分かっていること</td><td>フォルダを移動・リネーム・削除すると新しいハッシュが割り当てられ、<strong>過去セッションが孤児化する</strong> (要求 付録 A.2、公式ドキュメントで確認済み)</td></tr>
+</tbody></table></div>
+<p>この性質があるため、パスの完全一致だけに頼る紐付けは壊れる。<strong>FR-P-52 のフォルダ名フォールバックは省略できない。</strong></p>
+<hr />
+<h2 id="oq-04-稼働中セッションの検出方法">OQ-04 — 稼働中セッションの検出方法</h2>
+<p><strong>状態</strong>: 一部判明</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>~/.copilot/ide/</code> と <code>logs/process-*.log</code> から<strong>読み取り専用で</strong>稼働判定できるか。できない場合、<code>sessionStart</code> / <code>sessionEnd</code> フックが<strong>どのエントリポイントで発火するか</strong></td></tr>
+<tr><td>確認方法</td><td>T-0.4。CLI interactive / CLI background / VS Code 拡張 / coding agent の 4 経路で実際に動かす</td></tr>
+<tr><td>影響範囲</td><td>FR-C-40〜45</td></tr>
+</tbody></table></div>
+<p><strong>観測できた範囲</strong></p>
+<ul>
+<li><code>ide/*.lock</code> に <code>pid</code> と <code>workspaceFolders</code> がある → <strong>VS Code 経路は読み取り専用で判定できる見込み</strong></li>
+<li><code>logs/process-&lt;epoch_ms&gt;-&lt;pid&gt;.log</code> のファイル名から PID が取れる → CLI 経路の手掛かりになる</li>
+<li><strong>ただし、lock ファイルがプロセス終了時に必ず消える保証は未確認。</strong>PID 生存確認との併用が必要 (FR-C-40 / FR-P-57)</li>
+</ul>
+<p><strong>未確認</strong>: CLI background と coding agent の経路。セッション ID と PID の対応。lock の stale 具合。</p>
+<p>読み取り専用で足りれば、N-5 の不変条件を一切崩さずに済む。<strong>フックの利用は最後の手段</strong> (設定ファイルへの書き込みを伴うため、ADR-0012 と衝突する)。</p>
+<hr />
+<h2 id="oq-05-session-store.db-を安全に読めるか">OQ-05 — <code>session-store.db</code> を安全に読めるか</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>スキーマと、<strong>他プロセスが開いている最中に安全に読めるか</strong> (WAL / ロック)</td></tr>
+<tr><td>確認方法</td><td>コピーして読む → 読み取り専用オープンを試す (DR-05)</td></tr>
+<tr><td>影響範囲</td><td>FR-C-01〜09。<strong>自前索引を作らずに済む可能性がある</strong></td></tr>
+</tbody></table></div>
+<p>この環境には現時点で <code>session-store.db</code> が存在しない (<code>session-state/</code> と同様、CLI 未使用のため)。</p>
+<hr />
+<h2 id="oq-06-account.getquota-が個人アカウントで何を返すか">OQ-06 — <code>account.getQuota</code> が個人アカウントで何を返すか</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>quotaSnapshots</code> のキーに何が並ぶか / 月次クレジット残高が取れるか / <code>entitlementRequests</code> の意味 (リクエスト数か額か) / <code>1 AI Credit = $0.01</code> の裏取り</td></tr>
+<tr><td>確認方法</td><td>T-0.6。SDK を実アカウントで叩く</td></tr>
+<tr><td>影響範囲</td><td>FR-C-80〜95、FR-C-130〜144</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>取れないなら経路 B (REST) が主役になり、FR-C-130 の優先順が入れ替わる。</strong>段階 6 の設計がここで決まる。 <code>1 AI Credit = $0.01</code> は二次情報。<strong>実装前に実測で確認する</strong> (要求 付録 A.4)。裏が取れないうちは、金額換算を出さずに率だけを出す。</p>
+</div>
+<hr />
+<h2 id="oq-07-サブエージェント-委任タスクの概念があるか">OQ-07 — サブエージェント / 委任タスクの概念があるか</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>agents/*.agent.md</code> や coding agent への委任に相当する概念があるか。その親子関係が <code>events.jsonl</code> に残るか</td></tr>
+<tr><td>確認方法</td><td>T-0.3 と同じデータから。実際に委任を使ったセッションを作って観察する</td></tr>
+<tr><td>影響範囲</td><td>FR-C-21〜27、FR-C-112〜118</td></tr>
+</tbody></table></div>
+<p><strong>無ければ FR-C-21〜27 と系統図・ガントは大幅に縮退する。</strong> その場合は段階 7 のタスク T-7.5〜7.9 を落とし、セッション単位のガントだけにする。</p>
+<hr />
+<h2 id="oq-08-sdk-rest-の認証方法">OQ-08 — SDK / REST の認証方法</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>認証方法と、GitHub CLI の資格情報を再利用できるか。SDK が Copilot CLI の同梱を要求するか</td></tr>
+<tr><td>確認方法</td><td>実装検証 (T-0.6 と同時)</td></tr>
+<tr><td>影響範囲</td><td>FR-C-130〜141</td></tr>
+</tbody></table></div>
+<p><strong>制約は決まっている</strong>: 認証情報をアプリが管理しない。OS の資格情報ストアまたは既存の GitHub CLI 資格情報を参照する。<strong>平文で DB / 設定ファイルに保存しない</strong> (FR-C-141 / NFR-31)。</p>
+<hr />
+<h2 id="oq-09-古いセッションが自動削除されるか">OQ-09 — 古いセッションが自動削除されるか</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>Copilot CLI / Copilot Chat が古いセッションを自動削除するか</td></tr>
+<tr><td>確認方法</td><td>ドキュメント + 実データの経時観察</td></tr>
+<tr><td>影響範囲</td><td><span class="chip id">NFR-44</span></td></tr>
+</tbody></table></div>
+<p><strong>削除されるなら「累計セッション数」は原理的に取得できない。</strong>その場合は「保持されているセッション数」と表記する。分かるまでは後者の表記で実装する (取れない値を提示しない方が常に安全)。</p>
+<hr />
+<h2 id="oq-10-実データ量">OQ-10 — 実データ量</h2>
+<p><strong>状態</strong>: 一部判明</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>総容量 / ファイル数 / 行数 / 最大ファイルサイズ</td></tr>
+<tr><td>確認方法</td><td><span class="chip id">T-0.1</span></td></tr>
+<tr><td>影響範囲</td><td>NFR-01 / 02 の目標値の確定</td></tr>
+</tbody></table></div>
+<p><strong>観測</strong>: この環境の <code>~/.copilot/</code> は <code>logs/</code> に複数のプロセスログがあるのみで、<strong>セッションログはまだ存在しない</strong>。要求が想定する「数百 MB / 数百ファイル」の規模は、この環境ではまだ再現していない。</p>
+<p><strong>帰結</strong>: NFR-01 (5 秒以内) / NFR-02 (1 秒未満) の妥当性は、実際にセッションが溜まってから再評価する。<strong>現時点の測定値を根拠に「達成した」と判断しない。</strong></p>
+<hr />
+<h2 id="新しく分かったことの書き方">新しく分かったことの書き方</h2>
+<ol>
+<li>「観測」に<strong>数字か実物</strong>を書く (「〜のようだ」は観測ではない)</li>
+<li>状態を更新する</li>
+<li>影響を受ける ADR (<a href="decisions.html">設計判断</a>) と タスク (<a href="implementation-plan.html">実装計画</a>) を更新する</li>
+<li>実データで見つかった例外パターンは <a href="test-strategy.html">テスト戦略</a> 7 節にテストケースとして追記する (NFR-51)</li>
+</ol>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

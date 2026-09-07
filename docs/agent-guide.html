@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI エージェント作業ガイド | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>AI エージェント作業ガイド</h1>
+<p class="lede">このリポジトリで作業を始める AI エージェント (と人間) 向けの手引き。リポジトリ内の <a href="../CLAUDE.md">CLAUDE.md</a> と同じ内容を、背景つきで説明したもの。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/agent-guide.md</code></span></div>
+<h2 id="1.-最初の-5-分">1. 最初の 5 分</h2>
+<ol>
+<li><a href="requirements.html">要求仕様</a> の 0〜2 章を読む (何を作り、<strong>何を作らないか</strong>)</li>
+<li><code>CLAUDE.md</code> の不変条件 INV-1〜10 を読む</li>
+<li><a href="implementation-plan.html">実装計画</a> で「未着手」の最も上のタスクを取る</li>
+<li><a href="open-questions.html">未決事項</a> で、そのタスクが OQ に依存していないか確認する</li>
+<li>着手する</li>
+</ol>
+<h2 id="2.-この仕様書の性質">2. この仕様書の性質</h2>
+<p>要求仕様書は珍しく<strong>「なぜ」が全部書いてある</strong>。表の「根拠」列と引用ブロックには、実際に壊れた経験から来た理由が入っている。</p>
+<pre><code>FR-C-24  バックグラウンド起動の「起動しただけ」の暫定応答を完了として扱わない
+  理由 → 暫定応答を完了とみなすと、数分動いた実行が「1 秒」と記録される</code></pre>
+<p><strong>この理由を読まずに実装すると、たいてい要求どおりに書いたつもりで壊れる。</strong> 要求 ID を見たら、まず本文の根拠を読むこと。</p>
+<h2 id="3.-やってはいけない進め方">3. やってはいけない進め方</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>やらない</th><th>なぜ</th></tr></thead>
+<tbody>
+<tr><td><strong>OQ を推測で埋めて先に進む</strong></td><td>OQ-02 と OQ-06 は設計の分水嶺。推測が外れると書いたコードがまるごと無駄になる</td></tr>
+<tr><td>取れない値を 0 / 空文字で埋める</td><td>その瞬間、ゲージも一覧も嘘になる (NFR-40)</td></tr>
+<tr><td>「テストが通った」で完了とする</td><td>NFR-53 が明示的に禁じている。実機で動かして確認する</td></tr>
+<tr><td>便利そうなライブラリを足す</td><td>常駐の軽さが要求 (NFR-10 / 13)。足すなら先に ADR を書く</td></tr>
+<tr><td>単価・付与額をコードに書く</td><td>課金体系は実際に一度変わっている (ADR-0010)</td></tr>
+<tr><td>要求に無い機能を足す</td><td>2.2 節の非対象は「うっかり作りがちなもの」を名指しで禁じている</td></tr>
+<tr><td>Copilot の設定ファイルに書き込む</td><td>不変条件 INV-1。ADR-0012 がこれを支えている</td></tr>
+</tbody></table></div>
+<h2 id="4.-迷ったときの判断基準">4. 迷ったときの判断基準</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>迷い</th><th>基準</th></tr></thead>
+<tbody>
+<tr><td>保存すべきか</td><td><strong>導出データなら保存しない</strong> (DR-02)。迷ったら保存しない側</td></tr>
+<tr><td>表示すべきか</td><td><strong>区別できないものは断定しない</strong> (NFR-42)。中立表現にして補足はツールチップへ</td></tr>
+<tr><td>エラーにすべきか</td><td><strong>ユーザーが何もできない事象はエラーにしない</strong> (FR-C-57)。穏やかに状態として出す</td></tr>
+<tr><td>どこに置くか</td><td><strong>IO があるか無いか</strong>で分ける。純粋関数は IO を import しないモジュールへ</td></tr>
+<tr><td>2 秒経路に入れてよいか</td><td><strong>ネットワークか外部プロセスなら入れない</strong> (INV-4)。例外なし</td></tr>
+<tr><td>進行状態をどこに持つか</td><td><strong>タブ切替で消えてよいか</strong>で決める。消えては困るなら <code>appStore</code></td></tr>
+</tbody></table></div>
+<h2 id="5.-実装の型">5. 実装の型</h2>
+<h3 id="純粋関数から書く">純粋関数から書く</h3>
+<pre><code class="language-rust">// 1. まず純粋関数とテスト
+pub fn decide(recorded_offset: u64, recorded_size: u64, current_size: u64) -&gt; Delta { ... }
+
+// 2. その外側に IO
+pub fn index_file(path: &amp;Path, db: &amp;Db) -&gt; Result&lt;Stats&gt; {
+    let delta = delta::decide(rec.offset, rec.size, meta.len());
+    ...
+}</code></pre>
+<p><strong>逆順に書くと、テストできない形が先に固まる。</strong></p>
+<h3 id="コマンドの型">コマンドの型</h3>
+<pre><code class="language-rust">#[tauri::command(rename_all = "snake_case")]   // ★ 例外なく付ける
+pub async fn projects_settings_update(
+    state: tauri::State&lt;'_, AppState&gt;,
+    req: OverrideRequest,
+) -&gt; Result&lt;ProjectsSnapshot, AppError&gt; {
+    validate(&amp;req)?;                                  // 1. 検証
+    state.db.save_override(&amp;req).await?;              // 2. 永続化
+    let snap = state.cache.remerge(&amp;req)?;            // 3. 再マージ (再スキャンしない)
+    state.emit("projects-snapshot", &amp;snap);           // 4a. イベント
+    Ok(snap)                                          // 4b. 戻り値
+}</code></pre>
+<h2 id="6.-完了の定義">6. 完了の定義</h2>
+<ol>
+<li><code>npm run verify</code> が通る (typecheck + vitest + cargo test)</li>
+<li>純粋関数なら<strong>テストがある</strong></li>
+<li><strong>実際にアプリを起動して確認した</strong> (NFR-53)</li>
+<li><a href="traceability.html">トレーサビリティ</a> の該当行を埋めた</li>
+<li>置いた仮定を <a href="open-questions.html">未決事項</a> に書いた</li>
+<li>実データで見つかった例外パターンを <a href="test-strategy.html">テスト戦略</a> 7 節に追記した (NFR-51)</li>
+</ol>
+<h2 id="7.-ドキュメントを直すとき">7. ドキュメントを直すとき</h2>
+<p><strong>編集するのは <code>docs/source/*.md</code> だけ。</strong> <code>docs/*.html</code> は生成物なので直接編集しない (次回生成で消える)。</p>
+<pre><code class="language-bash">npm run docs:build   # 再生成
+npm run docs:check   # 生成物が原本と一致するか検査</code></pre>
+<p>ページを増やすときは <code>docs/assets/docs.js</code> の <code>NAV</code> に 1 行足す。<code>docs/index.html</code> は手書きなのでカードも足す。</p>
+<h2 id="8.-参照の順序">8. 参照の順序</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>知りたいこと</th><th>見る場所</th></tr></thead>
+<tbody>
+<tr><td>何を作るか</td><td><a href="requirements.html">要求仕様</a></td></tr>
+<tr><td>なぜその設計か</td><td><a href="decisions.html">設計判断</a></td></tr>
+<tr><td>どこに何を書くか</td><td><a href="architecture.html">アーキテクチャ</a> 4 節</td></tr>
+<tr><td>DB に何を置くか</td><td><a href="data-model.html">データモデル</a></td></tr>
+<tr><td>コマンドの名前と形</td><td><a href="api-spec.html">IPC API 仕様</a></td></tr>
+<tr><td>画面の文言と規則</td><td><a href="ui-spec.html">UI 仕様</a></td></tr>
+<tr><td>書き方の細かい規則</td><td><a href="coding-standards.html">コーディング規約</a></td></tr>
+<tr><td>何をテストするか</td><td><a href="test-strategy.html">テスト戦略</a></td></tr>
+<tr><td>次に何をするか</td><td><a href="implementation-plan.html">実装計画</a></td></tr>
+<tr><td>まだ分かっていないこと</td><td><a href="open-questions.html">未決事項</a></td></tr>
+<tr><td>同じものを別の名前で呼んでいないか</td><td><a href="glossary.html">用語集</a></td></tr>
+</tbody></table></div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

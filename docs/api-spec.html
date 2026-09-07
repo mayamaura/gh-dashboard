@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IPC API 仕様 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>IPC API 仕様</h1>
+<p class="lede">UI とコアの境界。要求 8 章 (IR-01..46) の実装形。フロントから <code>invoke</code> を書いてよいのは <code>src/ipc/commands.ts</code> だけ。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/api-spec.md</code></span></div>
+<h2 id="1.-引数名の規約-最初に読むこと">1. 引数名の規約 — 最初に読むこと</h2>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>すべてのコマンドに <code>#[tauri::command(rename_all = "snake_case")]</code> を付ける。</strong> Tauri は既定で引数名を <code>camelCase</code> に変換する。<code>path_key</code> を渡したつもりが <code>pathKey</code> を要求されて失敗する事故は、<strong>型検査でも lint でも検出できず、実際に呼ぶまで気づけない</strong> (IR-30)。規約でしか防げない。</p>
+</div>
+<pre><code class="language-rust">#[tauri::command(rename_all = "snake_case")]
+async fn projects_dev_start(
+    state: tauri::State&lt;'_, AppState&gt;,
+    path_key: String,
+    command: Option&lt;String&gt;,
+) -&gt; Result&lt;DevStatus, AppError&gt; { ... }</code></pre>
+<pre><code class="language-ts">// src/ipc/commands.ts — invoke を書いてよい唯一の場所 (IR-31)
+export const projectsDevStart = (path_key: string, command?: string) =&gt;
+  invoke&lt;DevStatus&gt;('projects_dev_start', { path_key, command })</code></pre>
+<p>呼び出し側は <code>commands.ts</code> の関数だけを使う。<strong>ページから <code>invoke()</code> を直接呼ばない。</strong></p>
+<h2 id="2.-変更系コマンドの共通形-ir-32">2. 変更系コマンドの共通形 (IR-32)</h2>
+<pre><code>バリデーション → 永続化 → スナップショット組み立て → イベント通知と戻り値の両方で返す</code></pre>
+<p>戻り値だけだと他の画面が更新されず、イベントだけだと呼び出し元が「反映されたか」を判断できない。<strong>両方返す。</strong></p>
+<h2 id="3.-エラーの形">3. エラーの形</h2>
+<p><code>Result&lt;T, String&gt;</code> にしない。型のある <code>AppError</code> を定義し、UI が扱える形で返す。</p>
+<pre><code class="language-rust">#[derive(Debug, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AppError {
+    NotFound { what: String },
+    InvalidInput { field: String, message: String },
+    Io { message: String },
+    Db { message: String },
+    External { tool: String, message: String, hint: Option&lt;String&gt; },  // FR-P-73
+    Unavailable { reason: String, how_to_fix: Option&lt;String&gt; },        // FR-C-83
+}</code></pre>
+<p><code>hint</code> / <code>how_to_fix</code> は「PATH に無い」「認証が必要」など、<strong>ユーザーが次にやることを書く欄</strong>。埋められないなら <code>None</code> にする。適当な文言で埋めない。</p>
+<h2 id="4.-コマンド一覧">4. コマンド一覧</h2>
+<h3 id="4.1-プロジェクト機能">4.1 プロジェクト機能</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>コマンド</th><th>引数</th><th>戻り値</th><th>注意</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">IR-01</span></td><td><code>projects_scan</code></td><td>—</td><td><code>ProjectsSnapshot</code></td><td><strong>必ず実スキャンしてから返す。</strong>読み出し専用版は作らない</td></tr>
+<tr><td><span class="chip id">IR-02</span></td><td><code>projects_settings_update</code></td><td><code>ProjectOverrideRequest</code></td><td><code>ProjectsSnapshot</code></td><td><strong>再スキャンしない。</strong>キャッシュ済み結果と再マージ (FR-P-05)</td></tr>
+<tr><td><span class="chip id">IR-03</span></td><td><code>projects_scan_folder_add</code></td><td><code>path: String</code></td><td><code>ProjectsSnapshot</code></td><td>存在確認 + 重複を分かりやすいメッセージに変換</td></tr>
+<tr><td><span class="chip id">IR-03</span></td><td><code>projects_scan_folder_remove</code></td><td><code>path: String</code></td><td><code>ProjectsSnapshot</code></td><td></td></tr>
+<tr><td><span class="chip id">IR-04</span></td><td><code>projects_dev_start</code></td><td><code>path_key</code>, <code>command?</code></td><td><code>DevStatus</code></td><td><strong>起動可否をバックエンドでも再チェック (FR-P-23)</strong></td></tr>
+<tr><td><span class="chip id">IR-04</span></td><td><code>projects_dev_stop</code></td><td><code>path_key</code></td><td><code>DevStatus</code></td><td>未起動でもエラーにせず「停止中」を返す (冪等。FR-P-66)</td></tr>
+<tr><td><span class="chip id">IR-04</span></td><td><code>projects_dev_stop_all</code></td><td>—</td><td><code>ProjectsSnapshot</code></td><td>UI 側で二段階確認 (FR-P-67)</td></tr>
+<tr><td><span class="chip id">IR-05</span></td><td><code>projects_dev_logs_get</code></td><td><code>path_key</code></td><td><code>Vec&lt;String&gt;</code></td><td>最大 500 行。詳細パネルを開いた直後の初期表示用</td></tr>
+<tr><td><span class="chip id">IR-06</span></td><td><code>projects_open_vscode</code></td><td><code>path_key</code></td><td><code>()</code></td><td>spawn 成否のみで判定 (FR-P-72)</td></tr>
+<tr><td><span class="chip id">IR-06</span></td><td><code>projects_open_folder</code></td><td><code>path_key</code></td><td><code>()</code></td><td>同上。<code>explorer.exe</code> は正常時も終了コード 1</td></tr>
+<tr><td><span class="chip id">IR-06</span></td><td><code>projects_open_terminal</code></td><td><code>path_key</code></td><td><code>()</code></td><td>Windows Terminal → 失敗したら PowerShell (FR-P-74)</td></tr>
+<tr><td><span class="chip id">IR-06</span></td><td><code>projects_open_agent</code></td><td><code>path_key</code></td><td><code>()</code></td><td>そのディレクトリで Copilot CLI を起動</td></tr>
+</tbody></table></div>
+<h3 id="4.2-copilot-ダッシュボード">4.2 Copilot ダッシュボード</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>コマンド</th><th>引数</th><th>戻り値</th><th>注意</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">IR-10</span></td><td><code>live_status_get</code></td><td>—</td><td><code>LiveStatus</code></td><td><strong>2 秒ごとに呼ばれる。ネットワーク・外部プロセス起動を含めない (INV-4)</strong></td></tr>
+<tr><td><span class="chip id">IR-11</span></td><td><code>snapshot_get</code></td><td>—</td><td><code>DbSnapshot</code></td><td>最終インデックス時刻・各種件数・直近セッション 20 件</td></tr>
+<tr><td><span class="chip id">IR-12</span></td><td><code>index_refresh</code></td><td>—</td><td><code>()</code></td><td>バックグラウンド起動、即座に返す。多重起動は黙って無視 (FR-C-10)</td></tr>
+<tr><td><span class="chip id">IR-13</span></td><td><code>sessions_list_get</code></td><td><code>SessionQuery</code></td><td><code>Vec&lt;SessionSummary&gt;</code></td><td>既定 100 / 上限 1000。入力は UI 側で 250ms デバウンス</td></tr>
+<tr><td><span class="chip id">IR-14</span></td><td><code>session_detail_get</code></td><td><code>session_id</code></td><td><code>Option&lt;SessionDetail&gt;</code></td><td><strong>未インデックスは <code>null</code> (正常系。エラーにしない)</strong></td></tr>
+<tr><td><span class="chip id">IR-15</span></td><td><code>turn_body_get</code></td><td><code>turn_id</code></td><td><code>TurnBody</code></td><td>都度シーク読み。上限 512KB。範囲外なら再インデックスを案内</td></tr>
+<tr><td><span class="chip id">IR-16</span></td><td><code>usage_today_get</code></td><td>—</td><td><code>UsageToday</code></td><td>ローカル日 0:00〜現在</td></tr>
+<tr><td><span class="chip id">IR-17</span></td><td><code>quota_get</code></td><td><code>force: bool</code></td><td><code>QuotaView</code></td><td>経路 A→B→C の降格込み。下限間隔あり</td></tr>
+<tr><td><span class="chip id">IR-18</span></td><td><code>quota_source_status_get</code></td><td>—</td><td><code>QuotaSourceStatus</code></td><td>認証状態 / SDK 有無 / 直近の取得結果と失敗理由</td></tr>
+<tr><td><span class="chip id">IR-19</span></td><td><code>animation_pref_get</code></td><td>—</td><td><code>AnimationPref</code></td><td></td></tr>
+<tr><td><span class="chip id">IR-19</span></td><td><code>animation_pref_set</code></td><td><code>pref</code></td><td><code>AnimationPref</code></td><td></td></tr>
+</tbody></table></div>
+<h2 id="5.-イベント">5. イベント</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>イベント</th><th>ペイロード</th><th>発火契機</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">IR-40</span></td><td><code>projects-snapshot</code></td><td><code>ProjectsSnapshot</code></td><td>スキャン・設定変更後</td></tr>
+<tr><td><span class="chip id">IR-41</span></td><td><code>projects-dev-status</code></td><td><code>DevStatus</code></td><td>dev 状態が変化したとき</td></tr>
+<tr><td><span class="chip id">IR-42</span></td><td><code>projects-dev-log</code></td><td><code>{ path_key, lines: string[] }</code></td><td>200〜300ms バッファリング (FR-P-65)</td></tr>
+<tr><td><span class="chip id">IR-43</span></td><td><code>index-progress</code></td><td><code>IndexProgress</code></td><td>250〜300ms 間引き (FR-C-11)</td></tr>
+<tr><td><span class="chip id">IR-44</span></td><td><code>snapshot</code></td><td><code>DbSnapshot</code></td><td>差分インデックス完了時</td></tr>
+<tr><td><span class="chip id">IR-45</span></td><td><code>quota</code></td><td><code>QuotaView</code></td><td>利用枠の再取得完了時</td></tr>
+<tr><td><span class="chip id">IR-46</span></td><td><code>window-visibility</code></td><td><code>{ minimized: boolean }</code></td><td>ネイティブウィンドウの最小化状態が変化したとき</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p>IR-46 は省略できない。<strong>ネイティブウィンドウの最小化は WebView の <code>visibilitychange</code> に伝播しない</strong> — 最小化しても <code>visibilityState</code> は <code>visible</code> のままなので、ブラウザ側のイベントだけに頼ると最小化中もポーリングが回り続ける (FR-C-43)。</p>
+</div>
+<h2 id="6.-主要-dto">6. 主要 DTO</h2>
+<p>TypeScript 側の定義は <code>src/types/dto.ts</code>。Rust 側と<strong>手で同期する</strong> (生成器は入れない。理由は ADR-0006)。</p>
+<pre><code class="language-ts">// ---- プロジェクト ----
+
+export type ProjectKind =
+  | 'tauri' | 'nextjs' | 'sveltekit' | 'vite' | 'python_package'
+  | 'rust' | 'python' | 'notebook' | 'other'
+
+export type DevState =
+  | { state: 'stopped' }
+  | { state: 'starting' }
+  | { state: 'running'; url: string | null; pid: number; started_at: number }
+  | { state: 'exited'; code: number | null }
+  | { state: 'failed'; reason: string }
+
+export interface GitStatus {
+  branch: string | null          // detached HEAD は null (FR-P-41)
+  dirty: boolean
+  has_remote: boolean
+  last_commit_at: number | null
+}
+
+export interface CopilotUsage {
+  session_count: number          // 「保持されているセッション数」 (NFR-44)
+  last_used_at: number | null
+  last_title: string | null
+  is_active: boolean
+  last_nano_aiu: number | null
+  lines_added: number | null
+  lines_removed: number | null
+  matched_by: 'exact' | 'folder_name_fallback'   // FR-P-53: 推測は推測と出す
+}
+
+export interface Project {
+  path_key: string
+  root_path: string
+  working_dir: string
+  display_name: string
+  kind: ProjectKind
+  command_candidates: string[]   // 許可リスト順 (FR-P-20)
+  resolved_command: string | null
+  launch_blocked_reason: string | null   // 起動不可の理由。隠さず出す (FR-P-22)
+  hidden: boolean
+  archived: boolean
+  sort_order: number | null
+  git: GitStatus | null          // .git が無ければ null (FR-P-42)
+  copilot: CopilotUsage | null   // 履歴が無ければ null。0 で埋めない (FR-P-58)
+  dev: DevState
+}
+
+export interface ProjectsSnapshot {
+  projects: Project[]
+  scan_folders: string[]
+  scanned_at: number
+  using_default_folder: boolean  // 既定フォルダをその場限りで使ったか (FR-P-02)
+  warnings: string[]             // 読めなかったフォルダなど (FR-P-03)
+}
+
+// ---- Copilot ライブ ----
+
+export type ActivityState =
+  | 'generating' | 'tool_running' | 'waiting_input' | 'subagent_running' | 'unknown'
+
+export interface LiveSession {
+  session_id: string
+  folder_name: string | null
+  entrypoint: string
+  title: string | null
+  activity: ActivityState
+  model: string | null
+  started_at: number | null
+  last_activity_at: number | null
+  context_used: number | null    // 使用トークン
+  context_limit: number | null
+  session_nano_aiu: number | null
+  running_subagent_ids: string[] // ★ 集合が正。件数は length で導く (FR-C-51)
+}
+
+export interface IdeWorkspace {
+  ide_name: string | null
+  folders: string[]
+  connected: boolean             // PID が死んでいても行を捨てず false にする (FR-C-71)
+  // ★ 認証トークンのフィールドは定義しない (FR-C-72 / INV-2)
+}
+
+export interface LiveStatus {
+  sessions: LiveSession[]
+  ide_workspaces: IdeWorkspace[]
+  running_session_count: number
+  running_subagent_count: number // 集合の合計から導出する
+  polled_at: number
+}
+
+// ---- 利用枠 ----
+
+export type QuotaSource =
+  | { source: 'actual'; via: 'sdk' | 'rest'; observed_at: number }
+  | { source: 'estimated'; basis: string; observed_at: number }   // FR-C-82
+  | { source: 'unavailable'; reason: string; how_to_fix: string | null }
+
+export interface QuotaGauge {
+  kind: string                   // 'monthly_credits' | 'quota:&lt;name&gt;' | 'context_window'
+  label: string
+  used: number | null
+  entitlement: number | null     // -1 = 無制限 (FR-C-131)
+  used_pct: number | null        // 100 でクランプしない (FR-C-90)
+  overage: number | null         // 付与超過分。別建てで出す (FR-C-90)
+  unit: 'credits' | 'requests' | 'tokens'
+  currency_amount: string | null // 例 "$6.20 / $10.00" (FR-C-89)
+  reset_at: number | null
+  origin: QuotaSource            // 枠ごとに独立 (FR-C-84)
+}
+
+export interface QuotaView {
+  gauges: QuotaGauge[]
+  fetched_at: number
+  note: string                   // 「金額は概算。請求額の正は GitHub の課金画面」(NFR-45)
+}</code></pre>
+<h2 id="7.-ui-側の呼び分け">7. UI 側の呼び分け</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>契機</th><th>呼ぶもの</th></tr></thead>
+<tbody>
+<tr><td>Copilot タブを開いた</td><td><code>snapshot_get</code> → 即描画 / <code>quota_get(false)</code> / <code>usage_today_get</code> / <code>index_refresh</code></td></tr>
+<tr><td>Copilot タブ表示中 2 秒ごと</td><td><code>live_status_get</code> <strong>のみ</strong></td></tr>
+<tr><td>更新ボタン</td><td><code>index_refresh</code> + <code>quota_get(true)</code></td></tr>
+<tr><td>未取り込みの追記を検知 (下限 10 秒)</td><td><code>index_refresh</code> (バッジは出さない。FR-C-60)</td></tr>
+<tr><td>長周期タイマー (5 分以上、画面表示中のみ)</td><td><code>quota_get(false)</code></td></tr>
+<tr><td>プロジェクトタブを開いた</td><td>キャッシュを即描画 → <code>projects_scan</code></td></tr>
+<tr><td>プロジェクトの手動調整を保存</td><td><code>projects_settings_update</code> (再スキャンしない)</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong><code>usage_today_get</code> を 2 秒ポーリングに載せない (FR-C-103)。</strong> 更新はタブ表示時と差分インデックス完了時だけ。</p>
+</div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

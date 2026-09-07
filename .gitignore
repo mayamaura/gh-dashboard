@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+src-tauri/target/
+src-tauri/gen/
+
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+
+# ローカル実測データ (OQ 調査の出力)。個人のセッション内容を含みうるためコミットしない
+tools/probe-out/
+.tsbuild/
+*.tsbuildinfo

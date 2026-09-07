@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>テスト戦略 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>テスト戦略</h1>
+<p class="lede">NFR-50〜54 の実装形。何を純粋関数として固め、何は実機でしか確認できないかを分ける。「テストが通る」で完了としない。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/test-strategy.md</code></span></div>
+<h2 id="1.-層">1. 層</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>層</th><th>対象</th><th>道具</th><th>実行</th></tr></thead>
+<tbody>
+<tr><td><strong>A. 純粋関数</strong></td><td>種別判定 / パス正規化 / 差分判定 / 末尾断片 / 木構築 / URL 抽出 / 活動状態 / 利用枠の降格</td><td><code>cargo test</code> / <code>vitest</code></td><td>常時。<strong>ここが本体</strong></td></tr>
+<tr><td><strong>B. DB</strong></td><td>マイグレーション / 冪等性 / UNIQUE 制約</td><td><code>cargo test</code> (一時ファイル DB)</td><td>常時</td></tr>
+<tr><td><strong>C. 読み取り専用プローブ</strong></td><td>実データ・実 API への疎通</td><td><code>tools/probe/*.mjs</code></td><td>手動。<strong>判定はせず数字を出す</strong></td></tr>
+<tr><td><strong>D. 実機確認</strong></td><td>UI の挙動、プロセス終了、最小化での停止</td><td>手動 (チェックリスト)</td><td>各段階の完了判定</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>NFR-53: 「テストが通る」で完了としない。実際にアプリを起動して挙動を確認してから完了とする。</strong> A と B がいくら緑でも、D を通っていない機能は未完成として扱う。</p>
+</div>
+<h2 id="2.-層-a-純粋関数のテスト一覧">2. 層 A — 純粋関数のテスト一覧</h2>
+<p>NFR-50 が名指ししている 8 つ。それぞれ「壊れ方」が要求に書かれているので、テストケースは<strong>そこから作る</strong>。</p>
+<h3 id="2.1-種別判定-projects-detect-fr-p-10-14">2.1 種別判定 (<code>projects::detect</code>) — FR-P-10〜14</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ケース</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td><code>src-tauri/tauri.conf.json</code> あり + <code>package.json</code> あり</td><td><code>tauri</code></td></tr>
+<tr><td><code>next.config.ts</code> と <code>vite.config.ts</code> の<strong>両方</strong>あり</td><td><code>nextjs</code> (<strong>Vite を先に見ると誤判定する。FR-P-11</strong>)</td></tr>
+<tr><td><code>next.config.mjs</code> / <code>.cjs</code> / <code>.mts</code> / <code>.cts</code></td><td>いずれも <code>nextjs</code></td></tr>
+<tr><td><code>svelte.config.js</code> あり</td><td><code>sveltekit</code></td></tr>
+<tr><td><code>pyproject.toml</code> と <code>requirements.txt</code> の両方</td><td><code>python_package</code></td></tr>
+<tr><td><code>*.ipynb</code> が 1 つ</td><td><code>notebook</code></td></tr>
+<tr><td>ルートに何もなく <code>frontend/vite.config.ts</code> だけ</td><td><code>vite</code>、<code>working_dir = frontend</code> (FR-P-12)</td></tr>
+<tr><td>ルートに何もなく <code>frontend/</code> と <code>backend/pyproject.toml</code> の両方</td><td>優先順位が上のものを採る。同順位なら<strong>ディレクトリ名昇順</strong> (FR-P-12)</td></tr>
+<tr><td>どれにも該当しない</td><td><code>other</code>。<strong>一覧から隠さない</strong> (FR-P-13)</td></tr>
+</tbody></table></div>
+<p>判定材料は<strong>マニフェストの存在有無だけ</strong>。中身を読まない。テストはファイル名の配列を渡すだけで書ける形にする。</p>
+<h3 id="2.2-パス正規化-util-path_key-用語定義">2.2 パス正規化 (<code>util::path_key</code>) — 用語定義</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>入力</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td><code>D:ProjectsFoo</code></td><td><code>d:projectsfoo</code></td></tr>
+<tr><td><code>D:/Projects/Foo/</code></td><td><code>d:projectsfoo</code></td></tr>
+<tr><td><code>d:projectsfoo</code></td><td><code>d:projectsfoo</code></td></tr>
+<tr><td><code>\servershareproj</code></td><td>UNC を壊さない</td></tr>
+<tr><td>空文字</td><td>エラーまたは <code>None</code> (パニックしない)</td></tr>
+</tbody></table></div>
+<h3 id="2.3-差分判定-copilot-delta-fr-c-03-05-06">2.3 差分判定 (<code>copilot::delta</code>) — FR-C-03/05/06</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>記録済みオフセット</th><th>記録済みサイズ</th><th>現在サイズ</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>0</td><td>1000</td><td>全パース (0 から)</td></tr>
+<tr><td>500</td><td>500</td><td>1200</td><td>継続 (500 から)</td></tr>
+<tr><td>500</td><td>500</td><td>500</td><td>更新なし</td></tr>
+<tr><td>500</td><td>800</td><td>300</td><td><strong>全再パース</strong> (truncate / 入れ替わり。FR-C-06)</td></tr>
+<tr><td>500</td><td>500</td><td>499</td><td><strong>全再パース</strong></td></tr>
+</tbody></table></div>
+<p><strong>mtime を入力に取らないこと自体をテストで固定する</strong> (引数に mtime が無いことがそのまま担保になる)。</p>
+<h3 id="2.4-末尾断片の切り捨て-copilot-delta-fr-c-05">2.4 末尾断片の切り捨て (<code>copilot::delta</code>) — FR-C-05</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>入力バイト列</th><th>期待する確定分</th><th>期待するオフセット増分</th></tr></thead>
+<tbody>
+<tr><td><code>{"a":1}n{"b":2}n</code></td><td>2 行</td><td>全体</td></tr>
+<tr><td><code>{"a":1}n{"b":2</code></td><td>1 行</td><td>1 行目まで</td></tr>
+<tr><td><code>{"a":1}</code> (改行なし)</td><td>0 行</td><td>0</td></tr>
+<tr><td><code>n</code> のみ</td><td>0 行 (空行)</td><td>1</td></tr>
+<tr><td>末尾が <code>rn</code></td><td>行として確定</td><td>全体</td></tr>
+</tbody></table></div>
+<h3 id="2.5-木構築-copilot-tree-fr-c-113-114">2.5 木構築 (<code>copilot::tree</code>) — FR-C-113/114</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ケース</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td>親 → 子 → 孫</td><td>3 段の木</td></tr>
+<tr><td><code>parent_agent_id</code> が NULL</td><td>セッション直下</td></tr>
+<tr><td>親が存在しない (孤児)</td><td><strong>ルート直下に置く。捨てない</strong> (FR-C-113)</td></tr>
+<tr><td>A → B → A の循環</td><td><strong>無限ループしない</strong>。循環を切ってガードする (FR-C-113)</td></tr>
+<tr><td>生データの <code>depth</code> が実際の階層と食い違う</td><td><strong><code>depth</code> を無視して親子関係を採る</strong> (FR-C-114)</td></tr>
+<tr><td>同じ親に複数の子</td><td>開始時刻順</td></tr>
+</tbody></table></div>
+<p>系統図とガントが同じ入力から同じ行順を返すことをテストで固定する。</p>
+<h3 id="2.6-url-抽出-util-url_detect-fr-p-63">2.6 URL 抽出 (<code>util::url_detect</code>) — FR-P-63</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>入力行</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td><code>Local:   http://localhost:5173/</code></td><td><code>http://localhost:5173/</code></td></tr>
+<tr><td><code>➜  Local:   http://127.0.0.1:3000/</code></td><td>取れる (装飾記号に強い)</td></tr>
+<tr><td><code>Running on http://0.0.0.0:8000</code></td><td><code>http://localhost:8000</code> に読み替える (0.0.0.0 はブラウザで開けない)</td></tr>
+<tr><td><code>Serving at https://localhost:5173</code></td><td>https を保つ</td></tr>
+<tr><td><code>Compiled successfully</code></td><td><code>None</code></td></tr>
+<tr><td>ANSI エスケープ付き</td><td>除去してから抽出</td></tr>
+</tbody></table></div>
+<p><strong>ポートは自動採番されるため、設定値からは決められない。</strong>出力からしか取れない。</p>
+<h3 id="2.7-活動状態の合成-copilot-activity-fr-c-44-45">2.7 活動状態の合成 (<code>copilot::activity</code>) — FR-C-44/45</h3>
+<p>優先順は ① 状態シグナルが新鮮 (60 秒以内) → ② 末尾レコードのターン終了理由 → ③ 稼働中サブエージェントがあれば上書き。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>状態シグナル</th><th>末尾レコード</th><th>稼働中サブエージェント</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td>新鮮 = 生成中</td><td>ツール呼び出し</td><td>0</td><td><code>generating</code> (① が最優先)</td></tr>
+<tr><td>古い (61 秒前)</td><td>ツール呼び出しで停止</td><td>0</td><td><code>tool_running</code> (② に落ちる)</td></tr>
+<tr><td>なし</td><td>ターン正常終了</td><td>0</td><td><code>waiting_input</code></td></tr>
+<tr><td>なし</td><td>ターン正常終了</td><td>2</td><td><strong><code>subagent_running</code></strong> (③ が上書き)</td></tr>
+<tr><td>なし</td><td>解釈できない</td><td>0</td><td><code>unknown</code></td></tr>
+<tr><td>なし</td><td>解釈できない</td><td>1</td><td><strong><code>subagent_running</code></strong></td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>「長時間のツール実行中」と「ツール許可プロンプトで停止中」を区別する分岐を書かない</strong> (FR-C-46)。両者はログ上まったく同じ形でしか現れない。<code>tool_running</code> の 1 値に寄せ、UI で断定しない。</p>
+</div>
+<h3 id="2.8-利用枠ビューの降格-copilot-quota-fr-c-80-92">2.8 利用枠ビューの降格 (<code>copilot::quota</code>) — FR-C-80〜92</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>入力</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td>SDK 成功</td><td><code>actual(sdk)</code></td></tr>
+<tr><td>SDK 失敗 → REST 成功</td><td><code>actual(rest)</code></td></tr>
+<tr><td>両方失敗 → 推定可</td><td><code>estimated</code> + 「推定」ラベル</td></tr>
+<tr><td>すべて不可</td><td><code>unavailable</code> + <strong>「何をすれば取れるか」が入っている</strong> (FR-C-83)</td></tr>
+<tr><td>枠 A は実値、枠 B は取得不可</td><td><strong>B に推定を混ぜない</strong> (FR-C-84)</td></tr>
+<tr><td><code>entitlement = -1</code></td><td>「無制限」。<strong>率を計算しない。0 除算もマイナス率も出さない</strong> (FR-C-131)</td></tr>
+<tr><td><code>used &gt; entitlement</code></td><td><code>used_pct &gt; 100</code> を許す。<strong>100 でクランプしない</strong>。超過額を別建て (FR-C-90)</td></tr>
+<tr><td><code>reset_at</code> が現在より過去</td><td><strong>その観測を除外する</strong> (FR-C-85)</td></tr>
+<tr><td><code>observed_at</code> が 16 分前</td><td>警告色 (FR-C-87)</td></tr>
+<tr><td><code>used_pct</code> = 70 / 89 / 90</td><td>警告 / 警告 / 危険 (FR-C-88)</td></tr>
+</tbody></table></div>
+<p><strong><code>received_at</code> を鮮度判定に使ったら落ちるテスト</strong>を必ず 1 本入れる (FR-C-86)。</p>
+<h2 id="3.-層-b-db-のテスト">3. 層 B — DB のテスト</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>ケース</th><th>期待</th></tr></thead>
+<tbody>
+<tr><td>空 DB にマイグレーション適用</td><td>全テーブルができる。<code>user_version</code> が上がる</td></tr>
+<tr><td>同じマイグレーションを 2 回適用</td><td>冪等。壊れない</td></tr>
+<tr><td>同じ <code>(file_path, byte_offset)</code> を 2 回挿入</td><td>2 件目は無視される (FR-C-07)</td></tr>
+<tr><td>インデックスを 2 回連続実行</td><td><strong>2 回目の新規レコードが 0 件</strong> (NFR-02)</td></tr>
+<tr><td>途中でトランザクションを中断</td><td>オフセットが進んでいない = 取りこぼしなく再開できる (FR-C-04)</td></tr>
+<tr><td><code>quota_samples</code> の間引き</td><td>30 日より古い行が消え、新しい行は残る (DR-07)</td></tr>
+</tbody></table></div>
+<h2 id="4.-層-c-読み取り専用プローブ">4. 層 C — 読み取り専用プローブ</h2>
+<p>実データと実 API に対して<strong>数字を出すだけ</strong>のスクリプト。合否判定をせず、OQ を潰す材料を作る (NFR-52)。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>スクリプト</th><th>出すもの</th><th>対応 OQ</th></tr></thead>
+<tbody>
+<tr><td><code>tools/probe/copilot-layout.mjs</code></td><td><code>~/.copilot</code> 配下の構成・ファイル数・総容量・最大ファイルサイズ</td><td><span class="chip id">OQ-10</span></td></tr>
+<tr><td><code>tools/probe/jsonl-shape.mjs</code></td><td>1 レコード = 1 行か / 行内改行の有無 / BOM の有無 / 行長分布</td><td><strong>OQ-02 (設計の分水嶺)</strong></td></tr>
+<tr><td><code>tools/probe/record-kinds.mjs</code></td><td>レコード種別ごとの件数・サイズ・出現位置・フィールド出現率</td><td>OQ-01 / OQ-07</td></tr>
+<tr><td><code>tools/probe/vscode-sessions.mjs</code></td><td><code>workspaceStorage</code> のハッシュと中身から cwd を逆引きできるか</td><td><span class="chip id">OQ-03</span></td></tr>
+<tr><td><code>tools/probe/live-detect.mjs</code></td><td><code>ide/*.lock</code> と <code>logs/process-*.log</code> から稼働セッションを判定できるか</td><td><span class="chip id">OQ-04</span></td></tr>
+<tr><td><code>tools/probe/quota-sdk.mjs</code></td><td><code>account.getQuota</code> が個人アカウントで何を返すか</td><td><span class="chip id">OQ-06</span></td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p>プローブは<strong>読み取り専用</strong>。書き込み・設定変更を一切行わない (INV-1)。 出力は <code>tools/probe-out/</code> に置き、<strong>コミットしない</strong> (個人のセッション内容を含みうる)。<code>.gitignore</code> 済み。 プローブが値を表示するときも、認証情報に相当するフィールドは伏せる (INV-2)。</p>
+</div>
+<h2 id="5.-層-d-実機確認チェックリスト">5. 層 D — 実機確認チェックリスト</h2>
+<p>各段階の完了条件。<strong>ここを通らないものは未完成。</strong></p>
+<h3 id="段階-1-2-プロジェクト基盤-git・利用状況">段階 1〜2 (プロジェクト基盤 / git・利用状況)</h3>
+<ul>
+<li>[ ] 実フォルダで一覧が出る。種別の誤判定がない</li>
+<li>[ ] Next.js + Vitest 構成が <code>nextjs</code> と判定される</li>
+<li>[ ] <code>.git</code> の無いフォルダで git コマンドが 1 つも実行されない</li>
+<li>[ ] フォルダをリネームしても、フォルダ名フォールバックで履歴が紐付く</li>
+<li>[ ] フォールバックで紐付いた行に「旧パスの履歴」表示が出る (FR-P-53)</li>
+<li>[ ] 履歴が無いプロジェクトが 0 埋めされていない</li>
+</ul>
+<h3 id="段階-3-dev-サーバー">段階 3 (dev サーバー)</h3>
+<ul>
+<li>[ ] 起動 → URL が自動検出されて表示される</li>
+<li>[ ] <strong>タスクマネージャーからアプリを強制終了 → 子プロセスが 1 つも残らない</strong> (FR-P-61)</li>
+<li>[ ] ウィンドウを閉じてトレイ常駐 → dev サーバーは<strong>止まらない</strong> (FR-P-62)</li>
+<li>[ ] アプリ終了 → 全 dev サーバーが止まる</li>
+<li>[ ] 停止済みのものに再度停止 → エラーにならない (FR-P-66)</li>
+<li>[ ] <code>explorer.exe</code> で開く → 成功扱いになる (終了コード 1 でも。FR-P-72)</li>
+</ul>
+<h3 id="段階-4-差分インデックス">段階 4 (差分インデックス)</h3>
+<ul>
+<li>[ ] 初回が実データで 5 秒以内に完走 (NFR-01)</li>
+<li>[ ] 2 回目が 1 秒未満、<strong>新規レコード 0 件</strong> (NFR-02)</li>
+<li>[ ] 実行中に CPU が 1 コア換算 15% を超えない (NFR-04)</li>
+<li>[ ] インデックス中にファイルが追記されても壊れない</li>
+<li>[ ] 壊れた行があっても止まらず、件数が UI に出る</li>
+</ul>
+<h3 id="段階-5-ライブ監視">段階 5 (ライブ監視)</h3>
+<ul>
+<li>[ ] <strong>タブを離れるとポーリングが止まる</strong> (ログで確認)</li>
+<li>[ ] <strong>ウィンドウを最小化するとポーリングが止まる</strong> (FR-C-43。<code>visibilitychange</code> だけでは止まらないことも確認)</li>
+<li>[ ] 死んだセッションが一覧から消える</li>
+<li>[ ] アイドルなセッションでディスクが読み直されない (FR-C-48)</li>
+<li>[ ] サブエージェントのバッジ件数と系統図の行数が一致する (FR-C-51)</li>
+<li>[ ] 未インデックスのセッションで赤いエラーが出ない (FR-C-57)</li>
+</ul>
+<h3 id="段階-6-利用枠">段階 6 (利用枠)</h3>
+<ul>
+<li>[ ] 実値 / 推定 / 取得不可 のラベルが実機で正しく切り替わる</li>
+<li>[ ] 額と率の両方が出る (<code>$6.20 / $10.00 (62%)</code>)</li>
+<li>[ ] 超過時に 100% でクランプされず、超過額が別建てで出る</li>
+<li>[ ] ネットワークを切っても画面操作がブロックされない (NFR-07)</li>
+<li>[ ] 取得中も他のタブが操作できる</li>
+</ul>
+<h3 id="段階-7-振り返り-ui">段階 7 (振り返り UI)</h3>
+<ul>
+<li>[ ] 系統図とガントの階層が一致する (FR-C-114)</li>
+<li>[ ] 本文ビューアが 1 レコードだけを読む (大きなセッションでも即座に開く)</li>
+<li>[ ] タブを切り替えてもインデックス進捗が消えない (FR-C-161)</li>
+</ul>
+<h2 id="6.-入力操作の検証">6. 入力操作の検証</h2>
+<p>ドラッグ等の検証に<strong>合成イベント (<code>dispatchEvent</code>) を使わない</strong> (NFR-54)。合成イベントはハンドラの配線しか検証できず、実際の不具合を素通りさせる。実入力相当のイベント注入を使う。</p>
+<h2 id="7.-実データ由来のテストケース">7. 実データ由来のテストケース</h2>
+<p><strong>実データで見つかった例外パターンは、そのままテストケースにする (NFR-51)。</strong> 見つけたら以下に追記していくこと。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>発見日</th><th>現象</th><th>テスト</th></tr></thead>
+<tbody>
+<tr><td>2026-09-08</td><td><code>~/.copilot/ide/*.lock</code> に <code>headers</code> フィールドが存在する (認証情報を含みうる)</td><td>DTO に <code>headers</code> が無いことをコンパイル時に担保 (INV-2)</td></tr>
+<tr><td>2026-09-08</td><td><code>~/.copilot/</code> に <code>session-state/</code> が存在しないことがある (CLI 未使用の環境)</td><td>ディレクトリ不在で 0 件を正常系として返すテスト</td></tr>
+</tbody></table></div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

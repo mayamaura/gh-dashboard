@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>実装計画 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>実装計画</h1>
+<p class="lede">要求 付録 C の段階を、AI エージェントが 1 件ずつ着手できるタスクに割ったもの。上から順に潰す。段階の完了条件を満たさずに次へ進まない。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/implementation-plan.md</code></span></div>
+<h2 id="進め方">進め方</h2>
+<ul>
+<li>タスク ID は <code>T-&lt;段階&gt;.&lt;連番&gt;</code>。<strong>段階を飛ばさない</strong></li>
+<li>1 タスク = 1 コミット を目安にする</li>
+<li>着手前に、そのタスクの「要求」列の ID を <a href="requirements.html">要求仕様</a> で読む</li>
+<li>完了時に <a href="traceability.html">トレーサビリティ</a> の該当行を埋める</li>
+<li>状態は <code>未着手</code> / <code>進行中</code> / <code>完了</code> / <code>保留(OQ待ち)</code></li>
+</ul>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>段階 0 を飛ばさない。</strong> OQ-02 (バイトオフセット方式が成立するか) と OQ-06 (利用枠が SDK で取れるか) の結論次第で、段階 4 と段階 6 の設計が根本から変わる。推測で先に進めると、書いたコードがまるごと無駄になる。</p>
+</div>
+<hr />
+<h2 id="段階-0-実データ・api-調査">段階 0 — 実データ・API 調査</h2>
+<p><strong>完了条件</strong>: <strong>バイトオフセット方式が成立するか</strong>と<strong>利用枠が SDK で取れるか</strong>の結論が出ている。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-0.1</span></td><td><code>tools/probe/copilot-layout.mjs</code> — 配下の構成・ファイル数・総容量・最大サイズを出す</td><td><span class="chip id">OQ-10</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.2</span></td><td><code>tools/probe/jsonl-shape.mjs</code> — 1 レコード = 1 行 / 行内改行 / BOM を検査</td><td><span class="chip id">OQ-02</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-0.3</span></td><td><code>tools/probe/record-kinds.mjs</code> — レコード種別ごとの件数・フィールド出現率を集計</td><td>OQ-01 / OQ-07</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-0.4</span></td><td><code>tools/probe/live-detect.mjs</code> — <code>ide/*.lock</code> + <code>logs/process-*.log</code> で稼働判定できるか</td><td><span class="chip id">OQ-04</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-0.5</span></td><td><code>tools/probe/vscode-sessions.mjs</code> — <code>workspaceStorage</code> から cwd を逆引きできるか</td><td><span class="chip id">OQ-03</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-0.6</span></td><td><code>tools/probe/quota-sdk.mjs</code> — <code>account.getQuota</code> が個人アカウントで返す中身</td><td><strong>OQ-06</strong> / OQ-08</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-0.7</span></td><td>結果を <a href="open-questions.html">未決事項</a> に書き戻し、影響を受ける ADR を更新</td><td>—</td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>このタスク群はすべて読み取り専用。</strong> 出力は <code>tools/probe-out/</code> (コミットしない)。</p>
+<hr />
+<h2 id="段階-1-プロジェクト基盤">段階 1 — プロジェクト基盤</h2>
+<p><strong>完了条件</strong>: 実フォルダで誤検出なく一覧が出る。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-1.1</span></td><td><code>util::path_key</code> — パス正規化 (純粋) + テスト</td><td>用語定義</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-1.2</span></td><td><code>projects::detect</code> — 種別判定 (純粋) + テスト</td><td>FR-P-10〜14</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-1.3</span></td><td>DB 初期化とマイグレーション基盤</td><td>DR-01 / DR-04</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-1.4</span></td><td><code>project_scan_folders</code> / <code>project_overrides</code> の読み書き</td><td>DR-02 / FR-P-30〜32</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-1.5</span></td><td><code>projects::scan</code> — 1 階層走査 → 種別判定 → スナップショット</td><td>FR-P-01〜06</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-1.6</span></td><td>起動コマンドの解決 (許可リスト順 / 上書き優先)</td><td>FR-P-20〜23</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-1.7</span></td><td>IR-01〜03 のコマンド実装 + <code>projects-snapshot</code> イベント</td><td>IR-01〜03 / IR-32</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-1.8</span></td><td>一覧 + 詳細パネルの 2 ペイン UI</td><td>FR-P-80 / 84</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-1.9</span></td><td>フロント側の絞り込み・並べ替え (純粋関数 + テスト)</td><td>FR-P-81〜82</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-1.10</span></td><td>ヘッダー (最終スキャン / すべて停止 / 更新) とスキャン中表示</td><td>FR-P-85 / 87</td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>気をつける点</strong></p>
+<ul>
+<li>既定フォルダを<strong>DB に書き込まない</strong> (FR-P-02)。書くと削除不能になる</li>
+<li>読めないフォルダはスキップして警告に積む。<strong>スキャン全体を失敗させない</strong> (FR-P-03)</li>
+<li>スキャン結果を<strong>永続化しない</strong> (FR-P-04)</li>
+<li>走査は <code>spawn_blocking</code> (FR-P-06)</li>
+</ul>
+<hr />
+<h2 id="段階-2-git-copilot-利用状況">段階 2 — git + Copilot 利用状況</h2>
+<p><strong>完了条件</strong>: フォルダ名フォールバックが実データで期待どおり効く。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-2.1</span></td><td><code>projects::git</code> — ブランチ / 変更有無 / リモート / 最終コミット</td><td>FR-P-40〜47</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.2</span></td><td>同時実行上限 (8) と <code>CREATE_NO_WINDOW</code></td><td>FR-P-45 / 46</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.3</span></td><td>セッション履歴の部分読み (末尾数 KB / 先頭数十 KB)</td><td><span class="chip id">FR-P-55</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.4</span></td><td><code>projects::copilot_link</code> — 完全一致の紐付け</td><td><span class="chip id">FR-P-51</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.5</span></td><td>フォルダ名フォールバック (3 条件すべて成立時のみ) + テスト</td><td>FR-P-52 / 54</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.6</span></td><td>UI に「旧パスの履歴 (フォルダ名で照合)」表示</td><td>FR-P-53 / NFR-41</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.7</span></td><td>稼働中判定 (状態ファイル + PID 生存確認)</td><td><span class="chip id">FR-P-57</span></td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>気をつける点</strong></p>
+<ul>
+<li>git の判定対象は <code>working_dir</code> ではなく<strong>リポジトリルート</strong> (FR-P-44)</li>
+<li><code>.git</code> が無ければ<strong>コマンドを 1 つも実行しない</strong> (FR-P-42)</li>
+<li><strong>mtime を判定に使わない。中身のタイムスタンプを読む</strong> (FR-P-56)</li>
+<li>履歴が無いプロジェクトは <code>null</code>。<strong>空欄で埋めない</strong> (FR-P-58)</li>
+<li>完全一致とフォールバックが競合したら<strong>フォールバックを捨てる。合算しない</strong> (FR-P-54)</li>
+</ul>
+<hr />
+<h2 id="段階-3-dev-サーバー">段階 3 — dev サーバー</h2>
+<p><strong>完了条件</strong>: <strong>アプリを強制終了しても子プロセスが残らない。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-3.1</span></td><td><code>platform::win_job</code> — Job Object (<code>KILL_ON_JOB_CLOSE</code>)。<strong>unsafe はここだけ</strong></td><td>FR-P-61 / 68</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-3.2</span></td><td>dev サーバーの起動 / 停止 / 5 状態管理</td><td>FR-P-60 / 66</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-3.3</span></td><td>stdout / stderr の非同期行読みと <code>util::url_detect</code></td><td><span class="chip id">FR-P-63</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-3.4</span></td><td>リングバッファ 500 行 + 200〜300ms バッファ配信</td><td>FR-P-64 / 65</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-3.5</span></td><td>アプリ終了イベントで全停止。<strong>ウィンドウを閉じただけでは止めない</strong></td><td><span class="chip id">FR-P-62</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-3.6</span></td><td>「すべて停止」+ 二段階確認</td><td><span class="chip id">FR-P-67</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-3.7</span></td><td><code>projects::external</code> — VS Code / エクスプローラー / ターミナル / Copilot CLI</td><td>FR-P-70〜74</td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>気をつける点</strong></p>
+<ul>
+<li>外部ツールは<strong>投げっぱなし。終了コードを見ない</strong> (FR-P-71 / 72)</li>
+<li>ターミナルは Windows Terminal → 失敗したら PowerShell (FR-P-74)</li>
+<li>起動可否は<strong>バックエンドでも再チェック</strong> (FR-P-23)</li>
+</ul>
+<hr />
+<h2 id="段階-4-差分インデックス">段階 4 — 差分インデックス</h2>
+<p><strong>完了条件</strong>: 初回が NFR-01 (5 秒) を満たし、<strong>2 回目が冪等 (新規 0 件)</strong>。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-4.1</span></td><td><code>copilot::delta</code> — 差分判定 + 末尾断片の切り捨て (純粋) + テスト</td><td>FR-C-03/05/06/15</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.2</span></td><td><code>copilot::record</code> — 防御的パース (全フィールド欠落しうる前提)</td><td>FR-C-12 / 13 / NFR-23</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.3</span></td><td>索引テーブルへの書き込み (UNIQUE + <code>INSERT OR IGNORE</code>)</td><td>FR-C-02 / 07</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.4</span></td><td>バッチコミット (3,000 行) + 15ms スリープ + オフセット更新の順序</td><td>FR-C-04 / 09</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.5</span></td><td>バックグラウンド実行 + 多重起動防止</td><td><span class="chip id">FR-C-10</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.6</span></td><td>進捗通知 (250〜300ms 間引き)</td><td><span class="chip id">FR-C-11</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.7</span></td><td>セッション集計</td><td><span class="chip id">FR-C-20</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.8</span></td><td>サブエージェント行のマージ (親子両側にあるキー)</td><td>FR-C-21〜23 / 29</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.9</span></td><td>完了通知の 2 段階ゲート + 暫定応答を完了扱いしない</td><td>FR-C-24〜26</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.10</span></td><td>拒否と失敗の区別</td><td><span class="chip id">FR-C-27</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.11</span></td><td>利用枠到達イベントの抽出</td><td><span class="chip id">FR-C-28</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.12</span></td><td><code>turn_body_get</code> — 1 レコードのシーク読み (上限 512KB)</td><td>IR-15 / FR-C-120</td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>気をつける点</strong></p>
+<ul>
+<li>ファイル全体をメモリに載せない (FR-C-08)</li>
+<li><strong>オフセット更新はトランザクションの最後</strong> (FR-C-04)</li>
+<li>壊れた行は数えて読み飛ばす。件数を UI に返す (FR-C-12 / NFR-43)</li>
+</ul>
+<hr />
+<h2 id="段階-5-ライブ監視">段階 5 — ライブ監視</h2>
+<p><strong>完了条件</strong>: <strong>タブ離脱・最小化で確実に止まる。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-5.1</span></td><td>状態ファイル列挙 + PID 生存確認</td><td><span class="chip id">FR-C-40</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.2</span></td><td>末尾シーク読み (64KB → 512KB 1 回だけ) と本文レコードの遡り探索</td><td>FR-C-47 / 49</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.3</span></td><td><code>(パス, サイズ, mtime)</code> キャッシュと剪定</td><td><span class="chip id">FR-C-48</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.4</span></td><td>稼働中サブエージェント<strong>集合</strong>の算出 (件数は length で導出)</td><td>FR-C-50 / 51</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.5</span></td><td><code>copilot::activity</code> — 活動状態の合成 (純粋) + テスト</td><td>FR-C-44〜46</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.6</span></td><td><code>useLivePoll</code> — 2 秒タイマー。アンマウントで停止</td><td>FR-C-41 / 42</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.7</span></td><td><code>window-visibility</code> イベント + <code>visibilitychange</code> の合成</td><td><strong>FR-C-43</strong> / IR-46</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.8</span></td><td>セッションカード (FR-C-53 の項目一式)</td><td>FR-C-53 / 54</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.9</span></td><td>30 分アイドルの既定非表示 (状態を持たない実装)</td><td><span class="chip id">FR-C-55</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.10</span></td><td>インライン系統図と自動展開の抑止条件</td><td><span class="chip id">FR-C-56</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.11</span></td><td>未インデックスセッションの穏やかな表示 + 1 回だけ再インデックス</td><td><span class="chip id">FR-C-57</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.12</span></td><td>自動インデックスの発火判定 (mtime のみ / 下限 10 秒)</td><td>FR-C-58 / 59 / 60</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.13</span></td><td>IDE ワークスペース一覧 (切断済みも残す)</td><td>FR-C-70〜72</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.14</span></td><td>稼働サマリー (3 数字)</td><td><span class="chip id">FR-C-61</span></td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>気をつける点</strong></p>
+<ul>
+<li><strong>この経路にネットワークも外部プロセス起動も入れない</strong> (INV-4 / NFR-03)</li>
+<li>自動展開の抑止が無いと「自動展開 → 失敗 → 閉じる → 自動展開」の 2 秒ループになる (FR-C-56)</li>
+<li>自動インデックスの判定に<strong>固定間隔で更新される値を混ぜない</strong> (FR-C-59)</li>
+<li><strong>IDE の状態ファイルに <code>headers</code> フィールドが存在する。DTO に定義しない</strong> (INV-2 / FR-C-72)</li>
+</ul>
+<hr />
+<h2 id="段階-6-利用枠ゲージ">段階 6 — 利用枠ゲージ</h2>
+<p><strong>完了条件</strong>: 段階降格とラベルが実機で正しく切り替わる。<strong>額と率の両方が出る。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-6.1</span></td><td><code>copilot::quota</code> の型定義 (3 状態 × 枠ごと独立)</td><td>FR-C-81 / 84 / ADR-0009</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-6.2</span></td><td>降格判定 (純粋) + テスト</td><td>FR-C-81〜90</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-6.3</span></td><td>経路 A: SDK <code>account.getQuota</code></td><td>FR-C-130 / 131</td><td>保留(OQ-06 待ち)</td></tr>
+<tr><td><span class="chip id">T-6.4</span></td><td>経路 A: <code>session.usage.getMetrics</code> / <code>models.list</code></td><td>FR-C-132 / 134</td><td>保留(OQ-06 待ち)</td></tr>
+<tr><td><span class="chip id">T-6.5</span></td><td>経路 B: GitHub REST (個人 / 組織の両方を試す)</td><td>FR-C-138〜142</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.6</span></td><td>認証は OS 資格情報ストア / GitHub CLI 参照。<strong>保存しない</strong></td><td>FR-C-141 / NFR-31</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.7</span></td><td>経路 C: ログ由来の推定 (60 秒 TTL)</td><td>FR-C-92 / 93 / 143</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.8</span></td><td>ゲージ描画 (自前 SVG)。3 段階色分け + 超過の別建て</td><td>FR-C-88 / 89 / 90</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.9</span></td><td>鮮度表示 (<code>observed_at</code> 基準) と 15 分超の警告色</td><td><strong>FR-C-86</strong> / 87</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.10</span></td><td>長周期タイマー (5 分以上、画面表示中のみ)</td><td>FR-C-135 / NFR-12</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.11</span></td><td><code>quota_source_status_get</code> — 各経路の可用性表示</td><td>IR-18 / FR-C-83</td><td>未着手</td></tr>
+</tbody></table></div>
+<p><strong>気をつける点</strong></p>
+<ul>
+<li><strong>2 秒ポーリングに絶対載せない</strong> (FR-C-135)</li>
+<li>金額表示に<strong>概算である旨を添える</strong> (NFR-45)</li>
+<li>失敗しても直前の値と「取得できませんでした」を並べる (NFR-07)</li>
+</ul>
+<hr />
+<h2 id="段階-7-振り返り-ui">段階 7 — 振り返り UI</h2>
+<p><strong>完了条件</strong>: <strong>系統図とガントの階層が一致する。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">T-7.1</span></td><td>本日の使用状況 (集計 + 時間帯グラフ + フォルダ別上位 5)</td><td>FR-C-100〜103</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.2</span></td><td>合成モデルの除外と usage 内訳の二重加算防止</td><td><span class="chip id">FR-C-104</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.3</span></td><td>モデル別内訳 (トークンとクレジットの両方)</td><td><span class="chip id">FR-C-105</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.4</span></td><td>セッション検索 (250ms デバウンス / 既定 100・上限 1000)</td><td>FR-C-110 / 111</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.5</span></td><td><code>copilot::tree</code> — 木構築 (純粋) + テスト</td><td>FR-C-113 / 114</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-7.6</span></td><td>系統図の描画 (自前 SVG)</td><td>FR-C-112 / 113</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.7</span></td><td>ガントチャート + 利用枠到達イベントの縦マーカー</td><td><span class="chip id">FR-C-118</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.8</span></td><td>ライブ表示の折りたたみ (祖先保護つき)</td><td>FR-C-115 / 116</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.9</span></td><td>振り返り側は全件表示</td><td><span class="chip id">FR-C-117</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.10</span></td><td>本文ビューア (初期 150 件 / 150 件ずつ追加 / クリックでシーク読み)</td><td>FR-C-119 / 120</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.11</span></td><td>系統図・ガント・ビューアの選択とホバー連動</td><td><span class="chip id">FR-C-121</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.12</span></td><td>ヘッダー (最終インデックス / 取得経路 / 更新)</td><td><span class="chip id">FR-C-160</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.13</span></td><td>タブ横断の進行状態と スナップショットキャッシュ</td><td><strong>FR-C-161</strong> / 164</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-7.14</span></td><td>アニメーション設定 (<code>自動 / 入 / 切</code>) と永続化</td><td>FR-C-162 / IR-19</td><td>未着手</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="横断タスク">横断タスク</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>T-X.1</td><td>ログのファイル出力 + ローテーション (5MB × 5 世代)</td><td><span class="chip id">NFR-22</span></td><td>未着手</td></tr>
+<tr><td>T-X.2</td><td>UI スレッド応答性の watchdog (3 秒)</td><td><span class="chip id">NFR-21</span></td><td>未着手</td></tr>
+<tr><td>T-X.3</td><td><code>quota_samples</code> の間引き (30 日) — <strong>書き込みとセットで</strong></td><td>DR-07 / FR-C-94</td><td>未着手</td></tr>
+<tr><td>T-X.4</td><td>リリースビルドのデバッグシンボル出力とアーカイブ</td><td><span class="chip id">NFR-25</span></td><td>未着手</td></tr>
+<tr><td>T-X.5</td><td>トレイ常駐とウィンドウ表示・非表示</td><td>要求 2.3 / FR-P-62</td><td>未着手</td></tr>
+<tr><td>T-X.6</td><td>起動時のマイグレーション前バックアップ</td><td><span class="chip id">DR-04</span></td><td>未着手</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="状態の集計">状態の集計</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>段階</th><th>完了 / 全体</th></tr></thead>
+<tbody>
+<tr><td>0. 調査</td><td>1 / 7</td></tr>
+<tr><td>1. プロジェクト基盤</td><td>3 / 10</td></tr>
+<tr><td>2. git + 利用状況</td><td>0 / 7</td></tr>
+<tr><td>3. dev サーバー</td><td>0 / 7</td></tr>
+<tr><td>4. 差分インデックス</td><td>1 / 12</td></tr>
+<tr><td>5. ライブ監視</td><td>1 / 14</td></tr>
+<tr><td>6. 利用枠</td><td>2 / 11</td></tr>
+<tr><td>7. 振り返り UI</td><td>1 / 14</td></tr>
+<tr><td>横断</td><td>0 / 6</td></tr>
+</tbody></table></div>
+<p>「完了」になっているのは、足場として<strong>純粋関数とテストだけ</strong>先に置いたもの。IO を伴う部分はすべて未着手。</p>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

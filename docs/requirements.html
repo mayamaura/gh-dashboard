@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>要求仕様書 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>要求仕様書</h1>
+<p class="lede">GitHub Copilot の稼働状況と利用枠の消費を可視化し、あわせてローカルの開発プロジェクトを一覧・起動できる、Windows 常駐型デスクトップアプリへの要求。<strong>この文書が唯一の正。</strong> 実装判断はここに戻って決める。</p>
+<div class="doc-meta"><span>確定</span><span>版 1.0</span><span>更新 2026-09-03</span><span>原本 <code>docs/source/requirements.md</code></span></div>
+<ul>
+<li><strong>版</strong>: 1.0 / 2026-09-03</li>
+</ul>
+<p>GitHub Copilot (Copilot CLI / VS Code の Copilot Chat・エージェントモード) の稼働状況と利用枠の消費を可視化し、あわせてローカルの開発プロジェクトを一覧・起動できる、<strong>Windows 常駐型のデスクトップアプリ</strong>に対する要求をまとめる。2 つのタブ (Copilot / プロジェクト) からなる 1 アプリを想定する。</p>
+<hr />
+<h2 id="0.-この文書の読み方">0. この文書の読み方</h2>
+<h3 id="0.1-要求-id">0.1 要求 ID</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>プレフィクス</th><th>領域</th></tr></thead>
+<tbody>
+<tr><td><code>FR-P-nn</code></td><td>機能要求: プロジェクト機能</td></tr>
+<tr><td><code>FR-C-nn</code></td><td>機能要求: Copilot 稼働ダッシュボード</td></tr>
+<tr><td><code>DR-nn</code></td><td>データ要求 (永続化)</td></tr>
+<tr><td><code>IR-nn</code></td><td>外部インタフェース要求 (コマンド / イベント)</td></tr>
+<tr><td><code>NFR-nn</code></td><td>非機能要求</td></tr>
+<tr><td><code>OQ-nn</code></td><td>未決事項 (着手前に実測で確定させる項目)</td></tr>
+</tbody></table></div>
+<p>要求 ID は欠番が出ても詰めず、削除した ID は再利用しない。</p>
+<h3 id="0.2-優先度">0.2 優先度</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>記号</th><th>意味</th></tr></thead>
+<tbody>
+<tr><td><span class="chip must">必須</span></td><td>これが無ければ機能として成立しない (MUST)</td></tr>
+<tr><td><span class="chip should">推奨</span></td><td>無くても動くが、実運用で必ず問題になる (SHOULD)</td></tr>
+<tr><td><span class="chip may">任意</span></td><td>あると良い (MAY)。v1 で落としてよい</td></tr>
+</tbody></table></div>
+<h3 id="0.3-確度の表記">0.3 確度の表記</h3>
+<p>本書は GitHub Copilot がローカルに残すデータと公開 API に依存する。<strong>公式ドキュメントで確認できた事実</strong>と、<strong>実測で確定させる必要がある事項</strong>を区別して書く。後者は付録 B に <code>OQ-nn</code> として集約し、本文からは ID で参照する。</p>
+<p><strong>Copilot のセッションログは内部形式であり、バージョンアップで予告なく変わりうる。</strong> 本書の要求はその前提に立って書かれている (FR-C-13、NFR-23)。</p>
+<hr />
+<h2 id="1.-目的">1. 目的</h2>
+<h3 id="1.1-解決する課題">1.1 解決する課題</h3>
+<p><strong>A. コーディングエージェントの稼働が見えない</strong></p>
+<p>複数の VS Code ウィンドウとターミナルで Copilot を並行運用すると、次が把握できなくなる。</p>
+<ol>
+<li>利用枠 (AI Credits / クォータ) の消費状況がすぐに見えない</li>
+<li>どのセッションが今動いていて、どれが止まっているか分からない</li>
+<li>どのエージェントがどのサブエージェント・委任タスクに指示を出しているかが見えない</li>
+<li>「どうエージェントが動いたか」を後から振り返る手段がない</li>
+</ol>
+<p><strong>B. 開発中プロジェクトの所在と状態が見えない</strong></p>
+<ol>
+<li>動かすたびに「フォルダを思い出す → エクスプローラーを開く → ターミナルを開く → <code>npm run dev</code> → 採番されたポートを確認」を繰り返している</li>
+<li>どれを最後にいつ触ったか、どれが放置されているかを一覧で把握できていない</li>
+</ol>
+<h3 id="1.2-想定利用者">1.2 想定利用者</h3>
+<p>開発者本人 1 名 (個人利用)。配布・マルチユーザー対応・組織展開は目的としない。</p>
+<hr />
+<h2 id="2.-スコープ">2. スコープ</h2>
+<h3 id="2.1-対象範囲">2.1 対象範囲</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>範囲</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">S-1</span></td><td>Copilot セッションのログの<strong>差分インデックス</strong>と、それを元にしたセッション一覧・系統図・ガント・本文ビューア</td></tr>
+<tr><td><span class="chip id">S-2</span></td><td>稼働中セッションの<strong>ライブ監視</strong> (どれが動いていて、何をしているか)</td></tr>
+<tr><td><span class="chip id">S-3</span></td><td><strong>利用枠に対する消費率</strong>の可視化 (AI Credits / クォータ / コンテキストウィンドウ)</td></tr>
+<tr><td><span class="chip id">S-4</span></td><td><strong>本日の使用状況</strong>ダイジェスト (トークン、ターン数、クレジット、時間帯別推移、フォルダ別内訳)</td></tr>
+<tr><td><span class="chip id">S-5</span></td><td>ローカル開発プロジェクトの<strong>自動スキャン・一覧・詳細</strong>、git 状態、Copilot 利用状況の紐付け</td></tr>
+<tr><td><span class="chip id">S-6</span></td><td>dev サーバーの<strong>起動 / 停止 / ログ / URL 検出</strong></td></tr>
+<tr><td><span class="chip id">S-7</span></td><td>外部ツール連携 (VS Code / エクスプローラー / ターミナル / Copilot CLI / ブラウザで開く)</td></tr>
+</tbody></table></div>
+<h3 id="2.2-非対象">2.2 非対象</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>やらないこと</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">N-1</span></td><td>Copilot セッションの再開・強制終了・エージェントへの介入</td><td>「見る・振り返る」に集中する。誤操作の代償が読み取り専用機能とは桁違い</td></tr>
+<tr><td><span class="chip id">N-2</span></td><td>プロジェクトの作成・削除・移動</td><td>同上</td></tr>
+<tr><td><span class="chip id">N-3</span></td><td>ビルド / テスト / デプロイの実行</td><td>dev サーバー起動以外のプロセス管理を持ち込まない</td></tr>
+<tr><td><span class="chip id">N-4</span></td><td>git 操作 (commit / push / pull / branch)</td><td>VS Code / ターミナルと責務が重複する。<strong>表示のみ</strong></td></tr>
+<tr><td><span class="chip id">N-5</span></td><td>Copilot の既存設定ファイル (<code>settings.json</code> / <code>config.json</code>) の書き換え</td><td><strong>一切行わない。Copilot 側のデータはすべて読み取り専用</strong>。ファイルを置く必要が生じても、既存ファイルの編集ではなく新規ファイルの追加に限る</td></tr>
+<tr><td><span class="chip id">N-6</span></td><td>認証情報の読み取り</td><td>認証情報・OAuth トークン・MCP シークレットは<strong>読まない</strong>。DTO にフィールドを持たせることすらしない</td></tr>
+<tr><td><span class="chip id">N-7</span></td><td>セッション内容・プロジェクト情報の外部送信</td><td>利用枠の取得のために GitHub の API を叩くことは許容するが、<strong>こちらから内容を送らない</strong></td></tr>
+<tr><td><span class="chip id">N-8</span></td><td>GitHub 側の課金設定 (予算 / 支出上限) の変更</td><td><strong>表示のみ</strong></td></tr>
+<tr><td><span class="chip id">N-9</span></td><td>LLM による要約・日記生成</td><td>本仕様のスコープ外</td></tr>
+<tr><td><span class="chip id">N-10</span></td><td>複数プロセス構成 (frontend + backend) の専用管理 UI</td><td>起動コマンド上書き欄に複合コマンドを書く運用でカバーする</td></tr>
+</tbody></table></div>
+<h3 id="2.3-前提環境">2.3 前提環境</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>前提</th></tr></thead>
+<tbody>
+<tr><td>OS</td><td>Windows 11。dev サーバーのプロセスツリー管理に OS 固有機能を使うため、v1 は Windows 専用でよい</td></tr>
+<tr><td>対象エージェント</td><td>GitHub Copilot CLI (<code>copilot</code>)、VS Code の Copilot Chat / エージェントモード</td></tr>
+<tr><td>課金体系</td><td><strong>GitHub AI Credits による従量課金</strong> (2026-06-01 以降。付録 A.4)</td></tr>
+<tr><td>権限</td><td>管理者権限を要求しない</td></tr>
+<tr><td>ネットワーク</td><td>利用枠の取得のみ GitHub SDK / API へアクセスする。それ以外は完全ローカル動作</td></tr>
+<tr><td>想定規模</td><td>プロジェクト数十件、並行セッション数件〜10 件、セッションログ数百 MB / 数百ファイル</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="3.-用語">3. 用語</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>用語</th><th>定義</th></tr></thead>
+<tbody>
+<tr><td><strong>セッション</strong></td><td>Copilot の 1 回の対話セッション。一意な session id を持つ</td></tr>
+<tr><td><strong>エントリポイント</strong></td><td>セッションを起動した経路。CLI (interactive) / CLI (background) / VS Code 拡張 / coding agent</td></tr>
+<tr><td><strong>サブエージェント実行</strong></td><td>セッションが起動した下位エージェント・委任タスクの 1 実行。親子関係を持ち N 段の木を成す</td></tr>
+<tr><td><strong>ターン (レコード)</strong></td><td>セッションログの 1 行 = 1 イベント</td></tr>
+<tr><td><strong>トランスクリプト</strong></td><td>セッションの発話・ツール呼び出し・ツール出力が記録された JSONL 形式のログ</td></tr>
+<tr><td><strong>AI Credit</strong></td><td>Copilot の従量課金の単位。トークン (入力 / 出力 / キャッシュ) 消費に応じてモデル別レートで消費される</td></tr>
+<tr><td><strong>nano-AIU</strong></td><td>Copilot SDK がコストを報告する単位。10⁹ で割ると AI Credit</td></tr>
+<tr><td><strong>クォータ</strong></td><td>プラン契約に含まれる利用枠。SDK の <code>account.getQuota</code> が返す <code>quotaSnapshots</code> の単位</td></tr>
+<tr><td><strong><code>path_key</code></strong></td><td>正規化済みパス (小文字化 + 区切りを `` に統一 + 末尾区切り除去)。プロジェクトの一意キー</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="4.-全体構成">4. 全体構成</h2>
+<h3 id="4.1-構成">4.1 構成</h3>
+<div class="ascii">┌──────────────────────────────────────────────────────────┐
+│ 本アプリ (常駐、非昇格)                                      │
+│  ┌──────────────┐   ┌────────────────────────────────┐  │
+│  │ UI (2 タブ)   │◄─►│ コア                            │  │
+│  │ - Copilot     │IPC│ - 差分インデクサ                  │  │
+│  │ - Projects    │   │ - ライブ監視 (画面表示中のみ)      │  │
+│  └──────────────┘   │ - 利用枠取得 (操作駆動 / 長周期)   │  │
+│                      │ - ローカル DB (索引・集計)        │  │
+│                      │ - dev サーバー管理                │  │
+│                      └────────────────────────────────┘  │
+│                          ▲              ▲                 │
+│         読み取り専用 ─────┘              │ HTTPS           │
+└──────────────────────────────────────┼──────────────────┘
+   ~/.copilot/ (session-state, ide, logs)     │
+   VS Code workspaceStorage/*/chatSessions     │
+   ローカルプロジェクトフォルダ / git            │
+                                    ┌──────────▼─────────┐
+                                    │ Copilot SDK / REST  │
+                                    │ (利用枠・クォータ)    │
+                                    └────────────────────┘</div>
+<h3 id="4.2-データ取得の-3-系統">4.2 データ取得の 3 系統</h3>
+<p>Copilot タブは<strong>性質の異なる 3 つの取得経路</strong>を持つ。混同しないこと。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>系統</th><th>取得契機</th><th>対象</th><th>永続化</th></tr></thead>
+<tbody>
+<tr><td><strong>(1) ライブ</strong></td><td>画面表示中の 2 秒ポーリング</td><td>小さなローカル状態ファイル + PID 生存確認 + トランスクリプト末尾のシーク読み</td><td>しない (プロセス内メモリのみ)</td></tr>
+<tr><td><strong>(2) インデックス</strong></td><td>タブ表示・更新ボタン・自動 (未取り込みの追記があるときのみ、下限 10 秒)</td><td>セッションログ全体の差分パース</td><td>する (索引・集計テーブル)</td></tr>
+<tr><td><strong>(3) 利用枠</strong></td><td>ユーザー操作 + 長周期 (目安 5 分以上)</td><td>Copilot SDK / GitHub REST API</td><td>直近値のみキャッシュ (任意で時系列)</td></tr>
+</tbody></table></div>
+<p><strong>(3) はネットワークアクセスを伴うため、絶対に (1) の 2 秒ポーリングに載せない</strong> (NFR-04)。</p>
+<p>プロジェクトタブは <strong>ユーザー操作駆動のみ</strong> (タブを開いたとき・更新ボタン)。定期ポーリングを持たない。</p>
+<hr />
+<h2 id="5.-機能要求-プロジェクト機能-fr-p">5. 機能要求: プロジェクト機能 (FR-P)</h2>
+<h3 id="5.1-スキャンと一覧化">5.1 スキャンと一覧化</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-01</span></td><td><span class="chip must">必須</span></td><td>スキャン対象フォルダ<strong>直下の 1 階層のみ</strong>を走査し、<strong>ディレクトリのみ</strong>を候補とする。再帰しない</td><td>深い再帰は <code>node_modules</code> / <code>.venv</code> / <code>target</code> の除外リスト管理を招き、走査時間も読めなくなる。ファイルを候補から外せば <code>*.zip</code> 等は自然に落ちる</td></tr>
+<tr><td><span class="chip id">FR-P-02</span></td><td><span class="chip must">必須</span></td><td>スキャン対象フォルダはユーザーが追加/削除できる。<strong>未登録のときは既定フォルダ</strong> (<code>%USERPROFILE%DocumentsProjects</code>) を<strong>その場限りの対象として使うだけで、DB には書き込まない</strong></td><td>既定フォルダを自動登録すると「削除しても次回スキャンで復活する」削除不能状態になる</td></tr>
+<tr><td><span class="chip id">FR-P-03</span></td><td><span class="chip must">必須</span></td><td>読み取れないフォルダ (存在しない / 権限なし) は警告ログを出して<strong>スキップし、スキャン全体を失敗させない</strong></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-04</span></td><td><span class="chip must">必須</span></td><td><strong>スキャン結果・git 状態・Copilot 利用状況を永続化しない</strong>。導出データとして要求時に読み直す。永続化するのは「スキャン対象フォルダ」と「手動調整」の 2 つだけ</td><td>ディスクの現状を写しただけのデータを DB に持つと「実体は消えたのに DB に残る」「リネームで別プロジェクト扱いになる」同期ずれの世話が恒久的に発生する</td></tr>
+<tr><td><span class="chip id">FR-P-05</span></td><td><span class="chip should">推奨</span></td><td>スキャン結果はプロセス内メモリにキャッシュし、<strong>再スキャンを伴わない操作</strong> (手動調整の保存など) では再利用する</td><td></td></tr>
+<tr><td><span class="chip id">FR-P-06</span></td><td><span class="chip must">必須</span></td><td>ディスク走査は UI スレッドを塞がない実行経路で行う</td><td>UI スレッドでの同期 IO はアプリ全体を「応答なし」にする</td></tr>
+</tbody></table></div>
+<h3 id="5.2-プロジェクト種別の判定">5.2 プロジェクト種別の判定</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-10</span></td><td><span class="chip must">必須</span></td><td>種別は<strong>固定の優先順リスト</strong>で判定する。判定材料は<strong>マニフェストファイルの存在有無のみ</strong> (内容は読まない)</td></tr>
+<tr><td><span class="chip id">FR-P-11</span></td><td><span class="chip must">必須</span></td><td>優先順は次表のとおり。<strong>Next.js を Vite より必ず先に見る</strong></td></tr>
+<tr><td><span class="chip id">FR-P-12</span></td><td><span class="chip must">必須</span></td><td>ルート直下にマニフェストが 1 つも無い場合、<strong>1 階層下だけ</strong>を探す。複数候補が出たら優先順位が最上位のもの、同順位ならディレクトリ名昇順で 1 つに決める。採用したサブフォルダが<strong>作業ディレクトリ (<code>working_dir</code>)</strong> になる</td></tr>
+<tr><td><span class="chip id">FR-P-13</span></td><td><span class="chip must">必須</span></td><td>いずれにも該当しなければ「その他」として扱い、<strong>一覧から隠さない</strong></td></tr>
+<tr><td><span class="chip id">FR-P-14</span></td><td><span class="chip should">推奨</span></td><td>判定は IO 非依存の純粋関数として切り出し、実データで見つかった誤判定パターンをユニットテストのケースにする</td></tr>
+</tbody></table></div>
+<p><strong>種別優先順リスト (FR-P-11)</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>順位</th><th>種別</th><th>判定材料</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Tauri</td><td><code>src-tauri/tauri.conf.json</code></td></tr>
+<tr><td>2</td><td>Next.js</td><td><code>next.config.{js,ts,mjs,cjs,mts,cts}</code></td></tr>
+<tr><td>3</td><td>SvelteKit</td><td><code>svelte.config.js</code></td></tr>
+<tr><td>4</td><td>Vite SPA</td><td><code>vite.config.*</code></td></tr>
+<tr><td>5</td><td>Python パッケージ</td><td><code>pyproject.toml</code></td></tr>
+<tr><td>6</td><td>Rust</td><td><code>Cargo.toml</code></td></tr>
+<tr><td>7</td><td>Python</td><td><code>requirements.txt</code></td></tr>
+<tr><td>8</td><td>Notebook</td><td><code>*.ipynb</code> が 1 つ以上</td></tr>
+<tr><td>9</td><td>その他</td><td>上記いずれにも該当しない</td></tr>
+</tbody></table></div>
+<div class="rationale"><span class="note-title">補足</span>
+<p><strong>順序が重要な理由</strong>: Next.js プロジェクトが Vitest 用の <code>vite.config.ts</code> を併せ持つことは珍しくなく、素朴な判定順では誤判定する。またルートにマニフェストが無くサブフォルダにあるケース、<code>frontend/</code> と <code>backend/</code> の<strong>両方</strong>にマニフェストがあるケースも実在するため FR-P-12 の決定規則が要る。</p>
+</div>
+<h3 id="5.3-起動コマンドの解決">5.3 起動コマンドの解決</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-20</span></td><td><span class="chip must">必須</span></td><td><code>package.json</code> の <code>scripts</code> を読み、許可リスト <code>["dev","build","start","preview","test","lint"]</code> に<strong>実在するキーだけ</strong>を、許可リストの順で起動候補として提示する。<code>test:watch</code> のような派生キーは含めない</td></tr>
+<tr><td><span class="chip id">FR-P-21</span></td><td><span class="chip must">必須</span></td><td>実行コマンドの解決順: ①ユーザーの起動コマンド上書き → ②<code>dev</code> があれば <code>npm run dev</code> → ③<code>start</code> があれば <code>npm run start</code> → ④空 (起動不可)</td></tr>
+<tr><td><span class="chip id">FR-P-22</span></td><td><span class="chip must">必須</span></td><td><strong>起動が不適切なプロジェクト (本アプリ自身のソースなど) を起動不可として扱える</strong>こと。一覧からは隠さず、起動ボタンを無効化して<strong>理由を表示する</strong></td></tr>
+<tr><td><span class="chip id">FR-P-23</span></td><td><span class="chip must">必須</span></td><td>起動可否は UI のボタン無効化だけに頼らず、<strong>バックエンド側でも再チェック</strong>する</td></tr>
+</tbody></table></div>
+<h3 id="5.4-手動調整-override">5.4 手動調整 (override)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-30</span></td><td><span class="chip must">必須</span></td><td>次の項目をプロジェクトごとに手動調整でき、<strong><code>path_key</code> をキーに永続化</strong>する: 表示名 / 起動コマンド上書き / 作業ディレクトリ上書き / 並び順 / 非表示 / アーカイブ</td></tr>
+<tr><td><span class="chip id">FR-P-31</span></td><td><span class="chip must">必須</span></td><td>手動調整は<strong>再スキャンしても失われない</strong> (<code>path_key</code> でマージする)</td></tr>
+<tr><td><span class="chip id">FR-P-32</span></td><td><span class="chip must">必須</span></td><td>作業ディレクトリ上書きは絶対パスでもルートからの相対パスでも受け付け、<strong>保存時に実在するディレクトリかを検証</strong>し、存在しなければ拒否して DB に書き込まない</td></tr>
+<tr><td><span class="chip id">FR-P-33</span></td><td><span class="chip should">推奨</span></td><td>自動判定は「候補の提示」、上書きは「最終決定」という役割分担にする。自動判定ロジックを個別事情に合わせて歪めない</td></tr>
+</tbody></table></div>
+<div class="rationale"><span class="note-title">なぜこの要求があるか</span>
+<p><strong>FR-P-32 が要る理由</strong>: リポジトリルートを作業ディレクトリにして、起動コマンドにルートからの相対パス (<code>.\backend\.venv\Scripts\python.exe -m ...</code>) を書きたい構成が実在する。自動判定が <code>frontend/</code> を選ぶと相対パスが解決できず起動が失敗するため、上書きが必要になる。</p>
+</div>
+<h3 id="5.5-git-状態">5.5 git 状態</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-40</span></td><td><span class="chip must">必須</span></td><td>各プロジェクトについて次を表示する: ブランチ名 / 未コミット変更の有無 / リモート (origin) の有無 / 最終コミット日時</td></tr>
+<tr><td><span class="chip id">FR-P-41</span></td><td><span class="chip must">必須</span></td><td>detached HEAD はブランチ名なしとして扱う</td></tr>
+<tr><td><span class="chip id">FR-P-42</span></td><td><span class="chip must">必須</span></td><td><code>.git</code> が存在しなければコマンドを 1 つも実行せず即座に「git 情報なし」とする</td></tr>
+<tr><td><span class="chip id">FR-P-43</span></td><td><span class="chip must">必須</span></td><td>個々のコマンドの非ゼロ終了は正常系として扱い (例: リモート未設定)、<strong>1 プロジェクトの失敗が全体を失敗させない</strong></td></tr>
+<tr><td><span class="chip id">FR-P-44</span></td><td><span class="chip must">必須</span></td><td>判定対象は <code>working_dir</code> ではなく<strong>リポジトリルート</strong> (<code>root_path</code>) とする</td></tr>
+<tr><td><span class="chip id">FR-P-45</span></td><td><span class="chip should">推奨</span></td><td>同時実行数に上限 (目安 8) を設ける — 数十プロジェクト × 複数コマンドの一斉プロセス起動を避ける</td></tr>
+<tr><td><span class="chip id">FR-P-46</span></td><td><span class="chip must">必須</span></td><td>子プロセス起動時にコンソールウィンドウを表示しない</td></tr>
+<tr><td><span class="chip id">FR-P-47</span></td><td><span class="chip may">任意</span></td><td>リモートとの ahead/behind は取得しない</td></tr>
+</tbody></table></div>
+<h3 id="5.6-copilot-利用状況の紐付け">5.6 Copilot 利用状況の紐付け</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-50</span></td><td><span class="chip must">必須</span></td><td>プロジェクトごとに Copilot の利用状況を<strong>読み取り専用</strong>で表示する: 保持セッション数 / 最終利用日時 / 直近セッションのタイトル / 稼働中か / 直近セッションのクレジット消費・追加行数・削除行数</td></tr>
+<tr><td><span class="chip id">FR-P-51</span></td><td><span class="chip must">必須</span></td><td>セッション履歴とプロジェクトの対応付けは<strong>履歴側に記録された作業ディレクトリ (cwd) を正規化した <code>path_key</code> の完全一致</strong>を最優先とする</td></tr>
+<tr><td><span class="chip id">FR-P-52</span></td><td><span class="chip must">必須</span></td><td><strong>フォルダ名フォールバック</strong>を持つ。完全一致が無く、かつ ①その cwd が<strong>ディスク上に存在せず</strong>、②<strong>同じフォルダ名を持つスキャン済みプロジェクトがちょうど 1 件</strong>で、③そのプロジェクトにまだ完全一致の履歴が紐付いていない — の 3 条件すべてが成立するときに限り紐付ける</td></tr>
+<tr><td><span class="chip id">FR-P-53</span></td><td><span class="chip must">必須</span></td><td>フォールバックで紐付けた場合は<strong>その旨を UI に明示する</strong> (「旧パスの履歴 (フォルダ名で照合)」等)。推測による紐付けを事実として提示しない</td></tr>
+<tr><td><span class="chip id">FR-P-54</span></td><td><span class="chip must">必須</span></td><td>同一 <code>path_key</code> に複数の履歴候補が競合したらセッション数が多い方を採用する。完全一致とフォールバックが競合したらフォールバック側を<strong>捨てる</strong> (合算しない)</td></tr>
+<tr><td><span class="chip id">FR-P-55</span></td><td><span class="chip must">必須</span></td><td>巨大なログの<strong>全文パースを行わない</strong>。最終利用日時とタイトルは<strong>末尾数 KB</strong>、作業ディレクトリは<strong>先頭数十 KB</strong> の部分読みで求める</td></tr>
+<tr><td><span class="chip id">FR-P-56</span></td><td><span class="chip must">必須</span></td><td><strong>ファイルの mtime を判定に使わない</strong>。中身のタイムスタンプを読む</td></tr>
+<tr><td><span class="chip id">FR-P-57</span></td><td><span class="chip must">必須</span></td><td>「稼働中」の判定は状態ファイルの存在だけでなく、<strong>PID の生存確認を併用</strong>する</td></tr>
+<tr><td><span class="chip id">FR-P-58</span></td><td><span class="chip must">必須</span></td><td>履歴が一切ないプロジェクトは「触ったことがない」として利用状況を持たせない (空欄で埋めない)</td></tr>
+</tbody></table></div>
+<div class="rationale"><span class="note-title">なぜこの要求があるか</span>
+<p><strong>FR-P-52 が要る理由</strong>: エージェントは作業ディレクトリのパスをキーに履歴を保存するため、<strong>プロジェクトフォルダを移動・リネームすると履歴との紐付けが切れる</strong>。とくに VS Code の Copilot Chat はワークスペースフォルダの URI から導いたハッシュでセッションを保存するため、フォルダが動くと過去セッションが丸ごと孤児化する (付録 A.2)。完全一致だけに頼ると、フォルダを一度整理しただけで機能が実質使えなくなる。</p>
+<p><strong>FR-P-55 / 56 が要る理由</strong>: セッションログには数 MB のファイルが実在するため全文パースは成立しない。また PC 移行やバックアップ復元により<strong>複数ファイルが同一 mtime になる</strong>ことがあり、mtime を信頼した判定は壊れる。</p>
+</div>
+<h3 id="5.7-dev-サーバー管理">5.7 dev サーバー管理</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-60</span></td><td><span class="chip must">必須</span></td><td>プロジェクトごとに dev サーバーを起動 / 停止できる。状態は <code>停止中 / 起動中 / 稼働中(URL, PID, 開始時刻) / 終了(終了コード) / 失敗(理由)</code> の 5 状態</td></tr>
+<tr><td><span class="chip id">FR-P-61</span></td><td><span class="chip must">必須</span></td><td>起動したプロセスツリー全体を、<strong>アプリ終了時に確実に道連れで終了できる仕組み</strong> (Windows Job Object の <code>KILL_ON_JOB_CLOSE</code> 等) に紐付ける</td></tr>
+<tr><td><span class="chip id">FR-P-62</span></td><td><span class="chip must">必須</span></td><td>アプリの終了イベントで全 dev サーバーを停止する。<strong>ウィンドウを閉じただけ (トレイ常駐継続) では停止しない</strong></td></tr>
+<tr><td><span class="chip id">FR-P-63</span></td><td><span class="chip must">必須</span></td><td>stdout / stderr を非同期に読み、<strong>URL を自動検出</strong>して表示する — ポートは自動採番されるため設定値からは決められない</td></tr>
+<tr><td><span class="chip id">FR-P-64</span></td><td><span class="chip must">必須</span></td><td>ログは<strong>メモリ上のリングバッファ 500 行</strong>のみ保持する。DB には保存しない</td></tr>
+<tr><td><span class="chip id">FR-P-65</span></td><td><span class="chip should">推奨</span></td><td>ログ配信はイベントを 200〜300ms でバッファリングして送る</td></tr>
+<tr><td><span class="chip id">FR-P-66</span></td><td><span class="chip must">必須</span></td><td>既に停止している / 未起動のものへの停止要求はエラーにせず「停止中」を返す (冪等)</td></tr>
+<tr><td><span class="chip id">FR-P-67</span></td><td><span class="chip should">推奨</span></td><td>「すべて停止」を用意し、二段階確認を挟む</td></tr>
+<tr><td><span class="chip id">FR-P-68</span></td><td><span class="chip must">必須</span></td><td>OS ネイティブ API (<code>unsafe</code> / FFI) の使用は<strong>1 ファイルに隔離</strong>し、レビュー面積を絞る</td></tr>
+</tbody></table></div>
+<h3 id="5.8-外部ツール連携">5.8 外部ツール連携</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-70</span></td><td><span class="chip must">必須</span></td><td>次の導線を提供する: VS Code で開く / エクスプローラーで開く / ターミナルで開く / Copilot CLI をそのディレクトリで起動 / (稼働中かつ URL 検出済みなら) ブラウザで開く</td></tr>
+<tr><td><span class="chip id">FR-P-71</span></td><td><span class="chip must">必須</span></td><td>外部ツールは投げっぱなしで起動し、完了を待たない</td></tr>
+<tr><td><span class="chip id">FR-P-72</span></td><td><span class="chip must">必須</span></td><td><strong>起動成否は spawn の成否のみで判定し、終了コードを見ない</strong> — <code>explorer.exe</code> は正常時でも終了コード 1 を返す</td></tr>
+<tr><td><span class="chip id">FR-P-73</span></td><td><span class="chip should">推奨</span></td><td>起動失敗時は「PATH に無い」等の具体的な対処を案内する</td></tr>
+<tr><td><span class="chip id">FR-P-74</span></td><td><span class="chip should">推奨</span></td><td>ターミナルは Windows Terminal を優先し、失敗したら PowerShell にフォールバックする</td></tr>
+</tbody></table></div>
+<h3 id="5.9-プロジェクト一覧-ui">5.9 プロジェクト一覧 UI</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-P-80</span></td><td><span class="chip must">必須</span></td><td>一覧 + 詳細パネルの 2 ペイン構成とする</td></tr>
+<tr><td><span class="chip id">FR-P-81</span></td><td><span class="chip must">必須</span></td><td>絞り込みはすべてフロント側で完結させる (バックエンドに再問い合わせしない): 名前の部分一致検索 / 種別フィルタ / 非表示も表示 / アーカイブを隠す / 起動中のみ</td></tr>
+<tr><td><span class="chip id">FR-P-82</span></td><td><span class="chip must">必須</span></td><td>並べ替えキーは <strong>最終利用日時 (既定、履歴なしは末尾に沈める)</strong> / 名前 / 種別。同率時は表示名昇順</td></tr>
+<tr><td><span class="chip id">FR-P-83</span></td><td><span class="chip must">必須</span></td><td>一覧行に出す情報: dev 状態ドット / Copilot 稼働中バッジ / 表示名 (+ 非表示・アーカイブバッジ) / git ブランチと未コミット変更ドット / 種別 / 最終利用日時 (相対表示) / 稼働中の URL または起動コマンド / 起動・停止ボタン / 外部ツールメニュー</td></tr>
+<tr><td><span class="chip id">FR-P-84</span></td><td><span class="chip must">必須</span></td><td>詳細パネルに出す情報: パス / 種別 / 作業ディレクトリ / 起動コマンド候補 / 外部ツールボタン列 / dev サーバー状態と操作とログ / git 状態 / Copilot 利用状況 / 起動不可の理由 / 手動調整フォーム</td></tr>
+<tr><td><span class="chip id">FR-P-85</span></td><td><span class="chip must">必須</span></td><td>ヘッダーに「最終スキャン (相対時刻)」「すべて停止」「更新」を置く</td></tr>
+<tr><td><span class="chip id">FR-P-86</span></td><td><span class="chip should">推奨</span></td><td>タブを開いた瞬間はキャッシュ済みスナップショットを即描画し、裏で最新化する</td></tr>
+<tr><td><span class="chip id">FR-P-87</span></td><td><span class="chip should">推奨</span></td><td>スキャン中はボタンに「スキャン中…」を表示する</td></tr>
+<tr><td><span class="chip id">FR-P-88</span></td><td><span class="chip should">推奨</span></td><td>行内メニューはクリック位置から座標計算して固定配置で描画する — 横スクロールコンテナの overflow クリッピングを避ける</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="6.-機能要求-copilot-稼働ダッシュボード-fr-c">6. 機能要求: Copilot 稼働ダッシュボード (FR-C)</h2>
+<h3 id="6.1-差分インデックス">6.1 差分インデックス</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-01</span></td><td><span class="chip must">必須</span></td><td>セッションログを<strong>全期間</strong>インデックスする。期間を区切らない</td><td>「全期間を振り返れること」が要求そのもの</td></tr>
+<tr><td><span class="chip id">FR-C-02</span></td><td><span class="chip must">必須</span></td><td><strong>本文 (発話・ツール呼び出し・ツール出力の全文) を DB に複製しない</strong>。索引には <code>ファイルパス + バイトオフセット + バイト長 + メタデータ + 先頭 140 字程度のプレビュー</code> のみを保存し、本文ビューアを開いた瞬間にその 1 レコードだけをシーク読みする</td><td>数百 MB の生テキストのうち実際に読み返されるのは「開いた 1 レコード」だけ。全文複製は使われないデータのためにディスクとメモリ帯域を倍払う</td></tr>
+<tr><td><span class="chip id">FR-C-03</span></td><td><span class="chip must">必須</span></td><td>ファイルごとに<strong>最後にパースし終えたバイトオフセット</strong>を記録し、<strong>追記分のみ</strong>を差分パースする</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-04</span></td><td><span class="chip must">必須</span></td><td>オフセットの更新は、対応するレコード挿入と<strong>同一トランザクション内の最後</strong>に行う</td><td>クラッシュしても最後にコミットが成功した位置から再開できる</td></tr>
+<tr><td><span class="chip id">FR-C-05</span></td><td><span class="chip must">必須</span></td><td><strong>改行で終わらない末尾断片 (書きかけの最終行) は確定分から除外</strong>し、その分をオフセットに含めない</td><td>追記中のファイルを読むための必須の安全策</td></tr>
+<tr><td><span class="chip id">FR-C-06</span></td><td><span class="chip must">必須</span></td><td>ファイルサイズが記録より<strong>小さく</strong>なっていたら truncate / 入れ替わりとみなして<strong>全再パース</strong>する</td><td>mtime は信頼できないため、サイズとオフセットで判定する</td></tr>
+<tr><td><span class="chip id">FR-C-07</span></td><td><span class="chip must">必須</span></td><td><code>(ファイルパス, バイトオフセット)</code> に UNIQUE 制約を張り、重複挿入を無視することで<strong>二重適用を安全にする</strong></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-08</span></td><td><span class="chip must">必須</span></td><td>読み込みは行単位のストリーミングで行い、<strong>ファイル全体をメモリに載せない</strong></td><td>ツール出力が丸ごと 1 行に載るため、単一レコードが数百 KB〜数 MB になりうる</td></tr>
+<tr><td><span class="chip id">FR-C-09</span></td><td><span class="chip must">必須</span></td><td>一定行数 (目安 3,000 行) ごとにコミットし、<strong>バッチ間で短いスリープ (目安 15ms) を入れて DB ロックを手放す</strong></td><td>他機能の DB 利用と競合させない</td></tr>
+<tr><td><span class="chip id">FR-C-10</span></td><td><span class="chip must">必須</span></td><td>インデックス実行は<strong>バックグラウンドで行い、起動要求は即座に返す</strong>。多重起動を防止する (実行中の再要求は黙って無視)</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-11</span></td><td><span class="chip must">必須</span></td><td>進捗を <code>フェーズ / 総ファイル数 / 完了数 / 現在のファイル / 累計取り込みレコード数</code> として通知する。通知は 250〜300ms 間隔に間引く</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-12</span></td><td><span class="chip must">必須</span></td><td>壊れた行はパース失敗として黙って読み飛ばし、<strong>他行の処理を継続</strong>する</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-13</span></td><td><span class="chip must">必須</span></td><td>すべてのフィールドを欠落しうる前提で防御的にパースする。<strong>読めなくなっても該当項目が空になるだけで機能全体が止まらない</strong></td><td>依存先は内部形式で、予告なく変わりうる</td></tr>
+<tr><td><span class="chip id">FR-C-14</span></td><td><span class="chip must">必須</span></td><td>セッション集計とサブエージェント実行履歴は<strong>無期限保持</strong>する。時系列サンプルのみ保持期間を設ける</td><td>「全期間を振り返る」が要求のため。集計行は数百件規模で放置しても問題にならない</td></tr>
+<tr><td><span class="chip id">FR-C-15</span></td><td><span class="chip should">推奨</span></td><td>差分判定 (<code>継続 / 全再パース / 更新なし</code>) と末尾断片の切り捨ては純粋関数に切り出し、ユニットテストで固める</td><td></td></tr>
+</tbody></table></div>
+<h3 id="6.2-セッション集計とサブエージェント系統">6.2 セッション集計とサブエージェント系統</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-20</span></td><td><span class="chip must">必須</span></td><td>セッション単位に次を集計する: 作業ディレクトリ / フォルダ名 / git ブランチ / エントリポイント / タイトル / 開始時刻 / 最終活動時刻 / ターン数 / トークン 4 種 (入力・出力・キャッシュ作成・キャッシュ読込) / <strong>消費 AI Credits</strong> / サブエージェント数 / 利用枠到達イベント数</td></tr>
+<tr><td><span class="chip id">FR-C-21</span></td><td><span class="chip must">必須</span></td><td>サブエージェント実行を、<strong>親エージェント ID を持つ N 段の木</strong>として保持する: 親子関係 / 深さ / エージェント種別 / 説明 / モデル / 開始・最終活動・終了時刻 / 状態 (<code>実行中 / 完了 / 拒否</code>) / トークン・ツール利用統計</td></tr>
+<tr><td><span class="chip id">FR-C-22</span></td><td><span class="chip must">必須</span></td><td>サブエージェント実行の<strong>主キーは、親側と子側の両方に必ず存在する識別子</strong>とする。片側にしか存在しない ID を主キーにしない</td></tr>
+<tr><td><span class="chip id">FR-C-23</span></td><td><span class="chip must">必須</span></td><td>親側でサブエージェント起動を見つけた時点で行を作成し、以降<strong>同じキーでマージ</strong>する</td></tr>
+<tr><td><span class="chip id">FR-C-24</span></td><td><span class="chip must">必須</span></td><td><strong>バックグラウンド起動の「起動しただけ」の暫定応答を完了として扱わない</strong>。本当の完了通知が届くまで実行中のままにする</td></tr>
+<tr><td><span class="chip id">FR-C-25</span></td><td><span class="chip must">必須</span></td><td>完了通知は<strong>単一のソースからのみ</strong>拾う。同じ通知が複数のレコード種別に重複して現れる場合、複数ソースから拾うと終了時刻が「どのソースを最後に処理したか」に依存する不安定な値になる</td></tr>
+<tr><td><span class="chip id">FR-C-26</span></td><td><span class="chip must">必須</span></td><td>完了通知の適用には<strong>2 段階の確認ゲート</strong>を通す (「同一バッチ内に起動レコードがある」または「既に該当行が存在する」もののみ適用)</td></tr>
+<tr><td><span class="chip id">FR-C-27</span></td><td><span class="chip must">必須</span></td><td>「拒否 (親が呼び出しを拒否した)」と「失敗 / 中断 (実際に起動して終わった)」を混同しない</td></tr>
+<tr><td><span class="chip id">FR-C-28</span></td><td><span class="chip must">必須</span></td><td>利用枠到達・レート制限・<strong>セッションのクレジット上限到達</strong>をイベントとして抽出し保持する: セッション / 発生時刻 / 種別 / リセット表示文言 / 生メッセージ</td></tr>
+<tr><td><span class="chip id">FR-C-29</span></td><td><span class="chip should">推奨</span></td><td>サブエージェント側のメタ情報 (種別・説明・親の呼び出し ID・深さ・モデル) は差分の有無に関わらず毎回読み直してマージする</td></tr>
+</tbody></table></div>
+<div class="rationale"><span class="note-title">なぜこの要求があるか</span>
+<p><strong>FR-C-22 が要る理由</strong>: 親側の呼び出しレコードと子側のログで異なる ID が振られている場合、片側にしか無い ID を主キーにすると (a) 拒否されたケースでキーを捻出できず、(b) 親の行と子のファイルが別々のインデックス実行に分かれたとき親子関係を復元できなくなり、系統図がフラットに退行する。</p>
+<p><strong>FR-C-24〜26 が要る理由</strong>: バックグラウンド実行のエージェントは起動 1〜2 秒後に「起動した」という暫定応答を書き、本当の完了は数分後に別のレコードとして届くことがある。暫定応答を完了とみなすと、数分動いた実行が「1 秒」と記録される。逆に完了通知を無条件に適用すると、エージェント以外のバックグラウンド実行 (シェルコマンド等) で幽霊行ができる。</p>
+</div>
+<h3 id="6.3-ライブ稼働監視">6.3 ライブ稼働監視</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-40</span></td><td><span class="chip must">必須</span></td><td>稼働中セッションを一覧表示する。判定は<strong>状態ファイル + PID の生存確認</strong>で行い、死んでいるものは一覧から除外する</td><td>状態ファイルはプロセス終了時に消える保証がなく stale になりうる</td></tr>
+<tr><td><span class="chip id">FR-C-41</span></td><td><span class="chip must">必須</span></td><td>ライブ監視のタイマーは<strong>画面 (タブ) 側に置き、タブを離れたら確実に止まる</strong>構造にする。バックエンドに常駐ポーリングループを作らない</td><td>コンポーネントのマウント/アンマウントが「タブを見ているか」と厳密に一致する。バックエンドに置くと開始/停止の往復と状態管理が増え、「離れたら確実に止まる」保証がコードから読み取れなくなる</td></tr>
+<tr><td><span class="chip id">FR-C-42</span></td><td><span class="chip must">必須</span></td><td>ポーリング間隔は <strong>2 秒</strong>。読むのは小さなローカルファイルと PID 生存確認のみで、<strong>ネットワークアクセスも外部プロセス起動も伴わない</strong></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-43</span></td><td><span class="chip must">必須</span></td><td><strong>ウィンドウ最小化時もポーリングを停止する</strong>。ブラウザの可視状態イベントだけに頼らず、ネイティブウィンドウの最小化を検知して通知する経路を併せ持つ</td><td>ネイティブウィンドウの最小化は WebView の <code>visibilitychange</code> に伝播しない (最小化しても <code>visibilityState</code> は <code>visible</code> のまま)</td></tr>
+<tr><td><span class="chip id">FR-C-44</span></td><td><span class="chip must">必須</span></td><td>各セッションの<strong>活動状態</strong>を次の 5 値で表す: <code>生成中 / ツール実行中 / 入力待ち / サブエージェント実行中 / 不明</code></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-45</span></td><td><span class="chip must">必須</span></td><td>活動状態の判定は次の優先順で合成する: ①セッション状態のシグナル (状態ファイル / セッション開始・終了フック) が<strong>新鮮 (目安 60 秒以内)</strong> ならそれを最優先 → ②なければ<strong>トランスクリプト末尾レコードのターン終了理由</strong>から判定 → ③結果が「入力待ち / 不明」で、かつ稼働中サブエージェントが 1 件以上あれば「サブエージェント実行中」に上書きする</td><td>①が得られないエントリポイントが存在しうるため、①だけに依存すると常に「不明」になる。<strong>②はエントリポイントに依存せず全セッションで効く</strong>ので、②だけでも成立する設計にしておく</td></tr>
+<tr><td><span class="chip id">FR-C-46</span></td><td><span class="chip must">必須</span></td><td><strong>「長時間のツール実行中」と「ツール許可プロンプトで停止中」は区別できない</strong>ことを前提とし、UI で断定しない (「ツール実行中」等の中立表現にし、補足はツールチップへ)</td><td>両者はログ上まったく同じ形 (直近の書き込みがツール呼び出しのまま止まる) でしか現れない</td></tr>
+<tr><td><span class="chip id">FR-C-47</span></td><td><span class="chip must">必須</span></td><td>末尾レコードの読み取りは<strong>末尾 64KB のシーク読み</strong>で行い、見つからなければ<strong>512KB で 1 回だけ</strong>読み直す。ファイル全体を読まない</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-48</span></td><td><span class="chip must">必須</span></td><td><code>(パス, サイズ, mtime)</code> が前回と同じならディスクを読み直さない。アイドルなセッションは一度読めば以降読まれない。一覧から消えたセッションのキャッシュは毎回剪定する</td><td>これが無いと 2 秒ごとに全セッションの末尾を読むことになる</td></tr>
+<tr><td><span class="chip id">FR-C-49</span></td><td><span class="chip must">必須</span></td><td><strong>末尾の物理的な最終行が本文レコードとは限らない</strong>。末尾から遡って最初に見つかる本文レコード (ユーザー / アシスタント) を採る</td><td>末尾付近にタイトル・添付・スナップショット等の特殊レコードが混ざる</td></tr>
+<tr><td><span class="chip id">FR-C-50</span></td><td><span class="chip must">必須</span></td><td>稼働中サブエージェント数は <strong>DB の状態列ではなく、サブエージェントのログファイルの mtime が直近 N 秒 (目安 120 秒) 以内か</strong>で近似する。ファイル内容は読まない</td><td>DB は更新ボタンを押すまで古いままで、「ライブ」の名に反する</td></tr>
+<tr><td><span class="chip id">FR-C-51</span></td><td><span class="chip must">必須</span></td><td><strong>稼働中サブエージェントの「件数」と「ID 集合」を別々に算出しない</strong>。集合を先に作り、件数はその長さとして導出する</td><td>数字と集合が食い違いようがない形にする。別々に持つと「バッジは稼働中なのに系統図は空」という矛盾が出る</td></tr>
+<tr><td><span class="chip id">FR-C-52</span></td><td><span class="chip must">必須</span></td><td>mtime 由来の稼働判定には<strong>最大 N 秒の遅れがある</strong>ことを既知の制約として受け入れ、UI で断定しない</td><td>mtime は「最後に書き込まれた時刻」に過ぎない</td></tr>
+<tr><td><span class="chip id">FR-C-53</span></td><td><span class="chip must">必須</span></td><td>セッションカードに出す情報: フォルダ名 / エントリポイントバッジ / タイトル / 活動状態ドット / モデル名 / 稼働時間 / 最終活動 (相対時刻) / <strong>コンテキストウィンドウ使用率</strong> / <strong>セッション消費クレジット</strong> / サブエージェント数バッジ</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-54</span></td><td><span class="chip must">必須</span></td><td>セッションタイトルは <code>インデックス済みタイトル → セッションストア / 状態ファイル由来の名前</code> の順にフォールバックする</td><td></td></tr>
+<tr><td><span class="chip id">FR-C-55</span></td><td><span class="chip should">推奨</span></td><td><strong>30 分以上アイドルなセッションは既定で非表示</strong>にし、トグルで表示できるようにする。「指示を出したら再表示」は<strong>状態を持たず、最終活動時刻の判定が自然に戻ることで</strong>満たす</td><td>タイマーもフラグも持たないので、隠す/戻すの状態がずれようがない</td></tr>
+<tr><td><span class="chip id">FR-C-56</span></td><td><span class="chip should">推奨</span></td><td>セッションカードを展開するとインラインでサブエージェント系統図を表示する。<strong>サブエージェントが稼働中のセッションは自動展開</strong>する。ただしユーザーが手動で閉じた場合と取得に失敗した場合は自動展開を抑止する</td><td>抑止が無いと「自動展開 → 失敗 → 閉じる → 自動展開」の 2 秒ループになる</td></tr>
+<tr><td><span class="chip id">FR-C-57</span></td><td><span class="chip must">必須</span></td><td><strong>未インデックスのセッションはエラーではなく正常系</strong>として扱う。「まだ記録がありません」と穏やかに表示し、そのセッションについて 1 回だけインデックスを起動する</td><td>赤いエラーを出しても、ユーザーには何をすればよいか分からない</td></tr>
+<tr><td><span class="chip id">FR-C-58</span></td><td><span class="chip should">推奨</span></td><td>画面を見ている間、<strong>実際に未取り込みの追記があるときに限り</strong>差分インデックスを自動起動する。判定はログの mtime と直近インデックス完了時刻の比較のみで行い、<strong>下限間隔 10 秒</strong>を設ける</td><td>手動更新しか無いと「画面上は動いていないのに、更新を押すと実は動いていた」状態が常態化する。下限が無いと生成中のセッションがある間ポーリングのたびに走る</td></tr>
+<tr><td><span class="chip id">FR-C-59</span></td><td><span class="chip must">必須</span></td><td>自動インデックスの発火判定には<strong>ログの mtime だけを使い、固定間隔で更新される値を混ぜない</strong></td><td>定期リフレッシュ由来のタイムスタンプは実際の活動と無関係に進む。混ぜるとアイドル時も常に「未取り込みあり」と誤判定し、際限なく回り続ける</td></tr>
+<tr><td><span class="chip id">FR-C-60</span></td><td><span class="chip should">推奨</span></td><td>「インデックス中」バッジは<strong>手動更新のときだけ</strong>出す。自動実行では出さず、「最終インデックス: N 秒前」の更新を鮮度の保証とする</td><td>10 秒ごとの点滅は視覚ノイズになる</td></tr>
+<tr><td><span class="chip id">FR-C-61</span></td><td><span class="chip must">必須</span></td><td>稼働サマリーとして「稼働中セッション数 / 稼働中サブエージェント数 / IDE ワークスペース数」を常時表示する</td><td></td></tr>
+</tbody></table></div>
+<h3 id="6.4-ide-ワークスペース">6.4 IDE ワークスペース</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-70</span></td><td><span class="chip must">必須</span></td><td>エディタ統合の状態ファイルを読み、接続中の IDE ワークスペースを一覧表示する (フォルダ一覧 / IDE 名 / 接続状態)</td></tr>
+<tr><td><span class="chip id">FR-C-71</span></td><td><span class="chip must">必須</span></td><td>PID が死んでいても<strong>行を捨てず「切断済み」として表示</strong>する (stale な状態ファイルが実在するため)</td></tr>
+<tr><td><span class="chip id">FR-C-72</span></td><td><span class="chip must">必須</span></td><td><strong>認証トークンは DTO のフィールドとして定義すらしない</strong>。表示も保存もしない</td></tr>
+</tbody></table></div>
+<h3 id="6.5-利用枠に対する消費率の可視化">6.5 利用枠に対する消費率の可視化</h3>
+<div class="rationale"><span class="note-title">補足</span>
+<p><strong>本節が満たすべきことは 1 つ</strong>: 「<strong>契約している利用枠に対して、今どこまで使っているか</strong>」が一目で分かること。取得手段は問わない (取得経路の要求は 6.8)。</p>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-80</span></td><td><span class="chip must">必須</span></td><td>利用枠の消費率をゲージで表示する。<strong>性質の異なる複数の枠を並べて</strong>表示できること。対象は ①<strong>月次 AI Credits の消費額 / 付与額</strong>、②<strong>クォータの消費率とリセット日</strong>、③<strong>セッションのコンテキストウィンドウ使用率</strong></td></tr>
+<tr><td><span class="chip id">FR-C-81</span></td><td><span class="chip must">必須</span></td><td>値の出所を段階で降格させ、<strong>UI で必ず区別表示する</strong>: <code>実値 (SDK / API 由来)</code> → <code>推定 (過去実績比)</code> → <code>取得不可</code></td></tr>
+<tr><td><span class="chip id">FR-C-82</span></td><td><span class="chip must">必須</span></td><td>「推定」は<strong>過去実績との相対値であり、提供元が課金している実際の消費率ではない</strong>ことを UI に明示する</td></tr>
+<tr><td><span class="chip id">FR-C-83</span></td><td><span class="chip must">必須</span></td><td>「取得不可」のときは<strong>何をすれば取れるようになるか</strong> (認証が必要 / SDK が見つからない / 対象プランでない 等) を表示する</td></tr>
+<tr><td><span class="chip id">FR-C-84</span></td><td><span class="chip must">必須</span></td><td>複数の枠を<strong>独立に評価</strong>する。<strong>ある枠だけ実値がある場合、他の枠に推定値を混ぜない</strong></td></tr>
+<tr><td><span class="chip id">FR-C-85</span></td><td><span class="chip must">必須</span></td><td><strong>リセット日時を過ぎた観測を除外</strong>する — 期間がロールオーバー済みなら値は原理的に無意味。恣意的な時間しきい値より正確な基準になる</td></tr>
+<tr><td><span class="chip id">FR-C-86</span></td><td><span class="chip must">必須</span></td><td>鮮度は「取得しに行った時刻」ではなく「<strong>値が変化したときだけ更新される観測時刻</strong>」で判定する。値と観測時刻は必ずペアで引き継ぐ — 定期取得は値の更新と無関係に走るため、取得時刻を鮮度に使うと<strong>期限切れの古い値が「最新」として選ばれる</strong></td></tr>
+<tr><td><span class="chip id">FR-C-87</span></td><td><span class="chip must">必須</span></td><td>観測からの経過時間を表示し、<strong>一定時間 (目安 15 分) を超えたら警告色</strong>にする</td></tr>
+<tr><td><span class="chip id">FR-C-88</span></td><td><span class="chip must">必須</span></td><td>使用率のしきい値は <code>90% 以上 = 危険</code> / <code>70% 以上 = 警告</code> / それ未満 = 通常 の 3 段階で色分けする</td></tr>
+<tr><td><span class="chip id">FR-C-89</span></td><td><span class="chip must">必須</span></td><td><strong>消費が「額」で表される枠 (AI Credits) は、率だけでなく金額も併記する</strong> (例: <code>$6.20 / $10.00 (62%)</code>) — 従量課金では「あと何ドル分か」が意思決定の単位になる</td></tr>
+<tr><td><span class="chip id">FR-C-90</span></td><td><span class="chip must">必須</span></td><td><strong>付与枠を超過した分がある場合は、超過額を別建てで明示する</strong>。100% でクランプして「上限に達した」ように見せない — 上限打ち止め設定でない限り、消費は付与額を超えて伸びる</td></tr>
+<tr><td><span class="chip id">FR-C-91</span></td><td><span class="chip should">推奨</span></td><td>リセット日時までの残り時間を表示する (月次枠は日付、短期枠は残り時間)</td></tr>
+<tr><td><span class="chip id">FR-C-92</span></td><td><span class="chip should">推奨</span></td><td>推定値の算出は「直近の期間のトークン合計 ÷ 過去 30 日を 1 時間刻みでスライドさせた最大合計」とし、0〜100% にクランプする</td></tr>
+<tr><td><span class="chip id">FR-C-93</span></td><td><span class="chip should">推奨</span></td><td>推定値の再計算は全表走査を伴うため 60 秒程度の TTL キャッシュを持つ</td></tr>
+<tr><td><span class="chip id">FR-C-94</span></td><td><span class="chip may">任意</span></td><td>消費率の時系列を保存し、推移グラフを表示する。保存する場合は保持期間 (目安 30 日) を設けて間引く</td></tr>
+<tr><td><span class="chip id">FR-C-95</span></td><td><span class="chip may">任意</span></td><td>セッション単位のクレジット上限 (session limit) が設定されている場合、その値と現在の消費を並べて表示する</td></tr>
+</tbody></table></div>
+<h3 id="6.6-本日の使用状況">6.6 本日の使用状況</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-100</span></td><td><span class="chip must">必須</span></td><td>ローカル日 0:00〜現在の使用状況を表示する: 入出力トークン / キャッシュ読込トークン / ターン数 / 稼働セッション・サブエージェント数 / <strong>消費 AI Credits</strong></td></tr>
+<tr><td><span class="chip id">FR-C-101</span></td><td><span class="chip must">必須</span></td><td>時間帯別のトークン推移をグラフ表示する (入出力のみ、キャッシュは含めない)</td></tr>
+<tr><td><span class="chip id">FR-C-102</span></td><td><span class="chip must">必須</span></td><td>フォルダ別のトークン内訳 (上位 5 件) を表示する</td></tr>
+<tr><td><span class="chip id">FR-C-103</span></td><td><span class="chip must">必須</span></td><td>この集計は<strong>2 秒ポーリングの対象に含めない</strong>。タブ表示時と差分インデックス完了時のみ更新する</td></tr>
+<tr><td><span class="chip id">FR-C-104</span></td><td><span class="chip must">必須</span></td><td>トークン集計時、合成モデルのレコードを除外する。また usage の内訳フィールド (反復ごとの明細等) を二重加算しない</td></tr>
+<tr><td><span class="chip id">FR-C-105</span></td><td><span class="chip should">推奨</span></td><td>モデル別の内訳を出す。<strong>単価はモデルごとに異なるため、トークン数だけでなくクレジット消費でも比較できること</strong></td></tr>
+</tbody></table></div>
+<h3 id="6.7-セッションの振り返り">6.7 セッションの振り返り</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-110</span></td><td><span class="chip must">必須</span></td><td>セッションを検索できる (フォルダ名・タイトル・作業ディレクトリの部分一致)。既定 100 件、上限 1000 件。入力は 250ms 程度デバウンスする</td></tr>
+<tr><td><span class="chip id">FR-C-111</span></td><td><span class="chip may">任意</span></td><td>「サブエージェントを使ったセッションのみ」の絞り込みを持つ</td></tr>
+<tr><td><span class="chip id">FR-C-112</span></td><td><span class="chip must">必須</span></td><td>セッション詳細として、タイトル / モデル別トークン・クレジット集計 / <strong>サブエージェント系統図</strong> / <strong>ガントチャート</strong> / <strong>本文ビューア</strong>を表示する</td></tr>
+<tr><td><span class="chip id">FR-C-113</span></td><td><span class="chip must">必須</span></td><td>系統図は親子関係を辿って木を構築する。<strong>親が見つからない孤児はルート直下に置き、循環参照をガードする</strong></td></tr>
+<tr><td><span class="chip id">FR-C-114</span></td><td><span class="chip must">必須</span></td><td>系統図とガントの<strong>行の並び・階層は同じ木構築結果を使う</strong>。生データの「深さ」フィールドは欠落しうるため信頼しない</td></tr>
+<tr><td><span class="chip id">FR-C-115</span></td><td><span class="chip must">必須</span></td><td>ライブ表示側では、稼働中判定に<strong>DB の状態列ではなくライブ集合を優先</strong>する。ライブ集合と照合できない行 (拒否済み・メタ未読) は DB の状態にフォールバックする</td></tr>
+<tr><td><span class="chip id">FR-C-116</span></td><td><span class="chip must">必須</span></td><td>ライブ表示側では<strong>完了したエージェントを各階層で 1 行に畳む</strong>。ただし<strong>稼働中の子孫を持つノードは畳まない</strong> (祖先保護)。稼働中が 0 件でも折りたたみは維持し「稼働中のエージェントはありません」と明示する</td></tr>
+<tr><td><span class="chip id">FR-C-117</span></td><td><span class="chip must">必須</span></td><td>過去の振り返り側は<strong>全件表示</strong>とする (ライブ集合を渡さない限り表示が変わらない設計)</td></tr>
+<tr><td><span class="chip id">FR-C-118</span></td><td><span class="chip must">必須</span></td><td>ガントの横軸はセッションの開始〜終了 (稼働中なら現在時刻)。利用枠到達イベントを縦マーカーとして重畳する</td></tr>
+<tr><td><span class="chip id">FR-C-119</span></td><td><span class="chip must">必須</span></td><td>本文ビューアはタイムライン (上限 1000 件) を段階表示する (初期 150 件、「もっと見る」で 150 件ずつ)。行クリックで<strong>その 1 レコードだけをシーク読み</strong>して整形表示する</td></tr>
+<tr><td><span class="chip id">FR-C-120</span></td><td><span class="chip must">必須</span></td><td>本文読み取りは上限サイズ (目安 512KB) を設ける。オフセットがファイル範囲外なら「インデックスを再実行してください」と案内する</td></tr>
+<tr><td><span class="chip id">FR-C-121</span></td><td><span class="chip should">推奨</span></td><td>系統図・ガント・本文ビューアの選択とホバーを相互連動させる (エージェント選択でタイムラインを絞り込む等)</td></tr>
+</tbody></table></div>
+<h3 id="6.8-利用枠の取得経路">6.8 利用枠の取得経路</h3>
+<p>以下は優先順であり、<strong>上位が使えるなら下位は実装しなくてよい</strong>。いずれの経路も Copilot の既存設定ファイルを書き換えない (N-5)。各 API の詳細は付録 A.3。</p>
+<h4 id="経路-a-copilot-sdk-第一候補">経路 A: Copilot SDK (第一候補)</h4>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-130</span></td><td><span class="chip must">必須</span></td><td>利用枠の取得は <strong>Copilot SDK のアカウント単位クォータ取得 (<code>account.getQuota</code>)</strong> を第一候補とする。返る <code>quotaSnapshots</code> の <code>entitlementRequests</code> / <code>usedRequests</code> / <code>remainingPercentage</code> / <code>resetDate</code> をそのままゲージに載せる</td></tr>
+<tr><td><span class="chip id">FR-C-131</span></td><td><span class="chip must">必須</span></td><td><code>entitlementRequests</code> が <strong><code>-1</code> (無制限)</strong> の枠は、率ではなく「無制限」と表示する。0 除算やマイナス率を出さない</td></tr>
+<tr><td><span class="chip id">FR-C-132</span></td><td><span class="chip should">推奨</span></td><td>セッション単位の消費は <strong><code>session.usage.getMetrics</code></strong> から取得する (<code>totalNanoAiu</code> を 10⁹ で割ると AI Credit、<code>modelMetrics</code> にモデル別内訳)。FR-C-53 / 105 / 112 の表示に使う</td></tr>
+<tr><td><span class="chip id">FR-C-133</span></td><td><span class="chip should">推奨</span></td><td>コンテキストウィンドウ使用率は <strong><code>session.usage_info</code> イベント</strong> (<code>currentTokens</code> / <code>tokenLimit</code>) または <strong><code>session.metadata.contextInfo</code></strong> から取得する</td></tr>
+<tr><td><span class="chip id">FR-C-134</span></td><td><span class="chip must">必須</span></td><td>モデル別の単価は <strong><code>models.list</code></strong> から<strong>実行時に読む</strong>。単価をコードに埋め込まない — プランとモデルの改定で必ず陳腐化する</td></tr>
+<tr><td><span class="chip id">FR-C-135</span></td><td><span class="chip must">必須</span></td><td>SDK の呼び出しは<strong>ネットワークアクセスを伴う前提</strong>で扱い、2 秒ポーリングに載せない。取得契機は「タブを開いたとき」「更新ボタン」「長周期タイマー (目安 5 分以上)」に限る</td></tr>
+<tr><td><span class="chip id">FR-C-136</span></td><td><span class="chip must">必須</span></td><td>SDK が利用不能なとき (未認証 / SDK 未導入 / API 変更) は<strong>機能全体を止めず</strong>、経路 B → C へ降格する</td></tr>
+<tr><td><span class="chip id">FR-C-137</span></td><td><span class="chip should">推奨</span></td><td>SDK の言語バインディングは実装言語に合わせて選ぶ (TypeScript / Python / Go / .NET / Java / Rust が提供されている)</td></tr>
+</tbody></table></div>
+<h4 id="経路-b-github-rest-api">経路 B: GitHub REST API</h4>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-138</span></td><td><span class="chip should">推奨</span></td><td>月次の AI Credits 消費は<strong>課金 API の AI クレジット使用量エンドポイント</strong>から取得する (過去 24 か月分が対象)</td></tr>
+<tr><td><span class="chip id">FR-C-139</span></td><td><span class="chip may">任意</span></td><td>日次のクレジット消費は <strong>Copilot usage metrics API の <code>ai_credits_used</code></strong> から取得する (ユーザー × 日単位の合計。モデル別・機能別の内訳は無い)</td></tr>
+<tr><td><span class="chip id">FR-C-140</span></td><td><span class="chip must">必須</span></td><td>個人アカウント購入か、組織 / Enterprise 管理下かで<strong>叩くべきエンドポイントが異なる</strong>。どちらかが 403 / 404 を返しても機能全体を止めず、取得できた方を使う</td></tr>
+<tr><td><span class="chip id">FR-C-141</span></td><td><span class="chip must">必須</span></td><td>認証情報 (PAT / OAuth トークン) は<strong>アプリが管理するのではなく、OS の資格情報ストアまたは既存の GitHub CLI の資格情報を参照する</strong>。平文で DB / 設定ファイルに保存しない</td></tr>
+<tr><td><span class="chip id">FR-C-142</span></td><td><span class="chip must">必須</span></td><td>REST の呼び出しにはレート制限があるため、<strong>取得間隔に下限 (目安 5 分) を設け、失敗時は指数バックオフする</strong></td></tr>
+</tbody></table></div>
+<h4 id="経路-c-ログ由来の推定-最後の手段">経路 C: ログ由来の推定 (最後の手段)</h4>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-143</span></td><td><span class="chip should">推奨</span></td><td>経路 A / B がいずれも使えないとき、インデックス済みのトークン集計から<strong>相対的な消費率を推定</strong>して表示する (FR-C-92)。<strong>必ず「推定」と明示する</strong></td></tr>
+<tr><td><span class="chip id">FR-C-144</span></td><td><span class="chip must">必須</span></td><td>推定値と実値を<strong>同じ枠の中で混ぜない</strong> (FR-C-84)</td></tr>
+</tbody></table></div>
+<h3 id="6.9-表示・設定">6.9 表示・設定</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">FR-C-160</span></td><td><span class="chip must">必須</span></td><td>ヘッダーに「最終インデックス (相対時刻)」「利用枠の取得経路と最終取得時刻」「更新ボタン」を置く</td></tr>
+<tr><td><span class="chip id">FR-C-161</span></td><td><span class="chip must">必須</span></td><td><strong>長時間かかるバックエンド処理の進行状態は、画面横断で共有される状態として持つ</strong>。ページのローカル状態だけに置かない — ページのローカル状態はタブ切替でコンポーネントごと破棄されるため、<strong>処理は続いているのに表示だけ元に戻る</strong></td></tr>
+<tr><td><span class="chip id">FR-C-162</span></td><td><span class="chip should">推奨</span></td><td>アニメーション設定 (<code>自動 / 入 / 切</code>) を持ち、永続化する。<code>自動</code> は OS の「動きを減らす」設定に追随する</td></tr>
+<tr><td><span class="chip id">FR-C-163</span></td><td><span class="chip should">推奨</span></td><td>図表 (ゲージ・ガント・系統図) は外部ライブラリを増やさず自前描画とし、アニメーションは GPU 合成されるプロパティ (<code>transform</code> / <code>opacity</code> / <code>stroke-dashoffset</code> / <code>filter</code>) に限定する</td></tr>
+<tr><td><span class="chip id">FR-C-164</span></td><td><span class="chip must">必須</span></td><td>タブ横断のスナップショットキャッシュを持ち、タブ切替時に即描画してから裏で取得し直す</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="7.-データ要求-dr">7. データ要求 (DR)</h2>
+<h3 id="7.1-永続化の原則">7.1 永続化の原則</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">DR-01</span></td><td><span class="chip must">必須</span></td><td>永続化は単一のローカル DB (SQLite 等) に一本化する。<strong>ただし「何でも保存する」という意味ではない</strong></td></tr>
+<tr><td><span class="chip id">DR-02</span></td><td><span class="chip must">必須</span></td><td><strong>導出データ (ディスクの現状を写したもの) は永続化しない</strong>: プロジェクトスキャン結果 / 種別判定 / git 状態 / Copilot 利用状況 / dev サーバーのログ</td></tr>
+<tr><td><span class="chip id">DR-03</span></td><td><span class="chip must">必須</span></td><td><strong>例外は「一覧性のための索引」のみ</strong>。数百ファイルを毎回全走査してはセッション一覧すら描けないため、セッションログの索引だけは持つ</td></tr>
+<tr><td><span class="chip id">DR-04</span></td><td><span class="chip must">必須</span></td><td>スキーマ変更はバージョン付きマイグレーションで行い、破壊的変更を含むリリースでは<strong>適用前バックアップ</strong>を残す</td></tr>
+<tr><td><span class="chip id">DR-05</span></td><td><span class="chip should">推奨</span></td><td>他アプリが所有する SQLite を読む場合は、<strong>読み取り専用で開くか、コピーしてから読む</strong>。書き込みロックを取らない (OQ-05)</td></tr>
+<tr><td><span class="chip id">DR-06</span></td><td><span class="chip must">必須</span></td><td>認証トークン・API キーを DB に保存しない (FR-C-141)</td></tr>
+<tr><td><span class="chip id">DR-07</span></td><td><span class="chip must">必須</span></td><td><strong>保持期間を設けたテーブルを作るなら、書き込みも必ず実装する</strong>。間引き処理だけが動く未使用テーブルを残さない</td></tr>
+</tbody></table></div>
+<h3 id="7.2-テーブル">7.2 テーブル</h3>
+<h4 id="プロジェクト機能">プロジェクト機能</h4>
+<div class="table-wrap"><table>
+<thead><tr><th>テーブル</th><th>主キー</th><th>主要カラム</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>project_scan_folders</code></td><td><code>id</code></td><td><code>path</code> (UNIQUE), <code>created_at</code></td><td>スキャン対象フォルダ</td></tr>
+<tr><td><code>project_overrides</code></td><td><code>path_key</code></td><td><code>hidden</code>, <code>archived</code>, <code>display_name</code>, <code>command_override</code>, <code>working_dir_override</code>, <code>sort_order</code>, <code>updated_at</code></td><td>手動調整。<strong>このタブで永続化するのはこの 2 つだけ</strong></td></tr>
+</tbody></table></div>
+<h4 id="copilot-稼働ダッシュボード">Copilot 稼働ダッシュボード</h4>
+<div class="table-wrap"><table>
+<thead><tr><th>テーブル</th><th>主キー</th><th>主要カラム</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>index_files</code></td><td><code>file_path</code></td><td><code>kind</code> (main/subagent), <code>session_id</code>, <code>agent_id</code>, <strong><code>last_parsed_offset</code></strong>, <code>file_size_at_parse</code>, <code>mtime_ms</code>, <code>updated_at</code></td><td>差分インデックスの進捗簿</td></tr>
+<tr><td><code>sessions</code></td><td><code>session_id</code></td><td><code>cwd</code>, <code>folder_name</code>, <code>git_branch</code>, <code>entrypoint</code>, <code>title</code>, <code>started_at</code>, <code>last_activity_at</code>, <code>turn_count</code>, トークン 4 種, <strong><code>total_nano_aiu</code></strong>, <code>agent_count</code>, <code>quota_event_count</code>, <code>updated_at</code></td><td>セッション集計。<strong>無期限保持</strong></td></tr>
+<tr><td><code>subagent_runs</code></td><td>親子両側に存在する識別子 (FR-C-22)</td><td><code>agent_id</code> (NULL 可), <code>session_id</code>, <code>parent_file_path</code>, <strong><code>parent_agent_id</code></strong> (NULL = セッション直下), <code>spawn_depth</code>, <code>agent_type</code>, <code>description</code>, <code>model</code>, <code>started_at</code>/<code>last_activity_at</code>/<code>ended_at</code>, <code>status</code>, トークン・ツール統計</td><td>サブエージェント実行。系統図は <code>parent_agent_id</code> で N 段の木に組む</td></tr>
+<tr><td><code>turn_index</code></td><td><code>id</code> (+ UNIQUE(<code>file_path</code>, <code>byte_offset</code>))</td><td><code>session_id</code>, <code>agent_id</code>, <code>file_path</code>, <strong><code>byte_offset</code></strong>, <code>byte_length</code>, <code>record_type</code>, <code>role</code>, <code>model</code>, <code>timestamp_ms</code> (NULL 可), <code>uuid</code>, <code>parent_uuid</code>, <code>is_sidechain</code>, <code>is_quota_error</code>, トークン 4 種, <code>nano_aiu</code>, <strong><code>preview</code></strong> (140 字)</td><td>タイムラインの軽量索引。<strong>本文は保存しない</strong></td></tr>
+<tr><td><code>quota_events</code></td><td><code>id</code> (+ UNIQUE(<code>session_id</code>, <code>occurred_at</code>))</td><td><code>session_id</code>, <code>occurred_at</code>, <code>kind</code> (credit_exhausted / rate_limit / session_limit / unknown), <code>reset_text</code>, <code>raw_message</code></td><td>利用枠到達履歴</td></tr>
+<tr><td><code>quota_samples</code></td><td><code>id</code></td><td><code>received_at</code>, <code>observed_at</code>, <code>source</code> (sdk / rest / estimated), <code>quota_kind</code>, <code>used</code>, <code>entitlement</code>, <code>used_pct</code>, <code>reset_at</code></td><td>消費率の時系列 (FR-C-94)。<strong>保持期間を設けて間引く唯一のテーブル</strong></td></tr>
+<tr><td><code>settings</code></td><td><code>key</code></td><td><code>value</code></td><td>アニメーション設定、最後に開いたタブ等の汎用 KV</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="8.-外部インタフェース要求-ir">8. 外部インタフェース要求 (IR)</h2>
+<h3 id="8.1-バックエンド-api-ui-コア">8.1 バックエンド API (UI ↔ コア)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>コマンド</th><th>引数</th><th>戻り値</th><th>説明</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">IR-01</span></td><td><code>projects_scan</code></td><td>—</td><td>プロジェクトスナップショット</td><td><strong>必ず実スキャンしてから返す</strong> (読み出し専用版は持たない)</td></tr>
+<tr><td><span class="chip id">IR-02</span></td><td><code>projects_settings_update</code></td><td>手動調整リクエスト</td><td>同上</td><td><strong>再スキャンせず</strong>キャッシュ済み結果と再マージする</td></tr>
+<tr><td><span class="chip id">IR-03</span></td><td><code>projects_scan_folder_add</code> / <code>_remove</code></td><td><code>path</code></td><td>同上</td><td>追加時は存在確認 + 重複を分かりやすいメッセージに変換</td></tr>
+<tr><td><span class="chip id">IR-04</span></td><td><code>projects_dev_start</code> / <code>_stop</code> / <code>_stop_all</code></td><td><code>path_key</code> (+ <code>command</code>)</td><td>dev 状態 / スナップショット</td><td></td></tr>
+<tr><td><span class="chip id">IR-05</span></td><td><code>projects_dev_logs_get</code></td><td><code>path_key</code></td><td>ログ最大 500 行</td><td>詳細パネルを開いた直後の初期表示用</td></tr>
+<tr><td><span class="chip id">IR-06</span></td><td><code>projects_open_vscode</code> / <code>_folder</code> / <code>_terminal</code> / <code>_agent</code></td><td><code>path_key</code></td><td>—</td><td>外部ツール起動</td></tr>
+<tr><td><span class="chip id">IR-10</span></td><td><code>live_status_get</code></td><td>—</td><td>ライブ状況一式</td><td><strong>2 秒ポーリング前提</strong>。ネットワークアクセスなし</td></tr>
+<tr><td><span class="chip id">IR-11</span></td><td><code>snapshot_get</code></td><td>—</td><td>DB 由来ダイジェスト</td><td>最終インデックス時刻・各種件数・直近セッション 20 件</td></tr>
+<tr><td><span class="chip id">IR-12</span></td><td><code>index_refresh</code></td><td>—</td><td>—</td><td>バックグラウンド起動、多重起動防止</td></tr>
+<tr><td><span class="chip id">IR-13</span></td><td><code>sessions_list_get</code></td><td>検索条件</td><td>セッション要約の配列</td><td>既定 100 / 上限 1000</td></tr>
+<tr><td><span class="chip id">IR-14</span></td><td><code>session_detail_get</code></td><td><code>session_id</code></td><td><strong>Option</strong>&lt;セッション詳細&gt;</td><td><strong>未インデックスは <code>null</code> (正常系)</strong></td></tr>
+<tr><td><span class="chip id">IR-15</span></td><td><code>turn_body_get</code></td><td><code>turn_id</code></td><td>本文</td><td>都度シーク読み、上限 512KB</td></tr>
+<tr><td><span class="chip id">IR-16</span></td><td><code>usage_today_get</code></td><td>—</td><td>本日の使用状況</td><td></td></tr>
+<tr><td><span class="chip id">IR-17</span></td><td><code>quota_get</code></td><td>(強制再取得フラグ)</td><td>利用枠ビュー</td><td><strong>経路 A→B→C の降格込み</strong>。ネットワークを伴うため下限間隔あり</td></tr>
+<tr><td><span class="chip id">IR-18</span></td><td><code>quota_source_status_get</code></td><td>—</td><td>各取得経路の可用性</td><td>認証状態 / SDK 有無 / 直近の取得結果と失敗理由</td></tr>
+<tr><td><span class="chip id">IR-19</span></td><td><code>animation_pref_get</code> / <code>_set</code></td><td>— / <code>pref</code></td><td>設定値</td><td></td></tr>
+</tbody></table></div>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">IR-30</span></td><td><span class="chip must">必須</span></td><td><strong>複合語の引数名がフレームワークによって暗黙にケース変換される場合、変換規則を明示的に固定する</strong>。<code>path_key</code> が <code>pathKey</code> として要求されるようなずれは、<strong>型検査でも lint でも検出できず、実際に呼ぶまで気づけない</strong></td></tr>
+<tr><td><span class="chip id">IR-31</span></td><td><span class="chip should">推奨</span></td><td>型付きの呼び出しラッパーを 1 箇所に集約し、IR-30 の事故クラスを構造的に防ぐ</td></tr>
+<tr><td><span class="chip id">IR-32</span></td><td><span class="chip must">必須</span></td><td>変更系コマンドは「バリデーション → 永続化 → スナップショット組み立て → <strong>イベント通知と戻り値の両方で返す</strong>」を統一パターンとする</td></tr>
+</tbody></table></div>
+<h3 id="8.2-イベント">8.2 イベント</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>イベント</th><th>ペイロード</th><th>発火契機</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">IR-40</span></td><td><code>projects-snapshot</code></td><td>プロジェクトスナップショット全体</td><td>スキャン・設定変更後</td></tr>
+<tr><td><span class="chip id">IR-41</span></td><td><code>projects-dev-status</code></td><td>1 プロジェクト分の dev 状態</td><td>dev 状態変化時</td></tr>
+<tr><td><span class="chip id">IR-42</span></td><td><code>projects-dev-log</code></td><td>ログ行</td><td>200〜300ms バッファリング</td></tr>
+<tr><td><span class="chip id">IR-43</span></td><td><code>index-progress</code></td><td>進捗</td><td>250〜300ms 間引き</td></tr>
+<tr><td><span class="chip id">IR-44</span></td><td><code>snapshot</code></td><td>ダイジェスト</td><td>差分インデックス完了時</td></tr>
+<tr><td><span class="chip id">IR-45</span></td><td><code>quota</code></td><td>利用枠ビュー</td><td>利用枠の再取得完了時</td></tr>
+<tr><td><span class="chip id">IR-46</span></td><td><code>window-visibility</code></td><td><code>{ minimized: bool }</code></td><td>ネイティブウィンドウの最小化状態が変化したとき (FR-C-43)</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="9.-非機能要求-nfr">9. 非機能要求 (NFR)</h2>
+<h3 id="9.1-性能">9.1 性能</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th><th>目標値</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-01</span></td><td><span class="chip must">必須</span></td><td>初回の全期間インデックスが実用的な時間で完走すること</td><td>数百ファイル / 数百 MB を <strong>5 秒以内</strong></td></tr>
+<tr><td><span class="chip id">NFR-02</span></td><td><span class="chip must">必須</span></td><td>2 回目以降の差分インデックスが速く、かつ冪等であること</td><td><strong>1 秒未満</strong>、新規レコード 0 件</td></tr>
+<tr><td><span class="chip id">NFR-03</span></td><td><span class="chip must">必須</span></td><td>2 秒ポーリング 1 回のコストは、小さなローカルファイル数件の読み取りと PID 生存確認に収めること。<strong>ネットワークアクセス・外部プロセス起動を含めない</strong></td><td></td></tr>
+<tr><td><span class="chip id">NFR-04</span></td><td><span class="chip should">推奨</span></td><td>自動インデックス実行中の CPU 使用率</td><td>1 コア換算 <strong>15% 以下</strong></td></tr>
+<tr><td><span class="chip id">NFR-05</span></td><td><span class="chip should">推奨</span></td><td>常時アニメーション稼働時の UI プロセスの CPU 増分</td><td>1 コア換算 <strong>+2 ポイント以内</strong></td></tr>
+<tr><td><span class="chip id">NFR-06</span></td><td><span class="chip must">必須</span></td><td>プロジェクトスキャン (数十件規模) は体感で待たされないこと。遅い場合は並列度調整と「スキャン中」表示で対処する</td><td></td></tr>
+<tr><td><span class="chip id">NFR-07</span></td><td><span class="chip must">必須</span></td><td>利用枠の取得はバックグラウンドで行い、<strong>取得中も画面操作をブロックしない</strong>。失敗しても直前の値と「取得できませんでした」を並べて表示する</td><td></td></tr>
+</tbody></table></div>
+<h3 id="9.2-常駐の軽さ">9.2 常駐の軽さ</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-10</span></td><td><span class="chip must">必須</span></td><td>常駐アプリとして軽量であること。重い依存 (ランタイム同梱・常駐サービス追加) を増やす場合は先に設計判断を文書化する</td></tr>
+<tr><td><span class="chip id">NFR-11</span></td><td><span class="chip must">必須</span></td><td><strong>バックエンドに常駐ポーリングループを作らない</strong>。定期実行はメンテナンス処理 (保持期間の間引き等) と利用枠の長周期取得に限る</td></tr>
+<tr><td><span class="chip id">NFR-12</span></td><td><span class="chip must">必須</span></td><td>画面を見ていないときのコストをゼロにする (タブ離脱・最小化で停止)。<strong>利用枠の長周期取得も画面を見ていない間は止める</strong></td></tr>
+<tr><td><span class="chip id">NFR-13</span></td><td><span class="chip should">推奨</span></td><td>フロント依存ライブラリの追加は最小限にする。図表は自前描画で足りる</td></tr>
+</tbody></table></div>
+<h3 id="9.3-信頼性">9.3 信頼性</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-20</span></td><td><span class="chip must">必須</span></td><td><strong>UI (メイン) スレッドで DB アクセス・外部プロセス起動・ロック取得・ネットワーク待ちを行わない</strong></td></tr>
+<tr><td><span class="chip id">NFR-21</span></td><td><span class="chip should">推奨</span></td><td>UI スレッドの応答性を監視する watchdog を持ち、一定時間 (目安 3 秒) 応答しなければログに記録する</td></tr>
+<tr><td><span class="chip id">NFR-22</span></td><td><span class="chip must">必須</span></td><td>ログをローテーション付きでファイル出力する (目安 5MB × 5 世代)。<strong>不具合調査の起点をログに一本化する</strong></td></tr>
+<tr><td><span class="chip id">NFR-23</span></td><td><span class="chip must">必須</span></td><td>外部データの読み取りは全フィールドを欠落しうる前提で防御的に行い、<strong>読めなくなっても該当項目が空になるだけで機能全体が止まらない</strong>こと</td></tr>
+<tr><td><span class="chip id">NFR-24</span></td><td><span class="chip must">必須</span></td><td>1 プロジェクト / 1 セッション / 1 取得経路の失敗が、全体の取得を失敗させないこと</td></tr>
+<tr><td><span class="chip id">NFR-25</span></td><td><span class="chip should">推奨</span></td><td>リリースビルドでデバッグシンボルを出力し、ビルドごとにアーカイブする (ハング時のダンプ解析に必要)</td></tr>
+</tbody></table></div>
+<h3 id="9.4-セキュリティ-プライバシー">9.4 セキュリティ / プライバシー</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-30</span></td><td><span class="chip must">必須</span></td><td>セッション内容・プロジェクト情報を<strong>外部に送信しない</strong>。外向き通信は利用枠の取得に限る</td></tr>
+<tr><td><span class="chip id">NFR-31</span></td><td><span class="chip must">必須</span></td><td>認証情報・トークン・シークレットを<strong>読まない・保持しない・表示しない</strong>。DTO にフィールドを定義しない。API 認証は OS の資格情報ストアまたは既存の GitHub CLI 資格情報を参照する</td></tr>
+<tr><td><span class="chip id">NFR-32</span></td><td><span class="chip must">必須</span></td><td><strong>Copilot の既存設定ファイルを書き換えない。Copilot 側のデータはすべて読み取り専用として扱う</strong> (N-5)</td></tr>
+<tr><td><span class="chip id">NFR-33</span></td><td><span class="chip must">必須</span></td><td>GitHub 側の課金設定 (予算 / 支出上限) に書き込まない (N-8)</td></tr>
+</tbody></table></div>
+<h3 id="9.5-表示の正直さ">9.5 表示の正直さ</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-40</span></td><td><span class="chip must">必須</span></td><td><strong>推定値を実測値であるかのように表示しない</strong>。出所 (実値 / 推定 / 取得不可) を必ず区別してラベル表示する</td></tr>
+<tr><td><span class="chip id">NFR-41</span></td><td><span class="chip must">必須</span></td><td>推測による紐付け (フォルダ名フォールバック) は、その旨を明示する</td></tr>
+<tr><td><span class="chip id">NFR-42</span></td><td><span class="chip must">必須</span></td><td>区別できないもの (長時間ツール実行 vs 許可待ち) を UI で断定しない</td></tr>
+<tr><td><span class="chip id">NFR-43</span></td><td><span class="chip must">必須</span></td><td>集計から除外が起きたら件数を表示し、<strong>無言で欠落させない</strong></td></tr>
+<tr><td><span class="chip id">NFR-44</span></td><td><span class="chip must">必須</span></td><td><strong>原理的に取得できない値を提示しない</strong>。エージェント側が古いセッションを自動削除する場合、「累計セッション数」は取得できないので「保持されているセッション数」と表記する</td></tr>
+<tr><td><span class="chip id">NFR-45</span></td><td><span class="chip must">必須</span></td><td><strong>金額表示は概算である旨を添える</strong>。単価は実行時取得 (FR-C-134) だが、キャッシュトークンの扱いや端数処理まで一致する保証はない。<strong>請求額の正は GitHub の課金画面である</strong></td></tr>
+</tbody></table></div>
+<h3 id="9.6-テスト容易性">9.6 テスト容易性</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>優先度</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">NFR-50</span></td><td><span class="chip must">必須</span></td><td>次のロジックは <strong>IO 非依存の純粋関数</strong>として切り出し、ユニットテストで固める: 種別判定 / パス正規化 / 差分判定 / 末尾断片の切り捨て / 木構築 / URL 抽出 / 活動状態の合成 / 利用枠ビューの降格判定</td></tr>
+<tr><td><span class="chip id">NFR-51</span></td><td><span class="chip must">必須</span></td><td>実データで見つかった例外パターンは<strong>そのままテストケースにする</strong></td></tr>
+<tr><td><span class="chip id">NFR-52</span></td><td><span class="chip should">推奨</span></td><td>実ファイルシステム / 実 DB / 実 API に対する疎通確認用の<strong>読み取り専用プローブ</strong>を用意する</td></tr>
+<tr><td><span class="chip id">NFR-53</span></td><td><span class="chip must">必須</span></td><td>「テストが通る」で完了としない。<strong>実際にアプリを起動して挙動を確認</strong>してから完了とする</td></tr>
+<tr><td><span class="chip id">NFR-54</span></td><td><span class="chip should">推奨</span></td><td>ドラッグ等の入力操作の検証には合成イベントではなく<strong>実入力相当のイベント注入</strong>を使う — 合成イベントはハンドラの配線しか検証できず、実際の不具合を素通りさせる</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="付録-a-github-copilot-のデータソースと-api">付録 A: GitHub Copilot のデータソースと API</h2>
+<div class="rationale"><span class="note-title">補足</span>
+<p><strong>凡例</strong>: ✅ = 公式ドキュメントで確認済み / ⚠️ = 存在は確認したが詳細が未文書化 (実測が必要)</p>
+</div>
+<h3 id="a.1-ローカルのファイル配置">A.1 ローカルのファイル配置</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>パス</th><th>内容</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><strong><code>~/.copilot/</code></strong></td><td>Copilot CLI の設定・状態のルート。環境変数 <code>COPILOT_HOME</code> で上書き可</td><td>✅</td></tr>
+<tr><td><code>~/.copilot/settings.json</code></td><td>ユーザー設定 (JSONC = コメント付き JSON)。<code>hooks</code> / <code>statusLine</code> 等。<strong>読むだけで書き換えない</strong> (N-5)</td><td>✅</td></tr>
+<tr><td><code>~/.copilot/config.json</code></td><td>認証情報を含む自動管理ファイル。<strong>読まない</strong></td><td>✅</td></tr>
+<tr><td><strong><code>~/.copilot/session-state/&lt;session-id&gt;/</code></strong></td><td>セッション履歴。<strong><code>events.jsonl</code></strong> (イベントログ) とワークスペース成果物 (プラン・チェックポイント・追跡ファイル)</td><td>⚠️ 構造は文書化済み、<strong>レコードスキーマは未文書化</strong> (OQ-01)</td></tr>
+<tr><td><strong><code>~/.copilot/session-store.db</code></strong></td><td>セッションメタデータの SQLite 索引。<code>/chronicle reindex</code> で再構築可能</td><td>⚠️ <strong>差分インデックスを一部肩代わりできる可能性</strong> (OQ-05)</td></tr>
+<tr><td><code>~/.copilot/ide/</code></td><td>IDE 統合状態 (自動管理)</td><td>⚠️ 形式は要実測 (OQ-04)</td></tr>
+<tr><td><code>~/.copilot/logs/process-{timestamp}-{pid}.log</code></td><td>プロセスログ。<strong>ファイル名に PID を含む</strong>ため稼働検出の手掛かりになりうる</td><td>⚠️ OQ-04</td></tr>
+<tr><td><code>~/.copilot/hooks/</code></td><td>個人用フックスクリプト。リポジトリ側は <code>.github/hooks/</code></td><td>✅</td></tr>
+<tr><td><code>~/.copilot/mcp-secrets/</code> <code>mcp-oauth-config/</code></td><td>MCP のシークレット。<strong>読まない</strong></td><td>✅</td></tr>
+<tr><td><code>~/.copilot/command-history-state/</code></td><td>コマンド履歴 (自動管理)</td><td>✅</td></tr>
+</tbody></table></div>
+<p><strong>フックのイベント</strong>: <code>sessionStart</code> (セッション開始・再開時) / <code>sessionEnd</code> (完了・終了時) / <code>preToolUse</code> (ツール実行前、実行の許可・拒否ができる) / <code>userPromptSubmitted</code> (プロンプト送信時)。✅</p>
+<p><strong>参考になる既存機能</strong>: <code>/chronicle</code> (セッション履歴からの洞察生成)、<code>/usage</code> (現セッションの AI Credits 消費表示)。同じデータから何が引き出せるかの参考になる。✅</p>
+<h3 id="a.2-vs-code-側-copilot-chat">A.2 VS Code 側 (Copilot Chat)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>セッション保存先</td><td><code>%APPDATA%CodeUserworkspaceStorage&lt;hash&gt;chatSessions</code> (Windows)</td><td>✅</td></tr>
+<tr><td><code>&lt;hash&gt;</code> の導出</td><td><strong>ワークスペースフォルダの URI から導出</strong>される</td><td>✅</td></tr>
+<tr><td><strong>重大な帰結</strong></td><td><strong>フォルダを移動・リネーム・削除すると新しいハッシュが割り当てられ、過去セッションが孤児化する</strong> (ファイルはディスクに残るが UI から辿れない)</td><td>✅</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p>この性質のため、<strong>プロジェクトと履歴の紐付けをパスの完全一致だけに頼ると壊れる</strong>。FR-P-52 のフォールバックが必須になる。ハッシュを再計算して照合する経路と、セッションファイルの中身に残る作業ディレクトリから逆引きする経路の両方を検討すること (OQ-03)。</p>
+</div>
+<h3 id="a.3-利用枠・使用量の取得手段">A.3 利用枠・使用量の取得手段</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>手段</th><th>返るもの</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td><strong>SDK <code>account.getQuota</code></strong></td><td><code>quotaSnapshots</code> (クォータ種別をキーとするマップ)。各要素に <code>entitlementRequests</code> (−1 = 無制限) / <code>usedRequests</code> / <code>remainingPercentage</code> / <code>resetDate</code> (ISO 8601)</td><td>✅ <strong>第一候補</strong></td></tr>
+<tr><td><strong>SDK <code>session.usage.getMetrics</code></strong></td><td><code>totalNanoAiu</code> (10⁹ で割ると AI Credit) / <code>totalPremiumRequestCost</code> / <code>modelMetrics</code> (モデル別内訳)</td><td>✅</td></tr>
+<tr><td><strong>SDK イベント <code>assistant.usage</code></strong></td><td>API 呼び出しごとに <code>model</code> / <code>inputTokens</code> / <code>outputTokens</code> / <code>cost</code></td><td>✅</td></tr>
+<tr><td><strong>SDK イベント <code>session.usage_info</code></strong></td><td>コンテキストウィンドウ変化時に <code>currentTokens</code> / <code>tokenLimit</code></td><td>✅</td></tr>
+<tr><td><strong>SDK <code>session.metadata.contextInfo</code></strong></td><td><code>totalTokens</code> / <code>systemTokens</code> / <code>conversationTokens</code> / <code>promptTokenLimit</code></td><td>✅</td></tr>
+<tr><td><strong>SDK <code>models.list</code></strong></td><td>モデル別の <code>billing.multiplier</code> / <code>billing.tokenPrices.{inputPrice,outputPrice,batchSize}</code>。<strong>実行時に読むこと</strong></td><td>✅</td></tr>
+<tr><td><strong>REST 課金 API</strong></td><td>AI クレジット使用量 (<code>/users/{USERNAME}/settings/billing/ai_credit/usage</code> 等)。過去 24 か月分。組織 / Enterprise 管理下は別エンドポイント</td><td>✅</td></tr>
+<tr><td><strong>REST Copilot usage metrics API</strong></td><td><code>ai_credits_used</code> (ユーザー × 日単位の合計のみ。モデル別・機能別の内訳なし)</td><td>✅</td></tr>
+<tr><td><strong>CLI / SDK のセッション上限</strong></td><td>AI クレジットのセッション単位上限を設定できる</td><td>✅</td></tr>
+<tr><td><strong>statusLine フック</strong></td><td><code>cwd</code> / <code>session_id</code> / <code>model</code> / <code>cost</code> (追加・削除行数) / <code>context_window</code>。<strong>利用枠は含まれない</strong></td><td>✅</td></tr>
+</tbody></table></div>
+<div class="rationale"><span class="note-title">補足</span>
+<p><strong>statusLine を使わない理由</strong>: 上表のとおり <strong>statusLine には利用枠が載らず</strong>、載っている情報はすべて SDK と差分インデックスで代替できる。採用すると「ユーザーの設定ファイルを書き換える」「中継用の実行ファイルを同梱する」という対価だけが残るため、本仕様では採用しない。これにより「Copilot 側のファイルは読むだけ」という不変条件を例外なく保てる (N-5 / NFR-32)。</p>
+<p><strong>SDK は TypeScript / Python / Go / .NET / Java / Rust で提供されている。</strong> ✅</p>
+</div>
+<h3 id="a.4-課金体系-2026-06-01-以降">A.4 課金体系 (2026-06-01 以降)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>単位</td><td><strong><code>GitHub AI Credits</code></strong>。従来のプレミアムリクエスト単位 (PRU) は 2026-06-01 に廃止された</td></tr>
+<tr><td>消費の仕方</td><td><strong>トークン (入力 / 出力 / キャッシュ) 消費 × モデル別レート</strong>。「1 リクエスト = 1 消費」ではない</td></tr>
+<tr><td>付与</td><td>月額プラン料金と<strong>同額のクレジットが毎月付与</strong>される (Pro <code>$10/月</code> に <code>$10</code> 分、Pro+ <code>$39/月</code> に <code>$39</code> 分、Business <code>$19/user/月</code> に <code>$19</code> 分、Enterprise <code>$39/user/月</code> に <code>$39</code> 分)</td></tr>
+<tr><td>超過</td><td>予算設定により「公開レートで超過分を課金」または「上限で打ち止め」を選べる (enterprise / cost center / ユーザー単位)</td></tr>
+<tr><td>除外</td><td><strong>コード補完と Next Edit Suggestions はプランに含まれ、従量課金されない</strong></td></tr>
+<tr><td>例外</td><td><strong>年額 Pro / Pro+ の既存契約は満了までリクエスト課金のまま</strong>。移行されない</td></tr>
+<tr><td>SDK の単位</td><td>コストは <strong>nano-AIU</strong> で報告される (10⁹ で割ると AI Credit)。<code>1 AI Credit = $0.01</code> という換算は二次情報のため、実装前に実測で確認する (OQ-06)</td></tr>
+<tr><td>残高の確認</td><td><code>github.com/settings/billing</code> の課金概要</td></tr>
+</tbody></table></div>
+<div class="rationale"><span class="note-title">補足</span>
+<p><strong>仕様への影響</strong>:</p>
+<ol>
+<li><strong>「枠」は月次クレジット額が主役</strong>になる。5 時間 / 週次のような<strong>短期ローリングウィンドウは存在しない</strong>ため、ゲージは「月次クレジット + クォータ + コンテキスト使用率」の構成にする。</li>
+<li><strong>率だけでなく額の表示が要る</strong> (FR-C-89)。従量課金では「あと何ドル分か」が判断単位になる。</li>
+<li><strong>超過を 100% でクランプしない</strong> (FR-C-90)。上限打ち止め設定でない限り、消費は付与額を超えて伸びる。</li>
+<li><strong>課金体系は実際に一度変わっている。</strong> 単価・付与額・枠の名前をコードに埋め込まず、実行時に読む (FR-C-134)。</li>
+</ol>
+</div>
+<hr />
+<h2 id="付録-b-着手前に実測で確定させる項目">付録 B: 着手前に実測で確定させる項目</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>項目</th><th>確認方法</th><th>影響範囲</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">OQ-01</span></td><td><code>events.jsonl</code> の<strong>レコードスキーマ</strong> — レコード種別、ロール、タイムスタンプ、トークン usage、クレジット消費、ツール呼び出し、サブエージェント / 委任タスクの表現</td><td>実データを分類集計するスクリプトを書き、種別ごとの件数・サイズ・出現位置を出す</td><td>FR-C-01〜28 のほぼ全部</td></tr>
+<tr><td><span class="chip id">OQ-02</span></td><td><code>events.jsonl</code> が <strong>1 レコード = 1 行 / 行内に生の改行を含まない / BOM なし</strong>か</td><td>実データで確認。<strong>成立しなければバイトオフセット方式が使えず、索引の設計が根本から変わる</strong></td><td>FR-C-02〜08 (設計の分水嶺)</td></tr>
+<tr><td><span class="chip id">OQ-03</span></td><td>VS Code の <code>chatSessions</code> の中身と、<code>&lt;hash&gt;</code> の導出アルゴリズム</td><td>実データ + VS Code のソース。ハッシュ再計算で照合できるか、中身から作業ディレクトリを逆引きできるか</td><td>FR-P-50〜58</td></tr>
+<tr><td><span class="chip id">OQ-04</span></td><td><strong>稼働中セッションをどう検出するか。</strong> <code>~/.copilot/ide/</code> と <code>logs/process-{timestamp}-{pid}.log</code> から<strong>読み取り専用で</strong>判定できるか。できない場合、<code>sessionStart</code> / <code>sessionEnd</code> フックが<strong>どのエントリポイントで発火するか</strong> (CLI interactive / CLI background / VS Code 拡張 / coding agent)</td><td>各エントリポイントで実際に動かして確認する。読み取り専用で足りれば N-5 の不変条件を一切崩さずに済む</td><td>FR-C-40〜45</td></tr>
+<tr><td><span class="chip id">OQ-05</span></td><td><code>session-store.db</code> のスキーマと、<strong>他プロセスが開いている最中に安全に読めるか</strong> (WAL / ロック)</td><td>コピーして読む → 読み取り専用オープンを試す</td><td>FR-C-01〜09 (自前索引を作らずに済む可能性)</td></tr>
+<tr><td><span class="chip id">OQ-06</span></td><td><strong><code>account.getQuota</code> が個人アカウント (AI Credits 課金) で何を返すか。</strong> <code>quotaSnapshots</code> のキーに何が並ぶか、月次クレジット残高が取れるか、<code>entitlementRequests</code> の意味 (リクエスト数か額か)。あわせて <code>1 AI Credit = $0.01</code> の裏取り</td><td>SDK を実アカウントで叩く。<strong>取れないなら経路 B (REST) が主役になり、FR-C-130 の優先順が入れ替わる</strong></td><td>FR-C-80〜95、FR-C-130〜144</td></tr>
+<tr><td><span class="chip id">OQ-07</span></td><td>サブエージェント / 委任タスクに相当する概念があるか (<code>agents/*.agent.md</code>、coding agent への委任) と、その親子関係が <code>events.jsonl</code> に残るか</td><td>実データ。<strong>無ければ FR-C-21〜27 と系統図・ガントは大幅に縮退する</strong></td><td>FR-C-21〜27、FR-C-112〜118</td></tr>
+<tr><td><span class="chip id">OQ-08</span></td><td>SDK / REST の<strong>認証方法</strong>と、GitHub CLI の資格情報を再利用できるか。SDK が Copilot CLI の同梱を要求するか</td><td>実装検証</td><td>FR-C-130〜141</td></tr>
+<tr><td><span class="chip id">OQ-09</span></td><td>Copilot CLI / Copilot Chat が<strong>古いセッションを自動削除するか</strong></td><td>ドキュメント + 実データの経時観察</td><td><span class="chip id">NFR-44</span></td></tr>
+<tr><td><span class="chip id">OQ-10</span></td><td>実データ量 (総容量 / ファイル数 / 行数 / 最大ファイルサイズ)</td><td>実測。NFR-01 / 02 の目標値を確定させる</td><td>NFR-01〜02</td></tr>
+</tbody></table></div>
+<hr />
+<h2 id="付録-c-実装順序">付録 C: 実装順序</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>段階</th><th>内容</th><th>完了条件</th></tr></thead>
+<tbody>
+<tr><td><strong>0. 実データ・API 調査</strong></td><td>OQ-01 / 02 / 06 / 07 / 08 / 10 を潰す。分類集計スクリプトと SDK / REST の疎通プローブを書いて数字を出す</td><td><strong>バイトオフセット方式が成立するか</strong>と<strong>利用枠が SDK で取れるか</strong>の結論が出ている</td></tr>
+<tr><td><strong>1. プロジェクト基盤</strong></td><td>スキャン + 種別判定 + 手動調整 + 一覧 UI (FR-P-01〜33, 80〜88)</td><td>実フォルダで誤検出なく一覧が出る</td></tr>
+<tr><td><strong>2. git + 利用状況</strong></td><td>FR-P-40〜58</td><td>フォルダ名フォールバックが実データで期待どおり効く</td></tr>
+<tr><td><strong>3. dev サーバー</strong></td><td>FR-P-60〜74</td><td>アプリを強制終了しても子プロセスが残らない</td></tr>
+<tr><td><strong>4. 差分インデックス</strong></td><td>FR-C-01〜29</td><td>初回が NFR-01 を満たし、2 回目が冪等 (新規 0 件)</td></tr>
+<tr><td><strong>5. ライブ監視</strong></td><td>FR-C-40〜61, 70〜72</td><td>タブ離脱・最小化で確実に止まる</td></tr>
+<tr><td><strong>6. 利用枠ゲージ</strong></td><td>FR-C-80〜95, 130〜144</td><td>段階降格とラベルが実機で正しく切り替わる。額と率の両方が出る</td></tr>
+<tr><td><strong>7. 振り返り UI</strong></td><td>FR-C-100〜121, 160〜164</td><td>系統図とガントの階層が一致する</td></tr>
+</tbody></table></div>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

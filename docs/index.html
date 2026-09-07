@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ドキュメント一覧 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+
+<h1>gh-dashboard ドキュメント</h1>
+<p class="lede">GitHub Copilot 稼働ダッシュボード / プロジェクトダッシュボード。Windows 常駐型デスクトップアプリ (Tauri v2 + Rust + React) の設計・実装ドキュメント一式。</p>
+<div class="doc-meta"><span>状態: 設計完了 / 実装は段階 0 から</span><span>更新 2026-09-08</span><span>個人利用</span></div>
+
+<div class="note">
+  <span class="note-title">最初に読むもの</span>
+  <p>実装に着手する前に <a href="requirements.html">要求仕様書</a> の 0〜2 章と、<a href="../CLAUDE.md">CLAUDE.md</a> の不変条件 INV-1〜10 を読んでください。この仕様書は珍しく「なぜその要求があるか」が全部書いてあります。<strong>理由を読まずに実装すると、要求どおりに書いたつもりで壊れます。</strong></p>
+</div>
+
+<h2 id="what">何を作るか</h2>
+
+<div class="cards">
+  <a class="card" href="requirements.html">
+    <div class="card-kicker">唯一の正 · 版 1.0</div>
+    <div class="card-title">要求仕様書</div>
+    <div class="card-desc">FR-P / FR-C / DR / IR / NFR / OQ の全要求。実装判断に迷ったらここに戻る。元の Markdown からそのまま移管したもの。</div>
+  </a>
+  <a class="card" href="open-questions.html">
+    <div class="card-kicker">着手前に実測</div>
+    <div class="card-title">未決事項 (OQ)</div>
+    <div class="card-desc">OQ-01〜10 と、この環境での初期観測。OQ-02 と OQ-06 は設計の分水嶺 — 推測で埋めない。</div>
+  </a>
+  <a class="card" href="ui-spec.html">
+    <div class="card-kicker">画面</div>
+    <div class="card-title">UI 仕様</div>
+    <div class="card-desc">2 タブの構成、各要素が表示するもの、そして「何を断定しないか」の文言ルール。</div>
+  </a>
+</div>
+
+<h2 id="how">どう作るか</h2>
+
+<div class="cards">
+  <a class="card" href="architecture.html">
+    <div class="card-kicker">構造</div>
+    <div class="card-title">アーキテクチャ</div>
+    <div class="card-desc">データ取得の 3 系統、スレッドの分担、モジュール構成、主要な処理の流れ、失敗の扱い。</div>
+  </a>
+  <a class="card" href="data-model.html">
+    <div class="card-kicker">永続化</div>
+    <div class="card-title">データモデル</div>
+    <div class="card-desc">SQLite に置くもの / 置かないもの。全テーブルの DDL と、その列がなぜそうなっているか。</div>
+  </a>
+  <a class="card" href="api-spec.html">
+    <div class="card-kicker">境界</div>
+    <div class="card-title">IPC API 仕様</div>
+    <div class="card-desc">コマンド 19 種とイベント 7 種、主要 DTO。引数名のケース事故を防ぐ規約から始まる。</div>
+  </a>
+  <a class="card" href="decisions.html">
+    <div class="card-kicker">ADR</div>
+    <div class="card-title">設計判断</div>
+    <div class="card-desc">Tauri を選んだ理由、チャートライブラリを入れない理由、statusLine を使わない理由。却下案も残す。</div>
+  </a>
+  <a class="card" href="coding-standards.html">
+    <div class="card-kicker">規約</div>
+    <div class="card-title">コーディング規約</div>
+    <div class="card-desc">スタイルではなく「壊れ方を構造で防ぐ」ための規則。各項目に対応する要求 ID つき。</div>
+  </a>
+</div>
+
+<h2 id="progress">進め方</h2>
+
+<div class="cards">
+  <a class="card" href="implementation-plan.html">
+    <div class="card-kicker">段階 0〜7</div>
+    <div class="card-title">実装計画</div>
+    <div class="card-desc">要求 付録 C を、1 件ずつ着手できるタスク (T-0.1 …) に割ったもの。各段階の完了条件つき。</div>
+  </a>
+  <a class="card" href="test-strategy.html">
+    <div class="card-kicker">4 層</div>
+    <div class="card-title">テスト戦略</div>
+    <div class="card-desc">純粋関数 8 つのテスト表、DB テスト、読み取り専用プローブ、そして実機確認チェックリスト。</div>
+  </a>
+  <a class="card" href="traceability.html">
+    <div class="card-kicker">対応表</div>
+    <div class="card-title">要求トレーサビリティ</div>
+    <div class="card-desc">要求 ID → 実装ファイル → テスト。タスクを終えたらここを埋める。空欄は「未実装」の意味。</div>
+  </a>
+  <a class="card" href="agent-guide.html">
+    <div class="card-kicker">手引き</div>
+    <div class="card-title">AI エージェント作業ガイド</div>
+    <div class="card-desc">最初の 5 分に何を読むか、迷ったときの判断基準、完了の定義。</div>
+  </a>
+  <a class="card" href="glossary.html">
+    <div class="card-kicker">語彙</div>
+    <div class="card-title">用語集</div>
+    <div class="card-desc">同じものを別の名前で呼ばないための表。「紛らわしい対の区別」が本体。</div>
+  </a>
+</div>
+
+<h2 id="rules">この 3 つだけは常に</h2>
+
+<div class="table-wrap"><table>
+<thead><tr><th class="col-narrow">#</th><th>不変条件</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td><span class="chip id">INV-1</span></td><td><strong>Copilot 側のデータは読み取り専用。</strong>設定ファイルを書き換えない</td><td>N-5 / NFR-32</td></tr>
+<tr><td><span class="chip id">INV-2</span></td><td><strong>認証情報を読まない・持たない・表示しない。</strong>DTO にフィールドすら定義しない</td><td>N-6 / FR-C-72</td></tr>
+<tr><td><span class="chip id">INV-4</span></td><td><strong>2 秒ポーリング経路にネットワーク・外部プロセス起動を入れない</strong></td><td>FR-C-42 / NFR-03</td></tr>
+</tbody></table></div>
+
+<p>残る 7 つを含む全 10 件は <a href="../CLAUDE.md">CLAUDE.md</a> にあります。<strong>これらに違反する変更は、動いていても差し戻し。</strong></p>
+
+<h2 id="build">ドキュメントの直し方</h2>
+
+<p>この HTML は生成物です。編集するのは <code>docs/source/*.md</code> だけで、<code>docs/*.html</code> を直接編集しないでください (次回生成で消えます)。判断の背景は <a href="decisions.html#adr-0008-ドキュメントは-markdown-原本-html-生成">ADR-0008</a>。</p>
+
+<pre><code>npm run docs:build   # docs/source/*.md -> docs/*.html を再生成
+npm run docs:check   # 生成物が原本と一致するか検査 (書き込まない)</code></pre>
+
+<p>ページを増やすときは <code>docs/assets/docs.js</code> の <code>NAV</code> に 1 行足します。このページ (<code>docs/index.html</code>) だけはカード配置のため手書きなので、カードも足してください。</p>
+
+<div class="footer-nav">
+  <span><a href="../README.md">README</a> · <a href="../CLAUDE.md">CLAUDE.md</a></span>
+  <span>gh-dashboard</span>
+</div>
+
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

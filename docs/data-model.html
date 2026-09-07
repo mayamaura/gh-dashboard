@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>データモデル | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>データモデル</h1>
+<p class="lede">SQLite に何を置き、何を置かないか。要求 7 章 (DR-01..07) の実装形。DDL はここが正で、<code>src-tauri/src/db/migrations.rs</code> はこの写し。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/data-model.md</code></span></div>
+<h2 id="1.-置く-置かない">1. 置く / 置かない</h2>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>対象</th></tr></thead>
+<tbody>
+<tr><td><strong>置く</strong></td><td>スキャン対象フォルダ、手動調整、セッションログの索引・集計、利用枠の時系列 (任意)、汎用設定</td></tr>
+<tr><td><strong>置かない</strong></td><td>プロジェクトスキャン結果、種別判定、git 状態、Copilot 利用状況、dev サーバーのログ、<strong>セッション本文</strong>、認証情報</td></tr>
+</tbody></table></div>
+<p>置かない理由は 2 つに集約される。</p>
+<ol>
+<li><strong>導出データを持つと同期ずれの世話が永続的に発生する</strong> (実体が消えても DB に残る / リネームで別物になる) — DR-02 / FR-P-04</li>
+<li><strong>数百 MB の本文のうち読み返されるのは開いた 1 レコードだけ</strong> — 全文複製は使われないデータのために帯域を倍払う — DR-03 / FR-C-02</li>
+</ol>
+<p>例外は「一覧性のための索引」だけ。数百ファイルを毎回全走査してはセッション一覧すら描けないため、索引だけは持つ。</p>
+<h2 id="2.-接続とマイグレーション">2. 接続とマイグレーション</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>方針</th></tr></thead>
+<tbody>
+<tr><td>ファイル</td><td><code>%LOCALAPPDATA%gh-dashboardapp.db</code></td></tr>
+<tr><td>ジャーナル</td><td><code>PRAGMA journal_mode = WAL</code></td></tr>
+<tr><td>待ち</td><td><code>PRAGMA busy_timeout = 5000</code></td></tr>
+<tr><td>外部キー</td><td><code>PRAGMA foreign_keys = ON</code></td></tr>
+<tr><td>マイグレーション</td><td><code>user_version</code> を段数として使い、上げるだけの前進マイグレーション (DR-04)</td></tr>
+<tr><td>バックアップ</td><td>破壊的変更を含む段の適用前に <code>app.db.bak-&lt;version&gt;</code> を残す (DR-04)</td></tr>
+<tr><td>他アプリの DB</td><td><code>session-store.db</code> 等を読む場合は<strong>読み取り専用オープン、またはコピーしてから読む</strong>。書き込みロックを取らない (DR-05 / OQ-05)</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>保持期間を設けたテーブルを作るなら、書き込みも必ず実装する (DR-07)。</strong> 間引き処理だけが動く未使用テーブルを残さない。現時点で保持期間を持つのは <code>quota_samples</code> のみ。</p>
+</div>
+<h2 id="3.-スキーマ">3. スキーマ</h2>
+<h3 id="3.1-プロジェクト機能">3.1 プロジェクト機能</h3>
+<p>このタブで永続化するのは次の 2 つだけ。</p>
+<pre><code class="language-sql">CREATE TABLE project_scan_folders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  path        TEXT    NOT NULL UNIQUE,
+  created_at  INTEGER NOT NULL          -- unix ms
+);
+
+CREATE TABLE project_overrides (
+  path_key            TEXT PRIMARY KEY,  -- 正規化済みパス (util::path_key)
+  display_name        TEXT,
+  command_override    TEXT,
+  working_dir_override TEXT,
+  sort_order          INTEGER,
+  hidden              INTEGER NOT NULL DEFAULT 0,
+  archived            INTEGER NOT NULL DEFAULT 0,
+  updated_at          INTEGER NOT NULL
+);</code></pre>
+<ul>
+<li><code>path_key</code> は「小文字化 + 区切りを <code>\</code> に統一 + 末尾区切り除去」。<strong>大文字小文字を保った生パスをキーにしない</strong></li>
+<li>再スキャンしても手動調整が失われないのは、キーがパスであってスキャン結果の行 id ではないから (FR-P-31)</li>
+<li><code>working_dir_override</code> は<strong>保存時に実在検証</strong>して、通らなければ書き込まない (FR-P-32)</li>
+<li>既定フォルダ (<code>%USERPROFILE%\Documents\Projects</code>) を<strong>自動登録しない</strong>。登録が空のときだけ、その場限りの対象として使う (FR-P-02)</li>
+</ul>
+<h3 id="3.2-差分インデックスの進捗簿">3.2 差分インデックスの進捗簿</h3>
+<pre><code class="language-sql">CREATE TABLE index_files (
+  file_path           TEXT PRIMARY KEY,
+  kind                TEXT NOT NULL,     -- 'main' | 'subagent'
+  session_id          TEXT,
+  agent_id            TEXT,
+  last_parsed_offset  INTEGER NOT NULL DEFAULT 0,
+  file_size_at_parse  INTEGER NOT NULL DEFAULT 0,
+  mtime_ms            INTEGER,           -- 参考値。差分判定には使わない
+  updated_at          INTEGER NOT NULL
+);</code></pre>
+<p>差分判定は <code>last_parsed_offset</code> と現在のファイルサイズだけで行う。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>状況</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td><code>現在サイズ &gt; last_parsed_offset</code></td><td>継続 (追記分のみパース)</td></tr>
+<tr><td><code>現在サイズ &lt; file_size_at_parse</code></td><td><strong>全再パース</strong> (truncate / 入れ替わり。FR-C-06)</td></tr>
+<tr><td><code>現在サイズ == last_parsed_offset</code></td><td>更新なし</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><code>mtime_ms</code> を差分判定に使ってはいけない。PC 移行やバックアップ復元で<strong>複数ファイルが同一 mtime になる</strong>ことが実際にある (FR-P-56)。この列は調査用の参考値として持つだけ。</p>
+</div>
+<h3 id="3.3-セッション集計">3.3 セッション集計</h3>
+<pre><code class="language-sql">CREATE TABLE sessions (
+  session_id         TEXT PRIMARY KEY,
+  cwd                TEXT,
+  path_key           TEXT,               -- cwd の正規化。プロジェクト紐付け用
+  folder_name        TEXT,
+  git_branch         TEXT,
+  entrypoint         TEXT,               -- 'cli_interactive'|'cli_background'|'vscode'|'coding_agent'|'unknown'
+  title              TEXT,
+  model              TEXT,
+  started_at         INTEGER,
+  last_activity_at   INTEGER,
+  turn_count         INTEGER NOT NULL DEFAULT 0,
+  input_tokens       INTEGER NOT NULL DEFAULT 0,
+  output_tokens      INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+  total_nano_aiu     INTEGER NOT NULL DEFAULT 0,   -- 10^9 で割ると AI Credit
+  agent_count        INTEGER NOT NULL DEFAULT 0,
+  quota_event_count  INTEGER NOT NULL DEFAULT 0,
+  updated_at         INTEGER NOT NULL
+);
+CREATE INDEX idx_sessions_last_activity ON sessions(last_activity_at DESC);
+CREATE INDEX idx_sessions_path_key      ON sessions(path_key);</code></pre>
+<p><strong>無期限保持 (FR-C-14)。</strong> 集計行は数百件規模なので放置してよい。</p>
+<p><code>total_nano_aiu</code> は整数で持つ。<strong>浮動小数で持つと合算で誤差が出て、金額表示が請求額と食い違って見える。</strong></p>
+<h3 id="3.4-サブエージェント実行">3.4 サブエージェント実行</h3>
+<pre><code class="language-sql">CREATE TABLE subagent_runs (
+  run_key           TEXT PRIMARY KEY,   -- 親側と子側の両方に必ず存在する識別子 (FR-C-22)
+  agent_id          TEXT,               -- 子側にしか無いことがある。NULL 可
+  session_id        TEXT NOT NULL,
+  parent_file_path  TEXT,
+  parent_agent_id   TEXT,               -- NULL = セッション直下
+  spawn_depth       INTEGER,            -- 参考値。木構築では信頼しない (FR-C-114)
+  agent_type        TEXT,
+  description       TEXT,
+  model             TEXT,
+  started_at        INTEGER,
+  last_activity_at  INTEGER,
+  ended_at          INTEGER,
+  status            TEXT NOT NULL,      -- 'running' | 'completed' | 'declined'
+  input_tokens      INTEGER NOT NULL DEFAULT 0,
+  output_tokens     INTEGER NOT NULL DEFAULT 0,
+  tool_call_count   INTEGER NOT NULL DEFAULT 0,
+  updated_at        INTEGER NOT NULL
+);
+CREATE INDEX idx_subagent_session ON subagent_runs(session_id);
+CREATE INDEX idx_subagent_parent  ON subagent_runs(parent_agent_id);</code></pre>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>主キーは親側と子側の両方に存在する識別子でなければならない (FR-C-22)。</strong> 片側にしか無い ID を主キーにすると、(a) 拒否されたケースでキーを作れず、(b) 親の行と子のファイルが別々のインデックス実行に分かれたとき親子関係を復元できず、系統図がフラットに退行する。</p>
+</div>
+<p><code>status</code> の 3 値は混同してはいけない。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>値</th><th>意味</th></tr></thead>
+<tbody>
+<tr><td><code>running</code></td><td>起動して、まだ完了通知が来ていない。<strong>「起動しました」という暫定応答を完了として扱わない (FR-C-24)</strong></td></tr>
+<tr><td><code>completed</code></td><td>本当の完了通知が届いた。完了通知は<strong>単一のソースからのみ</strong>拾う (FR-C-25)</td></tr>
+<tr><td><code>declined</code></td><td>親が呼び出しを<strong>拒否した</strong>。実際に起動して失敗した <code>completed</code> とは別物 (FR-C-27)</td></tr>
+</tbody></table></div>
+<p><code>spawn_depth</code> は欠落しうるので、系統図もガントも <code>parent_agent_id</code> を辿って作った木を使う (FR-C-114)。</p>
+<h3 id="3.5-タイムライン索引">3.5 タイムライン索引</h3>
+<pre><code class="language-sql">CREATE TABLE turn_index (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id         TEXT,
+  agent_id           TEXT,
+  file_path          TEXT    NOT NULL,
+  byte_offset        INTEGER NOT NULL,
+  byte_length        INTEGER NOT NULL,
+  record_type        TEXT,
+  role               TEXT,
+  model              TEXT,
+  timestamp_ms       INTEGER,            -- NULL 可
+  uuid               TEXT,
+  parent_uuid        TEXT,
+  is_sidechain       INTEGER NOT NULL DEFAULT 0,
+  is_quota_error     INTEGER NOT NULL DEFAULT 0,
+  input_tokens       INTEGER NOT NULL DEFAULT 0,
+  output_tokens      INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+  nano_aiu           INTEGER NOT NULL DEFAULT 0,
+  preview            TEXT,               -- 先頭 140 字程度
+  UNIQUE(file_path, byte_offset)
+);
+CREATE INDEX idx_turn_session ON turn_index(session_id, timestamp_ms);</code></pre>
+<p><strong><code>UNIQUE(file_path, byte_offset)</code> が二重適用の安全装置 (FR-C-07)。</strong> クラッシュ後の再開でも <code>INSERT OR IGNORE</code> が重複を吸収するので、冪等性がスキーマで保証される。</p>
+<p>本文はここに入れない。ビューアを開いた瞬間に <code>file_path</code> + <code>byte_offset</code> + <code>byte_length</code> でシーク読みする (FR-C-02 / IR-15)。</p>
+<h3 id="3.6-利用枠">3.6 利用枠</h3>
+<pre><code class="language-sql">CREATE TABLE quota_events (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id   TEXT NOT NULL,
+  occurred_at  INTEGER NOT NULL,
+  kind         TEXT NOT NULL,   -- 'credit_exhausted'|'rate_limit'|'session_limit'|'unknown'
+  reset_text   TEXT,
+  raw_message  TEXT,
+  UNIQUE(session_id, occurred_at)
+);
+
+CREATE TABLE quota_samples (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  received_at  INTEGER NOT NULL,   -- 取得しに行った時刻。鮮度判定に使わない
+  observed_at  INTEGER NOT NULL,   -- 値が変化したときだけ更新される観測時刻。★ 鮮度はこちら
+  source       TEXT NOT NULL,      -- 'sdk' | 'rest' | 'estimated'
+  quota_kind   TEXT NOT NULL,
+  used         REAL,
+  entitlement  REAL,               -- -1 = 無制限
+  used_pct     REAL,
+  reset_at     INTEGER
+);
+CREATE INDEX idx_quota_samples_kind ON quota_samples(quota_kind, observed_at DESC);</code></pre>
+<div class="warning"><span class="note-title">注意</span>
+<p><code>received_at</code> と <code>observed_at</code> を必ず別に持つ (FR-C-86)。定期取得は値の更新と無関係に走るため、取得時刻を鮮度に使うと<strong>期限切れの古い値が「最新」として選ばれる</strong>。値と観測時刻はペアで引き継ぐ。</p>
+</div>
+<p><code>quota_samples</code> は<strong>保持期間 30 日で間引く唯一のテーブル</strong>。間引き処理を書くなら書き込みも必ず実装する (DR-07)。</p>
+<p><code>entitlement = -1</code> は「無制限」。率を計算せず「無制限」と表示する。<strong>0 除算やマイナス率を出さない (FR-C-131)。</strong></p>
+<h3 id="3.7-設定">3.7 設定</h3>
+<pre><code class="language-sql">CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);</code></pre>
+<p>用途: アニメーション設定 (<code>auto</code> / <code>on</code> / <code>off</code>)、最後に開いたタブ、アイドルセッションの表示トグル、など。</p>
+<p><strong>認証トークン・API キーをここに入れない (DR-06 / NFR-31)。</strong> 認証は OS の資格情報ストアまたは既存の GitHub CLI 資格情報を参照する。</p>
+<h2 id="4.-保持と間引き">4. 保持と間引き</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>テーブル</th><th>保持</th><th>間引き</th></tr></thead>
+<tbody>
+<tr><td><code>sessions</code> / <code>subagent_runs</code> / <code>quota_events</code></td><td>無期限 (FR-C-14)</td><td>しない</td></tr>
+<tr><td><code>turn_index</code></td><td>無期限</td><td>しない (索引本体)</td></tr>
+<tr><td><code>index_files</code></td><td>無期限</td><td>元ファイルが消えた行は次回インデックスで掃除してよい</td></tr>
+<tr><td><code>quota_samples</code></td><td>30 日</td><td>起動時 + 1 日 1 回</td></tr>
+<tr><td><code>project_scan_folders</code> / <code>project_overrides</code></td><td>無期限</td><td>しない (ユーザーの意思)</td></tr>
+</tbody></table></div>
+<h2 id="5.-取れない値の表現">5. 取れない値の表現</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>状況</th><th>表現</th><th>やってはいけないこと</th></tr></thead>
+<tbody>
+<tr><td>履歴が一切ないプロジェクト</td><td><code>copilot: null</code></td><td>0 や空文字で埋める (FR-P-58)</td></tr>
+<tr><td>未インデックスのセッション</td><td><code>null</code> を返す (正常系)</td><td>エラーを返す (FR-C-57 / IR-14)</td></tr>
+<tr><td>利用枠が取れない</td><td><code>source = unavailable</code> + 理由</td><td>0% として描く (FR-C-83)</td></tr>
+<tr><td>エージェントが古いセッションを自動削除する場合</td><td>「保持されているセッション数」と表記</td><td>「累計セッション数」と称する (NFR-44)</td></tr>
+</tbody></table></div>
+<p><strong>取れない値を 0 で埋めた瞬間、そのゲージは嘘になる。</strong> DTO では <code>Option</code> / <code>null</code> を潰さないこと。</p>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

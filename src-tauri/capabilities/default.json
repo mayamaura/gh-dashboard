@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "メインウィンドウに与える最小限の権限。外向き通信は利用枠の取得だけなので、ここでは何も開けない (INV-3 / NFR-30)。",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-is-minimized",
+    "opener:default"
+  ]
+}

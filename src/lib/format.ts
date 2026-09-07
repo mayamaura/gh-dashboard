@@ -1,0 +1,140 @@
+// 表示の整形 (純粋)。
+//
+// ★ **取れない値を「0」や「—」だけで埋めない。**取得不可は取得不可として
+// 表現する (NFR-40 / 43 / 44)。この方針をここの関数群で守る。
+
+import type { QuotaGauge, QuotaSource } from '../types/dto'
+
+/** 相対時刻。`null` は「一度も無い」であって「0 秒前」ではない。 */
+export function relativeTime(ms: number | null, now: number): string {
+  if (ms === null) return 'なし'
+  const diff = now - ms
+  if (diff < 0) return 'たった今'
+  const sec = Math.floor(diff / 1000)
+  if (sec < 60) return `${sec} 秒前`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min} 分前`
+  const hour = Math.floor(min / 60)
+  if (hour < 24) return `${hour} 時間前`
+  const day = Math.floor(hour / 24)
+  if (day < 30) return `${day} 日前`
+  const month = Math.floor(day / 30)
+  if (month < 12) return `${month} か月前`
+  return `${Math.floor(month / 12)} 年前`
+}
+
+/** 稼働時間。 */
+export function duration(fromMs: number | null, toMs: number): string {
+  if (fromMs === null) return '不明'
+  const sec = Math.max(0, Math.floor((toMs - fromMs) / 1000))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${h}時間${m}分`
+  if (m > 0) return `${m}分${s}秒`
+  return `${s}秒`
+}
+
+/** トークン数の短縮表記。 */
+export function compactNumber(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
+
+/** nano-AIU から AI Credit へ (用語定義)。 */
+export const NANO_AIU_PER_CREDIT = 1_000_000_000
+
+export function creditsFromNanoAiu(nanoAiu: number | null): number | null {
+  return nanoAiu === null ? null : nanoAiu / NANO_AIU_PER_CREDIT
+}
+
+/**
+ * ゲージの本文。
+ *
+ * **率だけでなく額も併記する** (FR-C-89) — 従量課金では「あと何ドル分か」が
+ * 意思決定の単位になる。取れていない値は数字を作らない。
+ */
+export function gaugeText(g: QuotaGauge): string {
+  if (g.origin.source === 'unavailable') return '取得できませんでした'
+  if (g.unlimited) return '無制限'
+  if (g.used === null || g.entitlement === null) {
+    return g.used_pct === null ? '不明' : `${g.used_pct.toFixed(0)}%`
+  }
+  const pct = g.used_pct === null ? '' : ` (${g.used_pct.toFixed(0)}%)`
+  if (g.kind === 'monthly_credits') {
+    return `$${g.used.toFixed(2)} / $${g.entitlement.toFixed(2)}${pct}`
+  }
+  return `${g.used.toLocaleString()} / ${g.entitlement.toLocaleString()}${pct}`
+}
+
+/** 出所ラベル。**推定を実測であるかのように見せない** (NFR-40)。 */
+export function sourceLabel(origin: QuotaSource): string {
+  switch (origin.source) {
+    case 'actual':
+      return origin.via === 'sdk' ? '実値 (SDK)' : '実値 (API)'
+    case 'estimated':
+      return '推定'
+    case 'unavailable':
+      return '取得不可'
+  }
+}
+
+/** 「推定」の但し書き。ラベルだけでは足りない (FR-C-82)。 */
+export function sourceNote(origin: QuotaSource): string | null {
+  switch (origin.source) {
+    case 'estimated':
+      return `過去実績との相対値です (${origin.basis})。提供元が課金している実際の消費率ではありません。`
+    case 'unavailable':
+      return origin.how_to_fix
+    case 'actual':
+      return null
+  }
+}
+
+/** しきい値による色分け (FR-C-88)。取れていない枠は「安全」ではなく「通常」。 */
+export type Severity = 'normal' | 'warning' | 'danger'
+
+export function severity(usedPct: number | null): Severity {
+  if (usedPct === null) return 'normal'
+  if (usedPct >= 90) return 'danger'
+  if (usedPct >= 70) return 'warning'
+  return 'normal'
+}
+
+/** 観測が古いか (FR-C-87)。目安 15 分。 */
+export const STALE_THRESHOLD_MS = 15 * 60 * 1000
+
+export function isStale(origin: QuotaSource, now: number): boolean {
+  if (origin.source === 'unavailable') return false
+  return now - origin.observed_at > STALE_THRESHOLD_MS
+}
+
+/** 活動状態の文言。**区別できないものを断定しない** (FR-C-46 / NFR-42)。 */
+export function activityLabel(
+  activity: 'generating' | 'tool_running' | 'waiting_input' | 'subagent_running' | 'unknown'
+): string {
+  switch (activity) {
+    case 'generating':
+      return '生成中'
+    case 'tool_running':
+      // 「許可待ち」と断定しない。補足はツールチップへ
+      return 'ツール実行中'
+    case 'waiting_input':
+      return '入力待ち'
+    case 'subagent_running':
+      return 'サブエージェント実行中'
+    case 'unknown':
+      return '不明'
+  }
+}
+
+export const ACTIVITY_TOOLTIP: Record<string, string> = {
+  tool_running:
+    'ツールを実行中か、ツールの許可を待っている状態です。ログ上ではこの 2 つを区別できません。',
+}
+
+/** 履歴の照合方法。**推測による紐付けを事実として提示しない** (FR-P-53 / NFR-41)。 */
+export function matchedByLabel(matchedBy: 'exact' | 'folder_name_fallback'): string | null {
+  return matchedBy === 'folder_name_fallback' ? '旧パスの履歴 (フォルダ名で照合)' : null
+}
