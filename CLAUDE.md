@@ -85,7 +85,30 @@ src-tauri/src/
 - 図表のために外部チャートライブラリを追加しない (FR-C-163 / NFR-13)
 - 依存を増やすときは先に ADR (`docs/decisions.html`) を書く (NFR-10)
 
-## 7. コマンド
+## 7. 作業の振り分け (サブエージェント)
+
+定義は `.claude/agents/*.md`。詳細と根拠は [docs/subagents.html](docs/subagents.html)。
+
+| やること | 振り先 | モデル |
+|---|---|---|
+| 要求 ID / ADR / OQ の本文と根拠を引く | `spec-lookup` | Haiku |
+| 記録の更新 (traceability / 実装計画 / `docs:build`) | `docs-sync` | Haiku |
+| 段階 0 のプローブを書いて**数字を出す** | `probe-writer` | Sonnet |
+| 純粋関数 + ユニットテスト | `pure-fn` | Sonnet |
+| IO を伴う Rust (段階 1〜3) | `rust-io` | Sonnet |
+| React + TypeScript の画面 | `ui-impl` | Sonnet |
+| 不変条件と規約の検査 (読取のみ) | `invariant-review` | Sonnet / effort high |
+| **差分インデックス・ライブ監視・利用枠、OQ の結論、ADR** | `core-critical` | **Opus** |
+
+**判断が要らない作業に Opus を使わない。** 期待値が [テスト戦略](docs/test-strategy.html) の表になっているなら Sonnet で足ります。逆に、要求が「こう壊れる」と名指ししている箇所 (段階 4〜6 の中核) を安く済ませない。
+
+委譲するときは **要求 ID と、読むべきドキュメントを名指しで渡す**。「いい感じに実装して」と投げない。全ドキュメントを読ませない (それ自体がコストになる)。
+
+戻ってきた成果は `invariant-review` に通す — **INV 違反はテストでは捕まらない。**
+
+小さな修正 (1〜2 ファイル、タイポ、定数変更) は委譲しない。前提を読み直す固定費のほうが高くつく。
+
+## 8. コマンド
 
 ```bash
 npm run verify      # 型 + フロントテスト + Rust テスト (PR 前に必須)

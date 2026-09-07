@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>サブエージェント構成 | gh-dashboard docs</title>
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-sidebar></aside>
+  <main class="main">
+<h1>サブエージェント構成</h1>
+<p class="lede">作業を誰に振るか。仕様が表として確定している作業は安いモデルへ、判断が要る作業だけ高いモデルへ振り分ける。定義の実体は <code>.claude/agents/*.md</code>。</p>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/subagents.md</code></span></div>
+<h2 id="1.-考え方">1. 考え方</h2>
+<p>このリポジトリの作業は、<strong>仕様がどれだけ確定しているか</strong>で 3 つに分かれます。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>種類</th><th>例</th><th>振り先</th></tr></thead>
+<tbody>
+<tr><td><strong>参照・転記</strong> — 答えがドキュメントに書いてある</td><td>要求 ID の本文を引く、traceability を埋める</td><td>Haiku</td></tr>
+<tr><td><strong>確定した仕様の実装</strong> — 期待値が表になっている</td><td>純粋関数とテスト、UI、IO を伴う Rust</td><td>Sonnet</td></tr>
+<tr><td><strong>判断</strong> — 何が正しいかを決める必要がある</td><td>OQ の結論、差分インデックスの設計、ADR</td><td>Opus</td></tr>
+</tbody></table></div>
+<p><strong>「タスクに落とせる」= 期待値が表になっている</strong>ということです。この計画では <a href="test-strategy.html">テスト戦略</a> 2 節の期待値表と <a href="implementation-plan.html">実装計画</a> のタスク行がその役割を果たしているので、多くの作業を Sonnet に渡せます。</p>
+<h2 id="2.-コスト">2. コスト</h2>
+<p>Anthropic API の公表レート (100 万トークンあたり)。<strong>入力・出力とも同じ比率</strong>なので、比率だけ覚えれば足ります。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>モデル</th><th>入力</th><th>出力</th><th>Opus 比</th><th>コンテキスト</th></tr></thead>
+<tbody>
+<tr><td>Claude Opus 5</td><td>$5.00</td><td>$25.00</td><td>1.0</td><td>1M</td></tr>
+<tr><td>Claude Sonnet 5</td><td>$2.00</td><td>$10.00</td><td><strong>0.4</strong></td><td>1M</td></tr>
+<tr><td>Claude Haiku 4.5</td><td>$1.00</td><td>$5.00</td><td><strong>0.2</strong></td><td>200K</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>Haiku 4.5 は <code>effort</code> パラメータを受け付けません</strong> (400 が返る)。Haiku 系のエージェント定義に <code>effort</code> を書かないこと。また 200K しかないので、Haiku には<strong>ファイル全体を読ませる仕事を振らない</strong> — <code>spec-lookup</code> が grep で当たり行の周辺だけを読む設計にしてあるのはこのためです。</p>
+</div>
+<h3 id="一番効くコスト削減は-モデル選択ではなく-読ませない-こと">一番効くコスト削減は、モデル選択ではなく「読ませない」こと</h3>
+<p><code>docs/source/requirements.md</code> は 77KB、生成後の HTML は 115KB あります。要求 ID を 1 つ確認するためにこれを親の文脈へ載せると、以降そのセッションの<strong>全リクエスト</strong>が重くなります。</p>
+<p><code>spec-lookup</code> (Haiku) はこれを避けるためだけに存在します。数行を返すのが仕事で、その数行のために親が 115KB を抱え込まずに済みます。<strong>モデルを 1 段落とすより効きます。</strong></p>
+<h2 id="3.-8-体の構成">3. 8 体の構成</h2>
+<p>定義は <code>.claude/agents/&lt;名前&gt;.md</code>。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>エージェント</th><th>モデル</th><th>effort</th><th>役割</th><th>ツール</th></tr></thead>
+<tbody>
+<tr><td><code>spec-lookup</code></td><td>Haiku</td><td>—</td><td>要求 ID / ADR / OQ / タスクの本文と<strong>根拠</strong>を引く</td><td>読取のみ</td></tr>
+<tr><td><code>docs-sync</code></td><td>Haiku</td><td>—</td><td>traceability・実装計画の状態更新、<code>docs:build</code></td><td>編集可 (docs/source のみ)</td></tr>
+<tr><td><code>probe-writer</code></td><td>Sonnet</td><td>medium</td><td>段階 0 の読み取り専用プローブを書いて回し、<strong>数字を出す</strong></td><td>編集可</td></tr>
+<tr><td><code>pure-fn</code></td><td>Sonnet</td><td>medium</td><td>純粋関数 + ユニットテスト</td><td>編集可</td></tr>
+<tr><td><code>rust-io</code></td><td>Sonnet</td><td>medium</td><td>IO を伴う Rust (段階 1〜3)</td><td>編集可</td></tr>
+<tr><td><code>ui-impl</code></td><td>Sonnet</td><td>medium</td><td>React + TypeScript の画面</td><td>編集可</td></tr>
+<tr><td><code>invariant-review</code></td><td>Sonnet</td><td><strong>high</strong></td><td>INV-1〜10 と規約違反の検出</td><td><strong>読取のみ</strong></td></tr>
+<tr><td><code>core-critical</code></td><td><strong>Opus</strong></td><td>high</td><td>中核ロジックと設計判断、OQ の結論</td><td>編集可</td></tr>
+</tbody></table></div>
+<p><code>invariant-review</code> だけモデルは Sonnet のまま <code>effort</code> を high にしています。<strong>見落としの代償が大きい</strong> (INV 違反は「動いていても差し戻し」) 一方、探すべきものは列挙済みなので、モデルを上げるより思考を厚くするほうが費用対効果が高いためです。</p>
+<h2 id="4.-どれに振るか">4. どれに振るか</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>やること</th><th>振り先</th></tr></thead>
+<tbody>
+<tr><td>「FR-C-24 は何を要求している?」「この判断の ADR はあるか」</td><td><code>spec-lookup</code></td></tr>
+<tr><td>T-0.2〜0.6 (プローブを書いて数字を出す)</td><td><code>probe-writer</code></td></tr>
+<tr><td><strong>OQ の結論を出す / ADR を書く</strong></td><td><code>core-critical</code></td></tr>
+<tr><td>T-1.1〜1.2、その他の純粋関数とテスト</td><td><code>pure-fn</code></td></tr>
+<tr><td>T-1.4〜1.7、T-2.1〜2.7、T-3.1〜3.7</td><td><code>rust-io</code></td></tr>
+<tr><td>T-1.8〜1.10、T-5.6〜5.14、T-6.8〜6.9、T-7.1〜7.14</td><td><code>ui-impl</code></td></tr>
+<tr><td><strong>T-4.x (差分インデックス)、T-5.1〜5.5 (ライブ監視)、T-6.1〜6.7 (利用枠)</strong></td><td><code>core-critical</code></td></tr>
+<tr><td>コミット前の不変条件チェック</td><td><code>invariant-review</code></td></tr>
+<tr><td>実装が終わったあとの記録更新</td><td><code>docs-sync</code></td></tr>
+</tbody></table></div>
+<p>段階 4〜6 の中核が Opus なのは、要求に「こう壊れる」が名指しされているからです (FR-C-04 / 05 / 22 / 24〜26 / 51 / 86 …)。素直に実装すると踏むと<strong>分かっている</strong>罠が 16 個あり、そこを安く済ませても差し戻しで取り返せません。</p>
+<h2 id="5.-振らないほうがよい場合">5. 振らないほうがよい場合</h2>
+<p>サブエージェントは新しい文脈で始まるため、<strong>必要な前提を読み直す分の固定費</strong>がかかります。次の場合は自分でやるほうが安く済みます。</p>
+<ul>
+<li>1〜2 ファイルの小さな修正 (タイポ、定数の変更、import の追加)</li>
+<li>すでに親が読んで理解している箇所の手直し</li>
+<li>前後の会話に強く依存する作業 (説明を書き起こす手間が実作業を上回る)</li>
+</ul>
+<p>逆に、<strong>並行して進められる独立した作業が複数あるとき</strong>は、まとめて振ると実時間で効きます。</p>
+<h2 id="6.-委譲するときの決まり">6. 委譲するときの決まり</h2>
+<ol>
+<li><strong>要求 ID を渡す。</strong>「いい感じに実装して」ではなく「FR-P-52 と FR-P-54 を実装。根拠は本文の引用を読むこと」</li>
+<li><strong>読むべきドキュメントを名指しする。</strong>全部読ませない (それがコストになる)</li>
+<li><strong>OQ に依存する作業は、依存を明示する。</strong>未確定なら <code>core-critical</code> へ回すか、着手前に潰す</li>
+<li><strong>戻ってきた成果を <code>invariant-review</code> に通す。</strong>テストが緑でも、INV 違反はテストでは捕まらない</li>
+<li><strong>実装エージェントには実機確認まで求める</strong> (NFR-53)。「テストが通った」で受け取らない</li>
+</ol>
+<h2 id="7.-共通で守らせていること">7. 共通で守らせていること</h2>
+<p>全エージェントの定義に、それぞれの担当範囲に関係する不変条件を書き込んであります。とくに次は複数のエージェントに重複して書いてあります。</p>
+<ul>
+<li><strong>取れない値を 0 や空文字で埋めない</strong> (NFR-40)</li>
+<li><strong>区別できないものを UI で断定しない</strong> (FR-C-46 / NFR-42)</li>
+<li><strong>依存を勝手に足さない</strong> (NFR-10 / 13) — 足したくなったら止まって相談する</li>
+<li><strong>推測で埋めた箇所を必ず報告する</strong> — 黙って決めない</li>
+</ul>
+<p>重複を嫌って 1 箇所にまとめないのは、サブエージェントが <code>CLAUDE.md</code> を読む保証がないためです。<strong>それぞれの定義だけで完結させます。</strong></p>
+    <div class="footer-nav">
+      <span><a href="index.html">&larr; ドキュメント一覧</a></span>
+      <span>gh-dashboard</span>
+    </div>
+  </main>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

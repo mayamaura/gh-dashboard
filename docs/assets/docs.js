@@ -32,6 +32,7 @@ const NAV = [
     title: '進め方',
     items: [
       ['implementation-plan.html', '実装計画'],
+      ['subagents.html', 'サブエージェント構成'],
       ['test-strategy.html', 'テスト戦略'],
       ['traceability.html', '要求トレーサビリティ'],
     ],
