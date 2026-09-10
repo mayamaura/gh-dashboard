@@ -25,15 +25,15 @@
 <div class="table-wrap"><table>
 <thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">FR-P-01</span></td><td>直下 1 階層のみ走査</td><td><code>projects/scan.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-P-02</span></td><td>既定フォルダを DB に書かない</td><td><code>projects/scan.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-P-03</span></td><td>読めないフォルダはスキップ</td><td><code>projects/scan.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-P-04</span></td><td>スキャン結果を永続化しない</td><td><code>state.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-P-05</span></td><td>プロセス内キャッシュ</td><td><code>state.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-P-06</span></td><td>UI スレッドを塞がない</td><td><code>projects/commands.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-01 / 03 / 06</td><td>直下 1 階層のみ走査 / 読めないフォルダはスキップ / UI スレッドを塞がない</td><td><code>projects/scan.rs::run</code>, <code>projects/commands.rs::scan_and_cache</code></td><td><code>scan.rs</code> tests (存在しないフォルダ → warnings)、実機 (アクセス拒否のジャンクション)</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-02</span></td><td>既定フォルダを DB に書かない</td><td><code>projects/commands.rs::default_scan_folder</code></td><td>実機 (既定フォルダ不在の注記)</td><td>済</td></tr>
+<tr><td>FR-P-04 / 05 / 06</td><td>スキャン結果を永続化しない / プロセス内キャッシュ / UI スレッドを塞がない</td><td><code>state.rs</code>, <code>projects/commands.rs::scan_and_cache</code>, <code>projects/scan.rs</code></td><td>実機 (設定保存で「最終スキャン」が動かない)</td><td>済</td></tr>
 <tr><td>FR-P-10〜14</td><td>種別判定 (純粋)</td><td><code>projects/detect.rs</code></td><td><code>detect::tests</code></td><td>済</td></tr>
-<tr><td>FR-P-20〜23</td><td>起動コマンドの解決</td><td><code>projects/detect.rs</code></td><td><code>detect::tests::command_*</code></td><td>部分</td></tr>
-<tr><td>FR-P-30〜33</td><td>手動調整</td><td><code>projects/overrides.rs</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-12</span></td><td>1 階層下の探索 (除外リスト)</td><td><code>projects/scan.rs</code></td><td><code>scan.rs</code> tests (<code>frontend/vite.config.ts</code> → working_dir、<code>node_modules</code> 除外)</td><td>済</td></tr>
+<tr><td>FR-P-20 / 21</td><td>起動コマンドの解決 (許可リスト順)</td><td><code>projects/scan.rs::read_script_keys</code>, <code>detect::command_candidates</code>, <code>resolve_command</code></td><td><code>scan.rs</code> tests (許可リスト順、壊れた JSON)、実機 (候補が <code>dev / build / preview / test</code> の順)</td><td>済</td></tr>
+<tr><td>FR-P-22 / 23</td><td>起動コマンドの解決 (自己参照検出)</td><td><code>projects/scan.rs::is_self_source</code></td><td><code>scan.rs</code> tests、実機 (gh-dashboard が起動不可)</td><td>済</td></tr>
+<tr><td>FR-P-30 / 31</td><td>手動調整 (保存と取得)</td><td><code>projects/store.rs::override_upsert</code>, <code>Project.override_values</code></td><td><code>store.rs</code> tests、実機 (保存後にフォームへ値が戻る)</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-32</span></td><td>手動調整の検証</td><td><code>projects/commands.rs::projects_settings_update</code></td><td>実機 (<code>does-not-exist</code> が拒否され DB 未書き込み)</td><td>済</td></tr>
 <tr><td>FR-P-40〜47</td><td>git 状態</td><td><code>projects/git.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-P-50〜58</td><td>Copilot 利用状況の紐付け</td><td><code>projects/copilot_link.rs</code></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
 <tr><td><span class="chip id">FR-P-51</span></td><td>workspace.yaml 経由のパース</td><td></td><td></td><td><span class="chip id">ADR-0003</span></td></tr>
@@ -43,7 +43,12 @@
 <tr><td>FR-P-50〜58 (OQ-03 検証)</td><td>Copilot セッション紐付けの実装基盤</td><td></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
 <tr><td>FR-P-70〜72 (OQ-04 検証)</td><td>IDE 稼働判定</td><td></td><td><code>tools/probe/live-detect.mjs</code></td><td></td></tr>
 <tr><td>FR-P-70〜74</td><td>外部ツール連携</td><td><code>projects/external.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-P-80〜88</td><td>一覧 UI</td><td><code>pages/ProjectsPage.tsx</code></td><td><code>lib/projectList.test.ts</code></td><td></td></tr>
+<tr><td>FR-P-80 / 84</td><td>詳細パネル</td><td><code>components/ProjectDetail.tsx</code>, <code>pages/ProjectsPage.tsx</code></td><td>実機</td><td>済</td></tr>
+<tr><td>FR-P-81 / 82</td><td>絞り込み・並べ替え (純粋)</td><td><code>lib/projectList.ts</code></td><td><code>projectList.test.ts</code></td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-83</span></td><td>行の表示</td><td><code>components/ProjectRow.tsx</code></td><td>実機</td><td>済</td></tr>
+<tr><td>FR-P-85 / 87</td><td>ヘッダー・スキャン中表示</td><td><code>App.tsx</code>, <code>store/appStore.ts::projectsScanning</code></td><td>実機</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-86</span></td><td>キャッシュ即描画</td><td><code>pages/ProjectsPage.tsx</code></td><td>—</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-88</span></td><td>行内メニューの位置補正</td><td><code>components/RowMenu.tsx</code></td><td>実機 (右端で左に開く)</td><td>済</td></tr>
 </tbody></table></div>
 <h2 id="copilot-ダッシュボード-fr-c">Copilot ダッシュボード (FR-C)</h2>
 <div class="table-wrap"><table>
@@ -82,6 +87,8 @@
 <tr><td><span class="chip id">FR-C-138</span></td><td>組織の月次消費履歴</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
 <tr><td><span class="chip id">FR-C-139</span></td><td>個人の月次消費履歴</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
 <tr><td><span class="chip id">FR-C-140</span></td><td>Enterprise 組織の月次消費</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
+<tr><td>FR-C-83 / FR-P-73</td><td>エラー表示の形式化</td><td><code>lib/format.ts::describeError</code></td><td><code>format.test.ts</code></td><td>済</td></tr>
+<tr><td>FR-C-161 (プロジェクト側)</td><td>プロジェクトスキャン状態管理</td><td><code>store/appStore.ts</code> (<code>projectsScanning</code> / <code>projectsError</code> / <code>projectsSelectedKey</code>)</td><td>—</td><td>済</td></tr>
 <tr><td>FR-C-160〜164</td><td>表示・設定</td><td><code>App.tsx</code>, <code>store/appStore.ts</code></td><td></td><td></td></tr>
 </tbody></table></div>
 <h2 id="データ要求-dr">データ要求 (DR)</h2>
@@ -107,11 +114,11 @@
 <div class="table-wrap"><table>
 <thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td>IR-01〜06</td><td>プロジェクト系コマンド</td><td><code>projects/commands.rs</code>, <code>ipc/commands.ts</code></td><td></td><td></td></tr>
+<tr><td>IR-01 / 02 / 03</td><td>プロジェクト系コマンド</td><td><code>projects/commands.rs</code></td><td><code>store.rs</code> tests (重複メッセージ)、実機</td><td>済</td></tr>
 <tr><td>IR-10〜19</td><td>Copilot 系コマンド</td><td><code>copilot/commands.rs</code>, <code>ipc/commands.ts</code></td><td></td><td></td></tr>
 <tr><td><span class="chip id">IR-30</span></td><td>引数名のケース固定</td><td>全コマンドの <code>rename_all</code></td><td><code>tests/ipc_naming.rs</code></td><td></td></tr>
 <tr><td><span class="chip id">IR-31</span></td><td>型付きラッパーに集約</td><td><code>ipc/commands.ts</code></td><td></td><td>部分</td></tr>
-<tr><td><span class="chip id">IR-32</span></td><td>変更系の統一パターン</td><td><code>projects/commands.rs</code></td><td></td><td></td></tr>
+<tr><td>IR-32 / IR-40</td><td>プロジェクトスナップショット emit と取得</td><td><code>projects/commands.rs</code>, <code>hooks/useProjectsSnapshotBridge.ts</code></td><td>実機</td><td>済</td></tr>
 <tr><td>IR-40〜46</td><td>イベント</td><td><code>ipc/events.ts</code></td><td></td><td>部分</td></tr>
 </tbody></table></div>
 <h2 id="非機能要求-nfr">非機能要求 (NFR)</h2>

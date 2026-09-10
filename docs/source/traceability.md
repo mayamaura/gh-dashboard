@@ -20,15 +20,15 @@ updated: 2026-09-08
 
 | 要求 | 内容 | 実装 | テスト | 状態 |
 |---|---|---|---|---|
-| FR-P-01 | 直下 1 階層のみ走査 | `projects/scan.rs` | | |
-| FR-P-02 | 既定フォルダを DB に書かない | `projects/scan.rs` | | |
-| FR-P-03 | 読めないフォルダはスキップ | `projects/scan.rs` | | |
-| FR-P-04 | スキャン結果を永続化しない | `state.rs` | | |
-| FR-P-05 | プロセス内キャッシュ | `state.rs` | | |
-| FR-P-06 | UI スレッドを塞がない | `projects/commands.rs` | | |
+| FR-P-01 / 03 / 06 | 直下 1 階層のみ走査 / 読めないフォルダはスキップ / UI スレッドを塞がない | `projects/scan.rs::run`, `projects/commands.rs::scan_and_cache` | `scan.rs` tests (存在しないフォルダ → warnings)、実機 (アクセス拒否のジャンクション) | 済 |
+| FR-P-02 | 既定フォルダを DB に書かない | `projects/commands.rs::default_scan_folder` | 実機 (既定フォルダ不在の注記) | 済 |
+| FR-P-04 / 05 / 06 | スキャン結果を永続化しない / プロセス内キャッシュ / UI スレッドを塞がない | `state.rs`, `projects/commands.rs::scan_and_cache`, `projects/scan.rs` | 実機 (設定保存で「最終スキャン」が動かない) | 済 |
 | FR-P-10〜14 | 種別判定 (純粋) | `projects/detect.rs` | `detect::tests` | 済 |
-| FR-P-20〜23 | 起動コマンドの解決 | `projects/detect.rs` | `detect::tests::command_*` | 部分 |
-| FR-P-30〜33 | 手動調整 | `projects/overrides.rs` | | |
+| FR-P-12 | 1 階層下の探索 (除外リスト) | `projects/scan.rs` | `scan.rs` tests (`frontend/vite.config.ts` → working_dir、`node_modules` 除外) | 済 |
+| FR-P-20 / 21 | 起動コマンドの解決 (許可リスト順) | `projects/scan.rs::read_script_keys`, `detect::command_candidates`, `resolve_command` | `scan.rs` tests (許可リスト順、壊れた JSON)、実機 (候補が `dev / build / preview / test` の順) | 済 |
+| FR-P-22 / 23 | 起動コマンドの解決 (自己参照検出) | `projects/scan.rs::is_self_source` | `scan.rs` tests、実機 (gh-dashboard が起動不可) | 済 |
+| FR-P-30 / 31 | 手動調整 (保存と取得) | `projects/store.rs::override_upsert`, `Project.override_values` | `store.rs` tests、実機 (保存後にフォームへ値が戻る) | 済 |
+| FR-P-32 | 手動調整の検証 | `projects/commands.rs::projects_settings_update` | 実機 (`does-not-exist` が拒否され DB 未書き込み) | 済 |
 | FR-P-40〜47 | git 状態 | `projects/git.rs` | | |
 | FR-P-50〜58 | Copilot 利用状況の紐付け | `projects/copilot_link.rs` | `tools/probe/vscode-sessions.mjs` | |
 | FR-P-51 | workspace.yaml 経由のパース | | | ADR-0003 |
@@ -38,7 +38,12 @@ updated: 2026-09-08
 | FR-P-50〜58 (OQ-03 検証) | Copilot セッション紐付けの実装基盤 | | `tools/probe/vscode-sessions.mjs` | |
 | FR-P-70〜72 (OQ-04 検証) | IDE 稼働判定 | | `tools/probe/live-detect.mjs` | |
 | FR-P-70〜74 | 外部ツール連携 | `projects/external.rs` | | |
-| FR-P-80〜88 | 一覧 UI | `pages/ProjectsPage.tsx` | `lib/projectList.test.ts` | |
+| FR-P-80 / 84 | 詳細パネル | `components/ProjectDetail.tsx`, `pages/ProjectsPage.tsx` | 実機 | 済 |
+| FR-P-81 / 82 | 絞り込み・並べ替え (純粋) | `lib/projectList.ts` | `projectList.test.ts` | 済 |
+| FR-P-83 | 行の表示 | `components/ProjectRow.tsx` | 実機 | 済 |
+| FR-P-85 / 87 | ヘッダー・スキャン中表示 | `App.tsx`, `store/appStore.ts::projectsScanning` | 実機 | 済 |
+| FR-P-86 | キャッシュ即描画 | `pages/ProjectsPage.tsx` | — | 済 |
+| FR-P-88 | 行内メニューの位置補正 | `components/RowMenu.tsx` | 実機 (右端で左に開く) | 済 |
 
 ## Copilot ダッシュボード (FR-C)
 
@@ -77,6 +82,8 @@ updated: 2026-09-08
 | FR-C-138 | 組織の月次消費履歴 | | | 取得不可 / 未検証 (ADR-0018) |
 | FR-C-139 | 個人の月次消費履歴 | | | 取得不可 / 未検証 (ADR-0018) |
 | FR-C-140 | Enterprise 組織の月次消費 | | | 取得不可 / 未検証 (ADR-0018) |
+| FR-C-83 / FR-P-73 | エラー表示の形式化 | `lib/format.ts::describeError` | `format.test.ts` | 済 |
+| FR-C-161 (プロジェクト側) | プロジェクトスキャン状態管理 | `store/appStore.ts` (`projectsScanning` / `projectsError` / `projectsSelectedKey`) | — | 済 |
 | FR-C-160〜164 | 表示・設定 | `App.tsx`, `store/appStore.ts` | | |
 
 ## データ要求 (DR)
@@ -102,11 +109,11 @@ updated: 2026-09-08
 
 | 要求 | 内容 | 実装 | テスト | 状態 |
 |---|---|---|---|---|
-| IR-01〜06 | プロジェクト系コマンド | `projects/commands.rs`, `ipc/commands.ts` | | |
+| IR-01 / 02 / 03 | プロジェクト系コマンド | `projects/commands.rs` | `store.rs` tests (重複メッセージ)、実機 | 済 |
 | IR-10〜19 | Copilot 系コマンド | `copilot/commands.rs`, `ipc/commands.ts` | | |
 | IR-30 | 引数名のケース固定 | 全コマンドの `rename_all` | `tests/ipc_naming.rs` | |
 | IR-31 | 型付きラッパーに集約 | `ipc/commands.ts` | | 部分 |
-| IR-32 | 変更系の統一パターン | `projects/commands.rs` | | |
+| IR-32 / IR-40 | プロジェクトスナップショット emit と取得 | `projects/commands.rs`, `hooks/useProjectsSnapshotBridge.ts` | 実機 | 済 |
 | IR-40〜46 | イベント | `ipc/events.ts` | | 部分 |
 
 ## 非機能要求 (NFR)

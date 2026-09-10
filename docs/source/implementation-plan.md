@@ -42,18 +42,20 @@ updated: 2026-09-08
 
 **完了条件**: 実フォルダで誤検出なく一覧が出る。
 
+**実機確認済み (2026-09-11)**: 実フォルダ 2 か所 (`D:\masah\Projects` / `C:\Users\masah\Documents`) で 16 プロジェクトが一覧に出た。種別は Tauri × 4 / Vite SPA × 3 / その他 × 9 で誤判定なし。本アプリ自身は「起動不可: 本アプリ自身のソースです」。アクセス拒否のジャンクション (`My Music` / `My Videos`) は警告に積まれてスキップされた。
+
 | ID | タスク | 要求 | 状態 |
 |---|---|---|---|
 | T-1.1 | `util::path_key` — パス正規化 (純粋) + テスト | 用語定義 | 完了 |
 | T-1.2 | `projects::detect` — 種別判定 (純粋) + テスト | FR-P-10〜14 | 完了 |
 | T-1.3 | DB 初期化とマイグレーション基盤 | DR-01 / DR-04 | 完了 |
-| T-1.4 | `project_scan_folders` / `project_overrides` の読み書き | DR-02 / FR-P-30〜32 | 未着手 |
-| T-1.5 | `projects::scan` — 1 階層走査 → 種別判定 → スナップショット | FR-P-01〜06 | 未着手 |
-| T-1.6 | 起動コマンドの解決 (許可リスト順 / 上書き優先) | FR-P-20〜23 | 未着手 |
-| T-1.7 | IR-01〜03 のコマンド実装 + `projects-snapshot` イベント | IR-01〜03 / IR-32 | 未着手 |
-| T-1.8 | 一覧 + 詳細パネルの 2 ペイン UI | FR-P-80 / 84 | 未着手 |
-| T-1.9 | フロント側の絞り込み・並べ替え (純粋関数 + テスト) | FR-P-81〜82 | 未着手 |
-| T-1.10 | ヘッダー (最終スキャン / すべて停止 / 更新) とスキャン中表示 | FR-P-85 / 87 | 未着手 |
+| T-1.4 | `project_scan_folders` / `project_overrides` の読み書き (実装: projects/store.rs) | DR-02 / FR-P-30〜32 | 完了 |
+| T-1.5 | `projects::scan` — 1 階層走査 → 種別判定 → スナップショット (実装: projects/scan.rs) | FR-P-01〜06 | 完了 |
+| T-1.6 | 起動コマンドの解決 (許可リスト順 / 上書き優先) | FR-P-20〜23 | 完了 |
+| T-1.7 | IR-01〜03 のコマンド実装 + `projects-snapshot` イベント (実装: projects/commands.rs) | IR-01〜03 / IR-32 | 完了 |
+| T-1.8 | 一覧 + 詳細パネルの 2 ペイン UI (実装: components/ProjectRow.tsx / ProjectDetail.tsx / RowMenu.tsx) | FR-P-80 / 84 | 完了 |
+| T-1.9 | フロント側の絞り込み・並べ替え (純粋関数 + テスト) | FR-P-81〜82 | 完了 |
+| T-1.10 | ヘッダー (最終スキャン / すべて停止 / 更新) とスキャン中表示 (実装: App.tsx / lib/projectsActions.ts / store/appStore.ts) | FR-P-85 / 87 | 完了 |
 
 **気をつける点**
 
@@ -61,6 +63,10 @@ updated: 2026-09-08
 - 読めないフォルダはスキップして警告に積む。**スキャン全体を失敗させない** (FR-P-03)
 - スキャン結果を**永続化しない** (FR-P-04)
 - 走査は `spawn_blocking` (FR-P-06)
+- **既定フォルダは `USERPROFILE` から `Documents\Projects` を組み立てる。** `dirs::document_dir()` は OneDrive にリダイレクトされた「ドキュメント」既知フォルダ (`OneDrive\ドキュメント`) を返し、FR-P-02 の `%USERPROFILE%\Documents\Projects` と食い違う (実機で確認)
+- **スキャン対象フォルダの保存値はディスク上の大文字小文字** (`std::fs::canonicalize`、`\\?\` 接頭辞は落とす)。重複判定だけ `path_key` で行う。`path_key` (小文字) をそのまま表示に使うと `d:\masah\projects` と出て実物と違って見える
+- **1 階層下の探索では `node_modules` / `.git` / `target` / `dist` / `build` / `.venv` / `venv` / `__pycache__` と `.` 始まりを除外する。** `node_modules/<pkg>/vite.config.ts` を拾うと誤判定になる。スキャン対象フォルダ直下の `.` 始まり (`.git` / `.vscode` / `.obsidian` 等) も候補にしないが、**無言では消さず、除外した件数と名前を警告に積む** (FR-P-13 / NFR-43。`.dotfiles` のような本物のプロジェクトを黙って落とさないため)
+- **手動調整フォームの初期値は `Project.override_values` (保存済みの上書き値そのもの) から取る。** `display_name` / `resolved_command` / `working_dir` は上書き適用後の表示用の値。保存は行全体の置き換えなので、表示用の値を初期値にすると「表示名だけ直したら `working_dir_override` が消える」が起きる (実装中に検出)
 
 ---
 
@@ -246,7 +252,7 @@ updated: 2026-09-08
 | 段階 | 完了 / 全体 |
 |---|---|
 | 0. 調査 | 8 / 8 |
-| 1. プロジェクト基盤 | 3 / 10 |
+| 1. プロジェクト基盤 | 10 / 10 |
 | 2. git + 利用状況 | 0 / 7 |
 | 3. dev サーバー | 0 / 7 |
 | 4. 差分インデックス | 1 / 13 |

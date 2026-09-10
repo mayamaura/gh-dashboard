@@ -165,14 +165,24 @@ npm init -y &amp;&amp; npm install @github/copilot-sdk</code></pre>
 </div>
 <h2 id="5.-層-d-実機確認チェックリスト">5. 層 D — 実機確認チェックリスト</h2>
 <p>各段階の完了条件。<strong>ここを通らないものは未完成。</strong></p>
+<div class="rationale"><span class="note-title">補足</span>
+<p><strong>確認のしかた</strong>: <code>npm run app:dev</code> で起動し、ウィンドウを撮って目で見る。この環境は 125% DPI なので、<code>MoveWindow</code> / <code>GetWindowRect</code> を使う補助スクリプトは <code>SetProcessDPIAware()</code> を先に呼ぶこと (呼ばないと座標が 1/1.25 に仮想化され、ウィンドウの左上一部しか撮れない)。「テストが通った」を実機確認の代わりにしない (NFR-53)。</p>
+</div>
 <h3 id="段階-1-2-プロジェクト基盤-git・利用状況">段階 1〜2 (プロジェクト基盤 / git・利用状況)</h3>
 <ul>
-<li>[ ] 実フォルダで一覧が出る。種別の誤判定がない</li>
-<li>[ ] Next.js + Vitest 構成が <code>nextjs</code> と判定される</li>
+<li>[x] 実フォルダで一覧が出る。種別の誤判定がない (2026-09-11: 16 件、Tauri × 4 / Vite SPA × 3 / その他 × 9)</li>
+<li>[ ] Next.js + Vitest 構成が <code>nextjs</code> と判定される (実フォルダに該当構成が無い。<code>scan.rs</code> のフィクスチャテストで担保)</li>
 <li>[ ] <code>.git</code> の無いフォルダで git コマンドが 1 つも実行されない</li>
 <li>[ ] フォルダをリネームしても、フォルダ名フォールバックで履歴が紐付く</li>
 <li>[ ] フォールバックで紐付いた行に「旧パスの履歴」表示が出る (FR-P-53)</li>
 <li>[ ] 履歴が無いプロジェクトが 0 埋めされていない</li>
+<li>[x] 既定フォルダが未登録のとき注記が出て、DB に書かれない (FR-P-02)</li>
+<li>[x] スキャン対象フォルダの追加・削除が UI から効き、実際の大文字小文字で表示される (IR-03)</li>
+<li>[x] アクセス拒否のフォルダが警告に積まれ、スキャンが失敗しない (FR-P-03)</li>
+<li>[x] 本アプリ自身が「起動不可: 本アプリ自身のソースです」になる (FR-P-22)</li>
+<li>[x] 存在しない作業ディレクトリ上書きが拒否され、DB に書かれない (FR-P-32)</li>
+<li>[x] 手動調整の保存で「最終スキャン」が動かない = 再スキャンしていない (FR-P-05)</li>
+<li>[x] 行内メニューが右端で左に開き、画面外に出ない (FR-P-88)</li>
 </ul>
 <h3 id="段階-3-dev-サーバー">段階 3 (dev サーバー)</h3>
 <ul>
@@ -245,6 +255,16 @@ npm init -y &amp;&amp; npm install @github/copilot-sdk</code></pre>
 <tr><td>2026-09-08</td><td>同じ消費量が 3 通りの丸めで返る (<code>entitlement − quota_remaining</code> = 1.6 / <code>entitlement − remaining</code> = 2 / <code>credits_used</code> = 1)</td><td>率と消費量が同じ元データから出ることを確かめるテスト</td></tr>
 <tr><td>2026-09-08</td><td><code>quota_reset_at</code> が 3 枠とも <code>0</code> (本物のリセット日は別フィールドの <code>quota_reset_date</code>)</td><td><code>quota_reset_at</code> をリセット日に使わないテスト</td></tr>
 <tr><td>2026-09-08</td><td><code>entitlement</code> に <code>-1</code> (無制限) は<strong>未観測</strong>。<code>unlimited: true</code> も<strong>未観測</strong></td><td>無制限分岐は<strong>未観測であることをテスト名に書く</strong> (例: <code>未観測: entitlement が -1 のとき率を出さない</code>)</td></tr>
+<tr><td>2026-09-11</td><td><code>dirs::document_dir()</code> が OneDrive リダイレクト先 (<code>C:UsersmasahOneDriveドキュメント</code>) を返し、FR-P-02 の <code>%USERPROFILE%Documents</code> と食い違う</td><td>既定フォルダを <code>USERPROFILE</code> から組み立てるテスト (既知フォルダ API に依存しない)</td></tr>
+<tr><td>2026-09-11</td><td><code>DocumentsMy Music</code> / <code>My Videos</code> はアクセス拒否 (os error 5) のジャンクション</td><td>読めないサブフォルダが警告に積まれ、スキャン全体が失敗しないテスト (FR-P-03)</td></tr>
+<tr><td>2026-09-11</td><td><code>std::fs::canonicalize</code> が <code>\?D:...</code> の接頭辞付きで返す</td><td>表示用パスから <code>\?</code> を落とすテスト</td></tr>
+<tr><td>2026-09-11</td><td>小文字化した <code>path_key</code> を表示に使うと <code>d:masahprojects</code> と出る</td><td>保存値がディスク上の大文字小文字を保ち、重複判定は <code>path_key</code> で行うテスト (<code>store.rs::add_keeps_disk_casing_and_dedupes_by_key</code>)</td></tr>
+<tr><td>2026-09-11</td><td><code>node_modules/&lt;pkg&gt;/vite.config.ts</code> が 1 階層下の探索で拾われうる</td><td>除外リストが効くテスト (<code>scan.rs</code>)</td></tr>
+<tr><td>2026-09-11</td><td>本アプリ自身 (gh-dashboard) が Tauri + <code>npm run dev</code> として普通に検出される</td><td><code>CARGO_MANIFEST_DIR</code> の親と <code>path_key</code> が一致したら起動不可にするテスト (<code>scan.rs::is_self_source</code>)</td></tr>
+<tr><td>2026-09-11</td><td><code>working_dir_override</code> を <code>package.json</code> の無いサブフォルダにすると候補が空になる</td><td>上書き後の作業ディレクトリで <code>scripts</code> を読み直し、無ければ起動不可に落ちるテスト</td></tr>
+<tr><td>2026-09-11</td><td>手動調整の保存は行全体の置き換えなので、表示用の値をフォーム初期値にすると他の上書きが黙って消える</td><td><code>override_values</code> からフォームを初期化し、保存後に同じ値が戻ることを確かめる (実機で確認。純粋関数ではないのでユニットテストは無し)</td></tr>
+<tr><td>2026-09-11</td><td>行内メニューを右端の ⋮ から右に開くとウィンドウ外に出る</td><td>画面端で反転する位置補正 (<code>RowMenu.tsx</code>、実機で確認)</td></tr>
+<tr><td>2026-09-11</td><td><code>.</code> 始まりのトップレベルフォルダを無条件に除外すると、<code>.dotfiles</code> のような本物のプロジェクトが警告無しに消える</td><td>除外した件数と名前が警告に積まれるテスト (<code>scan.rs::dot_dirs_are_excluded_but_reported</code>)</td></tr>
 </tbody></table></div>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
