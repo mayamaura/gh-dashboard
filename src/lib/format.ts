@@ -3,7 +3,7 @@
 // ★ **取れない値を「0」や「—」だけで埋めない。**取得不可は取得不可として
 // 表現する (NFR-40 / 43 / 44)。この方針をここの関数群で守る。
 
-import type { QuotaGauge, QuotaSource } from '../types/dto'
+import type { AppError, QuotaGauge, QuotaSource } from '../types/dto'
 
 /** 相対時刻。`null` は「一度も無い」であって「0 秒前」ではない。 */
 export function relativeTime(ms: number | null, now: number): string {
@@ -137,4 +137,38 @@ export const ACTIVITY_TOOLTIP: Record<string, string> = {
 /** 履歴の照合方法。**推測による紐付けを事実として提示しない** (FR-P-53 / NFR-41)。 */
 export function matchedByLabel(matchedBy: 'exact' | 'folder_name_fallback'): string | null {
   return matchedBy === 'folder_name_fallback' ? '旧パスの履歴 (フォルダ名で照合)' : null
+}
+
+/**
+ * IPC の `AppError` を人が読める文にする。
+ *
+ * **「何をすればよいか」がある (`how_to_fix` / `hint`) なら必ず添える**
+ * (FR-C-83 / FR-P-73)。未知の形の値は文字列化して落とさない。
+ */
+export function describeError(e: unknown): string {
+  if (typeof e !== 'object' || e === null) {
+    return String(e)
+  }
+  if (!('kind' in e)) {
+    // 未知の形。断定せずそのまま文字列化する
+    return JSON.stringify(e)
+  }
+  const err = e as AppError
+  switch (err.kind) {
+    case 'not_found':
+      return `見つかりません: ${err.what}`
+    case 'invalid_input':
+      return err.message
+    case 'io':
+      return err.message
+    case 'db':
+      return err.message
+    case 'external':
+      return err.hint ? `${err.message} — ${err.hint}` : err.message
+    case 'unavailable':
+      return err.how_to_fix ? `${err.reason} — ${err.how_to_fix}` : err.reason
+    default:
+      // 未知の形。断定せずそのまま文字列化する
+      return JSON.stringify(err)
+  }
 }

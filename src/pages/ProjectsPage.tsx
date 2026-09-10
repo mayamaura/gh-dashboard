@@ -2,50 +2,51 @@
 //
 // ★ **定期ポーリングを持たない。**ユーザー操作駆動のみ (要求 4.2)。
 // ★ 絞り込み・並べ替えはすべてフロントで完結させる (FR-P-81)。
-//
-// 実装状況: 一覧の骨格と絞り込みの配線だけ。詳細パネルと dev サーバー操作は
-// 段階 1〜3 で実装する。
+// ★ 一覧 + 詳細パネルの 2 ペイン構成 (FR-P-80)。
+// ★ スキャン中フラグ・エラー・選択キーは appStore に置く (FR-C-161)。
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { projectsScan } from '../ipc/commands'
 import { appStore, useAppStore } from '../store/appStore'
 import {
   defaultFilter,
   filterProjects,
-  launchState,
   sortProjects,
   type ProjectFilter,
   type SortKey,
 } from '../lib/projectList'
-import { matchedByLabel, relativeTime } from '../lib/format'
+import { addScanFolder, openAgent, openFolder, openTerminal, openVscode, removeScanFolder, scanProjects } from '../lib/projectsActions'
 import { useIsViewing } from '../hooks/useWindowVisible'
+import { ProjectRow } from '../components/ProjectRow'
+import { ProjectDetail } from '../components/ProjectDetail'
+import { RowMenu, type RowMenuItem } from '../components/RowMenu'
+import type { ProjectKind } from '../types/dto'
+
+const KIND_OPTIONS: Array<{ value: ProjectKind; label: string }> = [
+  { value: 'tauri', label: 'Tauri' },
+  { value: 'nextjs', label: 'Next.js' },
+  { value: 'sveltekit', label: 'SvelteKit' },
+  { value: 'vite', label: 'Vite' },
+  { value: 'python_package', label: 'Python パッケージ' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'python', label: 'Python' },
+  { value: 'notebook', label: 'Notebook' },
+  { value: 'other', label: 'その他' },
+]
 
 export function ProjectsPage() {
   const viewing = useIsViewing('projects')
-  const { projects } = useAppStore()
+  const { projects, projectsError, projectsSelectedKey } = useAppStore()
   const [filter, setFilter] = useState<ProjectFilter>(defaultFilter)
   const [sortKey, setSortKey] = useState<SortKey>('last_used')
-  const [scanning, setScanning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [newFolderPath, setNewFolderPath] = useState('')
+  const [menu, setMenu] = useState<{ pathKey: string; x: number; y: number } | null>(null)
   const now = Date.now()
 
-  const scan = async () => {
-    setScanning(true)
-    setError(null)
-    try {
-      const snap = await projectsScan()
-      appStore.set({ projects: snap })
-    } catch (e) {
-      setError(describeError(e))
-    } finally {
-      setScanning(false)
-    }
-  }
-
-  // タブを開いたときだけ。**定期ポーリングは張らない**
+  // タブを開いたときだけ。キャッシュ済みスナップショットを即描画し (appStore.projects
+  // は既に反映済みなのでそのまま出る)、裏で最新化する (FR-P-86)。**定期ポーリングは張らない**
   useEffect(() => {
-    if (viewing) void scan()
+    if (viewing) void scanProjects()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewing])
 
@@ -54,8 +55,39 @@ export function ProjectsPage() {
     [projects, filter, sortKey]
   )
 
+  const selected = visible.find((p) => p.path_key === projectsSelectedKey) ?? null
+
+  const toggleKind = (kind: ProjectKind) => {
+    setFilter((f) => ({
+      ...f,
+      kinds: f.kinds.includes(kind) ? f.kinds.filter((k) => k !== kind) : [...f.kinds, kind],
+    }))
+  }
+
+  const menuItems: RowMenuItem[] = menu
+    ? (() => {
+        const p = projects?.projects.find((x) => x.path_key === menu.pathKey)
+        const items: RowMenuItem[] = [
+          { label: 'VS Code で開く', onSelect: () => void openVscode(menu.pathKey) },
+          { label: 'エクスプローラーで開く', onSelect: () => void openFolder(menu.pathKey) },
+          { label: 'ターミナルで開く', onSelect: () => void openTerminal(menu.pathKey) },
+          { label: 'Copilot CLI を起動', onSelect: () => void openAgent(menu.pathKey) },
+        ]
+        if (p && p.dev.state === 'running' && p.dev.url) {
+          items.push({
+            label: 'ブラウザで開く',
+            onSelect: () =>
+              appStore.set({
+                projectsError: '未実装です (T-3.x) — ブラウザで開く機能は段階 3 で実装します',
+              }),
+          })
+        }
+        return items
+      })()
+    : []
+
   return (
-    <div className="page">
+    <div className="page projects-page">
       <section className="panel">
         <div className="toolbar">
           <input
@@ -64,6 +96,23 @@ export function ProjectsPage() {
             value={filter.text}
             onChange={(e) => setFilter({ ...filter, text: e.target.value })}
           />
+
+          <details className="kind-filter">
+            <summary>種別 {filter.kinds.length > 0 ? `(${filter.kinds.length})` : ''}</summary>
+            <div className="kind-filter-body">
+              {KIND_OPTIONS.map((opt) => (
+                <label key={opt.value}>
+                  <input
+                    type="checkbox"
+                    checked={filter.kinds.includes(opt.value)}
+                    onChange={() => toggleKind(opt.value)}
+                  />{' '}
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </details>
+
           <label>
             <input
               type="checkbox"
@@ -93,15 +142,36 @@ export function ProjectsPage() {
             <option value="name">名前</option>
             <option value="kind">種別</option>
           </select>
-
-          <span className="spacer" />
-          <span className="muted">
-            最終スキャン: {relativeTime(projects?.scanned_at ?? null, now)}
-          </span>
-          <button onClick={() => void scan()} disabled={scanning}>
-            {scanning ? 'スキャン中…' : '更新'}
-          </button>
         </div>
+
+        <details className="scan-folders">
+          <summary>スキャン対象フォルダ</summary>
+          <ul className="scan-folder-list">
+            {(projects?.scan_folders ?? []).map((f) => (
+              <li key={f}>
+                <span className="mono">{f}</span>
+                <button onClick={() => void removeScanFolder(f)}>削除</button>
+              </li>
+            ))}
+          </ul>
+          <div className="scan-folder-add">
+            <input
+              className="search"
+              placeholder="フォルダの絶対パス"
+              value={newFolderPath}
+              onChange={(e) => setNewFolderPath(e.target.value)}
+            />
+            <button
+              disabled={newFolderPath.trim() === ''}
+              onClick={() => {
+                void addScanFolder(newFolderPath.trim())
+                setNewFolderPath('')
+              }}
+            >
+              追加
+            </button>
+          </div>
+        </details>
 
         {/* FR-P-03 / NFR-43: 読めなかったフォルダを無言で欠落させない */}
         {projects?.warnings.map((w) => (
@@ -114,63 +184,33 @@ export function ProjectsPage() {
             スキャン対象フォルダが未登録のため、既定フォルダを一時的に使っています (保存はしていません)。
           </p>
         )}
-        {error && <p className="note-inline error">{error}</p>}
+        {projectsError && <p className="note-inline error">{projectsError}</p>}
       </section>
 
-      <section className="panel">
+      <section className="panel list-panel">
         {visible.length === 0 ? (
           <p className="muted">
             {projects === null ? '読み込み中…' : '表示できるプロジェクトがありません。'}
           </p>
         ) : (
           <ul className="project-list">
-            {visible.map((p) => {
-              const launch = launchState(p)
-              const fallback = p.copilot ? matchedByLabel(p.copilot.matched_by) : null
-              return (
-                <li key={p.path_key} className="project-row">
-                  <span className={`dot dev-${p.dev.state}`} aria-hidden />
-                  <span className="project-name">{p.display_name}</span>
-                  {p.hidden && <span className="chip">非表示</span>}
-                  {p.archived && <span className="chip">アーカイブ</span>}
-                  <span className="chip">{p.kind_label}</span>
-                  {p.git && (
-                    <span className="muted">
-                      {p.git.branch ?? 'detached'} {p.git.dirty && '●'}
-                    </span>
-                  )}
-                  <span className="muted">
-                    {relativeTime(p.copilot?.last_used_at ?? null, now)}
-                  </span>
-                  {/* FR-P-53 / NFR-41: 推測による紐付けを明示する */}
-                  {fallback && <span className="chip warn">{fallback}</span>}
-                  <span className="spacer" />
-                  {/* FR-P-22: 起動不可でも隠さず、理由を出す */}
-                  {launch.canLaunch ? (
-                    <button disabled title="段階 3 (T-3.2) で実装">
-                      起動
-                    </button>
-                  ) : (
-                    <span className="muted" title={launch.reason ?? undefined}>
-                      起動不可
-                    </span>
-                  )}
-                </li>
-              )
-            })}
+            {visible.map((p) => (
+              <ProjectRow
+                key={p.path_key}
+                project={p}
+                now={now}
+                selected={p.path_key === projectsSelectedKey}
+                onSelect={() => appStore.set({ projectsSelectedKey: p.path_key })}
+                onMenuOpen={(x, y) => setMenu({ pathKey: p.path_key, x, y })}
+              />
+            ))}
           </ul>
         )}
       </section>
+
+      <ProjectDetail project={selected} now={now} />
+
+      {menu && <RowMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
     </div>
   )
-}
-
-/** AppError を人が読める文にする。**「何をすればよいか」があるなら添える** */
-function describeError(e: unknown): string {
-  if (typeof e === 'object' && e !== null && 'kind' in e) {
-    const err = e as { kind: string; reason?: string; message?: string; how_to_fix?: string | null }
-    const head = err.reason ?? err.message ?? err.kind
-    return err.how_to_fix ? `${head} — ${err.how_to_fix}` : head
-  }
-  return String(e)
 }

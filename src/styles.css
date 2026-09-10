@@ -243,3 +243,106 @@ body {
 button { cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
+button.danger { border-color: var(--danger); color: var(--danger); }
+
+/* ---------- プロジェクトタブ: 2 ペイン (FR-P-80) ---------- */
+
+.projects-page { max-width: none; height: 100%; }
+
+/* 一覧は詳細パネルより優先して高さを確保する。詳細を開いても 5 行前後は見えるように。
+   実機で 16 件を並べたとき、min-height 120px では 2 行しか残らなかった */
+.list-panel { padding: 0; overflow-y: auto; flex: 1 1 auto; min-height: 300px; }
+.list-panel .project-list { padding: 4px 8px; }
+
+.project-row { cursor: pointer; border-radius: 6px; overflow-x: auto; }
+.project-row:hover { background: var(--sunken); }
+.project-row.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+.project-command {
+  font-family: var(--mono);
+  font-size: 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot.dirty { width: 6px; height: 6px; background: var(--warn); display: inline-block; margin-left: 4px; }
+
+.row-menu-trigger { padding: 2px 8px; }
+
+/* FR-P-88: クリック位置から座標計算した固定配置。横スクロールでクリップされない */
+.row-menu {
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  padding: 4px;
+}
+.row-menu-item {
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.row-menu-item:hover:not(:disabled) { background: var(--sunken); border-color: transparent; }
+
+/* ---------- 詳細パネル (FR-P-84) ---------- */
+
+.detail-panel { flex: 0 1 auto; max-height: 42vh; overflow-y: auto; }
+.detail-panel h2 { margin: 0 0 10px; font-size: 15px; color: var(--fg); }
+.detail-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.detail-section h3 {
+  font-size: 12px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.detail-grid dt { color: var(--muted); }
+.detail-grid dd { margin: 0; word-break: break-all; }
+
+.button-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
+.override-form { display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
+.override-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.override-form label.checkbox-label { flex-direction: row; align-items: center; gap: 6px; }
+.override-form input[type='text'],
+.override-form input:not([type]) { padding: 5px 9px; }
+.field-error { color: var(--danger); font-size: 11.5px; }
+
+/* ---------- スキャン対象フォルダ / 種別フィルタ ---------- */
+
+.scan-folders, .kind-filter { margin-top: 8px; }
+.scan-folders summary, .kind-filter summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+
+.scan-folder-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.scan-folder-list li { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.scan-folder-add { display: flex; gap: 8px; margin-top: 6px; }
+.mono { font-family: var(--mono); }
+
+.kind-filter-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 2px 0;
+}

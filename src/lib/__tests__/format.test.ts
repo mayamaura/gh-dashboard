@@ -5,6 +5,7 @@ import {
   activityLabel,
   compactNumber,
   creditsFromNanoAiu,
+  describeError,
   duration,
   gaugeText,
   isStale,
@@ -174,6 +175,41 @@ describe('activityLabel', () => {
 
   it('不明を空文字にしない', () => {
     expect(activityLabel('unknown')).toBe('不明')
+  })
+})
+
+describe('describeError', () => {
+  // FR-C-83 / FR-P-73: 「何をすればよいか」があれば必ず添える
+  it('unavailable は reason と how_to_fix をつなげる', () => {
+    expect(
+      describeError({ kind: 'unavailable', reason: '未実装です (T-3.x)', how_to_fix: 'あとで再試行してください' })
+    ).toBe('未実装です (T-3.x) — あとで再試行してください')
+  })
+
+  it('how_to_fix が無い unavailable は reason だけ', () => {
+    expect(describeError({ kind: 'unavailable', reason: '未実装です', how_to_fix: null })).toBe(
+      '未実装です'
+    )
+  })
+
+  it('invalid_input は message を返す', () => {
+    expect(
+      describeError({ kind: 'invalid_input', field: 'working_dir_override', message: 'フォルダが存在しません' })
+    ).toBe('フォルダが存在しません')
+  })
+
+  it('external は hint があればつなげる', () => {
+    expect(
+      describeError({ kind: 'external', tool: 'code', message: '起動に失敗しました', hint: 'PATH に code がありません' })
+    ).toBe('起動に失敗しました — PATH に code がありません')
+  })
+
+  it('文字列はそのまま返す', () => {
+    expect(describeError('何かのエラー')).toBe('何かのエラー')
+  })
+
+  it('未知の形のオブジェクトでも落ちずに文字列化する', () => {
+    expect(describeError({ foo: 'bar' })).toBe('{"foo":"bar"}')
   })
 })
 

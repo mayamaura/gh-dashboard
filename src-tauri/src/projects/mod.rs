@@ -9,11 +9,14 @@
 pub mod commands;
 pub mod detect;
 pub mod dev_server;
+pub mod scan;
+pub mod store;
 
 use serde::{Deserialize, Serialize};
 
 pub use detect::ProjectKind;
 pub use dev_server::DevState;
+pub use store::ProjectOverride;
 
 /// git 状態。`.git` が無ければそもそもこの構造体を作らない (FR-P-42)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +71,9 @@ pub struct Project {
     pub hidden: bool,
     pub archived: bool,
     pub sort_order: Option<i64>,
+    /// 保存済みの手動調整そのもの。手動調整フォームの初期値に使う。
+    /// 無ければ `None` (FR-P-30)。**表示用の値 (`display_name` 等) と混同しない**
+    pub override_values: Option<ProjectOverride>,
     pub git: Option<GitStatus>,
     pub copilot: Option<CopilotUsage>,
     pub dev: DevState,

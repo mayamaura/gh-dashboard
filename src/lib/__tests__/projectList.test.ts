@@ -16,6 +16,7 @@ const project = (patch: Partial<Project>): Project => ({
   hidden: false,
   archived: false,
   sort_order: null,
+  override_values: null,
   git: null,
   copilot: null,
   dev: { state: 'stopped' },

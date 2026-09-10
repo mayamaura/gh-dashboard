@@ -62,6 +62,16 @@ export interface CopilotUsage {
   matched_by: MatchedBy
 }
 
+/** 保存済みの手動調整そのもの (FR-P-30)。フォームの初期値に使う */
+export interface ProjectOverride {
+  display_name: string | null
+  command_override: string | null
+  working_dir_override: string | null
+  sort_order: number | null
+  hidden: boolean
+  archived: boolean
+}
+
 export interface Project {
   path_key: string
   /** リポジトリルート。git の判定対象 (FR-P-44) */
@@ -78,6 +88,8 @@ export interface Project {
   hidden: boolean
   archived: boolean
   sort_order: number | null
+  /** 保存済みの手動調整。無ければ null。**表示用の値と混同しない** */
+  override_values: ProjectOverride | null
   git: GitStatus | null
   copilot: CopilotUsage | null
   dev: DevState

@@ -3,11 +3,15 @@
 // ★ タブ状態は appStore に置く (FR-C-161 / 164)。ページのローカル state に
 // 置くと、切り替えたときに進行中の処理が「消えて」見える。
 
+import { useRef, useState } from 'react'
+
 import { CopilotPage } from './pages/CopilotPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { appStore, useAppStore } from './store/appStore'
 import { useWindowVisibilityBridge } from './hooks/useWindowVisible'
+import { useProjectsSnapshotBridge } from './hooks/useProjectsSnapshotBridge'
 import { relativeTime } from './lib/format'
+import { scanProjects, stopAllDevServers } from './lib/projectsActions'
 
 const TABS = [
   { id: 'copilot', label: 'Copilot' },
@@ -17,9 +21,36 @@ const TABS = [
 export function App() {
   // ネイティブの最小化を受け取る。ここで 1 回だけ購読する (IR-46 / FR-C-43)
   useWindowVisibilityBridge()
+  // スキャン・設定変更のたびにバックエンドが発火する (IR-40)。ここで 1 回だけ購読する
+  useProjectsSnapshotBridge()
 
-  const { tab, indexing, indexingManual, lastIndexedAt, quotaFetchedAt } = useAppStore()
+  const {
+    tab,
+    indexing,
+    indexingManual,
+    lastIndexedAt,
+    quotaFetchedAt,
+    projects,
+    projectsScanning,
+  } = useAppStore()
   const now = Date.now()
+
+  // 「すべて停止」の二段階確認 (FR-P-67)
+  const [confirmingStopAll, setConfirmingStopAll] = useState(false)
+  const confirmTimer = useRef<number | undefined>(undefined)
+
+  const onStopAllClick = () => {
+    if (!confirmingStopAll) {
+      setConfirmingStopAll(true)
+      window.clearTimeout(confirmTimer.current)
+      // 3 秒操作が無ければ元に戻す
+      confirmTimer.current = window.setTimeout(() => setConfirmingStopAll(false), 3000)
+      return
+    }
+    window.clearTimeout(confirmTimer.current)
+    setConfirmingStopAll(false)
+    void stopAllDevServers()
+  }
 
   return (
     <div className="app">
@@ -53,7 +84,19 @@ export function App() {
               <span className="muted">利用枠: {relativeTime(quotaFetchedAt, now)}</span>
             </>
           ) : (
-            <span className="muted">プロジェクト</span>
+            <>
+              {/* FR-P-85: 最終スキャン (相対時刻) */}
+              <span className="muted">
+                最終スキャン: {relativeTime(projects?.scanned_at ?? null, now)}
+              </span>
+              <button onClick={onStopAllClick} className={confirmingStopAll ? 'danger' : undefined}>
+                {confirmingStopAll ? '本当に停止しますか?' : 'すべて停止'}
+              </button>
+              {/* FR-P-87: スキャン中はボタンに明示する */}
+              <button onClick={() => void scanProjects()} disabled={projectsScanning}>
+                {projectsScanning ? 'スキャン中…' : '更新'}
+              </button>
+            </>
           )}
         </div>
       </header>

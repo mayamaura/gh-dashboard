@@ -41,6 +41,13 @@ export interface AppStoreState {
   usageToday: UsageToday | null
   projects: ProjectsSnapshot | null
 
+  /** スキャン中か。タブを切り替えても「スキャン中…」が消えない (FR-C-161 / FR-P-87) */
+  projectsScanning: boolean
+  /** 直近のプロジェクト操作 (スキャン/設定変更/外部ツール等) のエラー文言 */
+  projectsError: string | null
+  /** 詳細パネルで選択中のプロジェクト。タブを往復しても残る */
+  projectsSelectedKey: string | null
+
   animation: AnimationPref
 }
 
@@ -56,6 +63,9 @@ const initial: AppStoreState = {
   quota: null,
   usageToday: null,
   projects: null,
+  projectsScanning: false,
+  projectsError: null,
+  projectsSelectedKey: null,
   animation: 'auto',
 }
 
