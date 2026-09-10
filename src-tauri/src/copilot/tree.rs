@@ -200,7 +200,10 @@ mod tests {
     /// FR-C-113: 親が見つからない孤児はルート直下に置く。捨てない。
     #[test]
     fn orphan_is_placed_at_root_not_dropped() {
-        let t = build(&[node("a", None, Some(1)), node("x", Some("missing"), Some(2))]);
+        let t = build(&[
+            node("a", None, Some(1)),
+            node("x", Some("missing"), Some(2)),
+        ]);
         assert_eq!(t.len(), 2, "孤児を捨ててはいけない");
         let orphan = t.iter().find(|n| n.run_key == "x").unwrap();
         assert_eq!(orphan.depth, 0);
@@ -210,10 +213,7 @@ mod tests {
     /// FR-C-113: 循環参照で無限ループしない。
     #[test]
     fn cycle_does_not_loop_forever() {
-        let t = build(&[
-            node("a", Some("b"), Some(1)),
-            node("b", Some("a"), Some(2)),
-        ]);
+        let t = build(&[node("a", Some("b"), Some(1)), node("b", Some("a"), Some(2))]);
         assert_eq!(t.len(), 2, "循環でも全行が 1 度ずつ出る");
     }
 
@@ -296,10 +296,7 @@ mod tests {
 
     #[test]
     fn live_view_handles_cycle_without_hanging() {
-        let t = build(&[
-            node("a", Some("b"), Some(1)),
-            node("b", Some("a"), Some(2)),
-        ]);
+        let t = build(&[node("a", Some("b"), Some(1)), node("b", Some("a"), Some(2))]);
         let running: HashSet<String> = ["a".to_string()].into_iter().collect();
         let visible = visible_for_live(&t, &running);
         assert!(!visible.is_empty());

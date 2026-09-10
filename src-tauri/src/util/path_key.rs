@@ -78,15 +78,30 @@ mod tests {
 
     #[test]
     fn normalizes_case_and_separators() {
-        assert_eq!(path_key("D:\\Projects\\Foo").as_deref(), Some("d:\\projects\\foo"));
-        assert_eq!(path_key("D:/Projects/Foo").as_deref(), Some("d:\\projects\\foo"));
-        assert_eq!(path_key("d:/PROJECTS/foo").as_deref(), Some("d:\\projects\\foo"));
+        assert_eq!(
+            path_key("D:\\Projects\\Foo").as_deref(),
+            Some("d:\\projects\\foo")
+        );
+        assert_eq!(
+            path_key("D:/Projects/Foo").as_deref(),
+            Some("d:\\projects\\foo")
+        );
+        assert_eq!(
+            path_key("d:/PROJECTS/foo").as_deref(),
+            Some("d:\\projects\\foo")
+        );
     }
 
     #[test]
     fn strips_trailing_separator() {
-        assert_eq!(path_key("D:\\Projects\\Foo\\").as_deref(), Some("d:\\projects\\foo"));
-        assert_eq!(path_key("D:/Projects/Foo//").as_deref(), Some("d:\\projects\\foo"));
+        assert_eq!(
+            path_key("D:\\Projects\\Foo\\").as_deref(),
+            Some("d:\\projects\\foo")
+        );
+        assert_eq!(
+            path_key("D:/Projects/Foo//").as_deref(),
+            Some("d:\\projects\\foo")
+        );
     }
 
     #[test]

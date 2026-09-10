@@ -246,7 +246,14 @@ mod tests {
 
     #[test]
     fn sdk_success_is_actual() {
-        let g = degrade("m", "月次", Some(FetchOutcome::Ok(obs(6.2, 10.0))), None, None, NOW);
+        let g = degrade(
+            "m",
+            "月次",
+            Some(FetchOutcome::Ok(obs(6.2, 10.0))),
+            None,
+            None,
+            NOW,
+        );
         assert!(matches!(
             g.origin,
             QuotaSource::Actual {
@@ -289,7 +296,14 @@ mod tests {
     /// FR-C-83: 取得不可には「何をすれば取れるか」が入っている
     #[test]
     fn unavailable_carries_how_to_fix() {
-        let g = degrade("m", "月次", Some(failed("未認証")), Some(failed("403")), None, NOW);
+        let g = degrade(
+            "m",
+            "月次",
+            Some(failed("未認証")),
+            Some(failed("403")),
+            None,
+            NOW,
+        );
         match g.origin {
             QuotaSource::Unavailable { reason, how_to_fix } => {
                 assert!(reason.contains("未認証"));
@@ -303,8 +317,22 @@ mod tests {
     /// FR-C-84: ある枠が実値でも、別の枠に推定を混ぜない
     #[test]
     fn gauges_are_evaluated_independently() {
-        let a = degrade("a", "枠A", Some(FetchOutcome::Ok(obs(1.0, 10.0))), None, None, NOW);
-        let b = degrade("b", "枠B", Some(failed("対象プランでない")), None, None, NOW);
+        let a = degrade(
+            "a",
+            "枠A",
+            Some(FetchOutcome::Ok(obs(1.0, 10.0))),
+            None,
+            None,
+            NOW,
+        );
+        let b = degrade(
+            "b",
+            "枠B",
+            Some(failed("対象プランでない")),
+            None,
+            None,
+            NOW,
+        );
         assert!(matches!(a.origin, QuotaSource::Actual { .. }));
         assert!(matches!(b.origin, QuotaSource::Unavailable { .. }));
         assert_eq!(b.used_pct, None);

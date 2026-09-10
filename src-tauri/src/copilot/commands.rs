@@ -157,9 +157,7 @@ pub async fn quota_get(
 
 /// IR-18: 各取得経路の可用性。「何をすれば取れるようになるか」の材料 (FR-C-83)。
 #[tauri::command(rename_all = "snake_case")]
-pub async fn quota_source_status_get(
-    _state: State<'_, AppState>,
-) -> AppResult<serde_json::Value> {
+pub async fn quota_source_status_get(_state: State<'_, AppState>) -> AppResult<serde_json::Value> {
     // TODO(T-6.11): 認証状態 / SDK 有無 / 直近の取得結果と失敗理由
     Ok(serde_json::json!({
         "sdk": { "available": false, "reason": "未調査 (OQ-06)" },

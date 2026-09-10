@@ -89,8 +89,7 @@ pub fn synthesize(
     });
 
     // ③ 「入力待ち / 不明」のときだけ、稼働中サブエージェントで上書きする
-    if running_subagents > 0
-        && matches!(base, ActivityState::WaitingInput | ActivityState::Unknown)
+    if running_subagents > 0 && matches!(base, ActivityState::WaitingInput | ActivityState::Unknown)
     {
         return ActivityState::SubagentRunning;
     }
@@ -114,14 +113,22 @@ mod tests {
 
     #[test]
     fn fresh_signal_wins_over_tail_record() {
-        let s = synthesize(Some((StateSignal::Generating, 1_000)), TailRecord::ToolUse, 0);
+        let s = synthesize(
+            Some((StateSignal::Generating, 1_000)),
+            TailRecord::ToolUse,
+            0,
+        );
         assert_eq!(s, ActivityState::Generating);
     }
 
     #[test]
     fn stale_signal_falls_back_to_tail_record() {
         // 61 秒前のシグナルは使わない
-        let s = synthesize(Some((StateSignal::Generating, 61_000)), TailRecord::ToolUse, 0);
+        let s = synthesize(
+            Some((StateSignal::Generating, 61_000)),
+            TailRecord::ToolUse,
+            0,
+        );
         assert_eq!(s, ActivityState::ToolRunning);
     }
 
@@ -179,7 +186,11 @@ mod tests {
     fn boundary_of_signal_freshness() {
         // ちょうど 60 秒は新鮮側に含める
         assert_eq!(
-            synthesize(Some((StateSignal::WaitingInput, SIGNAL_FRESH_MS)), TailRecord::ToolUse, 0),
+            synthesize(
+                Some((StateSignal::WaitingInput, SIGNAL_FRESH_MS)),
+                TailRecord::ToolUse,
+                0
+            ),
             ActivityState::WaitingInput
         );
         assert_eq!(

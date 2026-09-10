@@ -238,13 +238,20 @@ mod tests {
         for ext in ["js", "ts", "mjs", "cjs", "mts", "cts"] {
             let name = format!("next.config.{ext}");
             let d = detect_root(&[&name]);
-            assert_eq!(d.kind, ProjectKind::Nextjs, "拡張子 {ext} で判定できていない");
+            assert_eq!(
+                d.kind,
+                ProjectKind::Nextjs,
+                "拡張子 {ext} で判定できていない"
+            );
         }
     }
 
     #[test]
     fn sveltekit_detected() {
-        assert_eq!(detect_root(&["svelte.config.js"]).kind, ProjectKind::Sveltekit);
+        assert_eq!(
+            detect_root(&["svelte.config.js"]).kind,
+            ProjectKind::Sveltekit
+        );
     }
 
     #[test]
@@ -355,7 +362,8 @@ mod tests {
     fn resolve_prefers_override() {
         let keys = vec!["dev".to_string()];
         assert_eq!(
-            resolve_command(Some(".\\backend\\.venv\\Scripts\\python.exe -m app"), &keys).as_deref(),
+            resolve_command(Some(".\\backend\\.venv\\Scripts\\python.exe -m app"), &keys)
+                .as_deref(),
             Some(".\\backend\\.venv\\Scripts\\python.exe -m app")
         );
     }
@@ -363,7 +371,10 @@ mod tests {
     #[test]
     fn resolve_ignores_blank_override() {
         let keys = vec!["dev".to_string()];
-        assert_eq!(resolve_command(Some("   "), &keys).as_deref(), Some("npm run dev"));
+        assert_eq!(
+            resolve_command(Some("   "), &keys).as_deref(),
+            Some("npm run dev")
+        );
     }
 
     #[test]

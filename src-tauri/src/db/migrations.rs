@@ -96,7 +96,13 @@ mod tests {
     fn no_derived_data_tables() {
         let conn = migrated();
         let names = table_names(&conn);
-        for forbidden in ["projects", "git_status", "dev_logs", "copilot_usage", "turn_bodies"] {
+        for forbidden in [
+            "projects",
+            "git_status",
+            "dev_logs",
+            "copilot_usage",
+            "turn_bodies",
+        ] {
             assert!(
                 !names.contains(&forbidden.to_string()),
                 "{forbidden} は導出データ。永続化してはいけない (DR-02)"
@@ -109,7 +115,9 @@ mod tests {
     fn no_credential_columns() {
         let conn = migrated();
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
             .unwrap();
         let tables: Vec<String> = stmt
             .query_map([], |r| r.get::<_, String>(0))
@@ -158,7 +166,9 @@ mod tests {
         assert!(names.contains(&"byte_offset".to_string()));
         assert!(names.contains(&"preview".to_string()));
         assert!(
-            !names.iter().any(|n| n == "body" || n == "content" || n == "text"),
+            !names
+                .iter()
+                .any(|n| n == "body" || n == "content" || n == "text"),
             "本文を DB に複製してはいけない (FR-C-02 / INV-6)"
         );
     }

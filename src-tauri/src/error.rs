@@ -114,10 +114,13 @@ mod tests {
     fn hint_is_none_unless_set() {
         let e = AppError::external("code", "spawn failed");
         let json = serde_json::to_string(&e).unwrap();
-        assert!(json.contains("\"hint\":null"), "埋められないなら null のまま");
+        assert!(
+            json.contains("\"hint\":null"),
+            "埋められないなら null のまま"
+        );
 
-        let e = AppError::external("code", "spawn failed")
-            .with_hint("VS Code が PATH にありません");
+        let e =
+            AppError::external("code", "spawn failed").with_hint("VS Code が PATH にありません");
         let json = serde_json::to_string(&e).unwrap();
         assert!(json.contains("PATH"));
     }

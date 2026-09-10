@@ -99,7 +99,8 @@ mod tests {
         let conn = open_in_memory().unwrap();
         let insert = "INSERT INTO quota_samples (received_at, observed_at, source, quota_kind) VALUES (?1, ?2, 'sdk', 'monthly_credits')";
         // 31 日前 / 1 日前
-        conn.execute(insert, [NOW, NOW - 31 * 24 * 3_600_000]).unwrap();
+        conn.execute(insert, [NOW, NOW - 31 * 24 * 3_600_000])
+            .unwrap();
         conn.execute(insert, [NOW, NOW - 24 * 3_600_000]).unwrap();
 
         let removed = prune_quota_samples(&conn, NOW).unwrap();
