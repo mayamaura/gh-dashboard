@@ -16,5 +16,8 @@ Thumbs.db
 
 # ローカル実測データ (OQ 調査の出力)。個人のセッション内容を含みうるためコミットしない
 tools/probe-out/
+# 段階 0 プローブが使う Copilot SDK の置き場。依存はリポジトリの package.json に足さない (NFR-10)
+tools/probe-sdk/
+
 .tsbuild/
 *.tsbuildinfo

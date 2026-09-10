@@ -19,8 +19,16 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT_DIR = join(ROOT, 'tools', 'probe-out');
 const JSON_ONLY = process.argv.includes('--json');
 
-/** 値を絶対に出さないフィールド名 (INV-2 / FR-C-72) */
-const SECRET_KEYS = /^(headers?|authorization|token|access_token|refresh_token|secret|password|api_?key|cookie)$/i;
+// 完全一致で伏せるキー名
+const SECRET_KEY_EXACT = /^(headers?|authorization|token|secret|password|passwd|cookie|credentials?)$/i;
+// 部分一致で伏せるキー名。`authToken` / `accessToken` / `authInfo` のような複合名を拾う。
+// **`tokenCount` / `totalTokens` / `token_based_billing` のようなトークン「数」のキーは伏せない** —
+// これらは利用量表示の中核であり、秘密ではない (FR-C-132)。
+const SECRET_KEY_PART =
+  /(auth[-_]?(token|info|header)|access[-_]?token|refresh[-_]?token|id[-_]?token|session[-_]?token|bearer[-_]?token|(github|gh|copilot|oauth|pat)[-_]?token|api[-_]?key|apikey|client[-_]?secret|private[-_]?key|password|passphrase|credential)/i;
+
+/** 値を絶対に出さないフィールド名か (INV-2 / FR-C-72) */
+const SECRET_KEYS = { test: (k) => SECRET_KEY_EXACT.test(k) || SECRET_KEY_PART.test(k) };
 
 const copilotHome = process.env.COPILOT_HOME || join(homedir(), '.copilot');
 
