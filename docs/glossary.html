@@ -24,7 +24,7 @@
 <tr><td><strong>トランスクリプト</strong></td><td>セッションの発話・ツール呼び出し・ツール出力が記録された JSONL 形式のログ</td><td><code>events.jsonl</code></td></tr>
 <tr><td><strong>AI Credit</strong></td><td>Copilot の従量課金の単位。トークン消費 × モデル別レートで消費される</td><td><code>credits</code></td></tr>
 <tr><td><strong>nano-AIU</strong></td><td>Copilot SDK がコストを報告する単位。<strong>10⁹ で割ると AI Credit</strong></td><td><code>nano_aiu</code> / <code>total_nano_aiu</code></td></tr>
-<tr><td><strong>クォータ</strong></td><td>プラン契約に含まれる利用枠。SDK の <code>account.getQuota</code> が返す <code>quotaSnapshots</code> の単位</td><td><code>QuotaGauge.kind</code></td></tr>
+<tr><td><strong>クォータ</strong></td><td>プラン契約に含まれる利用枠。SDK の <code>account.getCurrentAuth</code> が返す <code>quota_snapshots</code> の単位</td><td><code>QuotaGauge.kind</code></td></tr>
 <tr><td><strong>コンテキストウィンドウ</strong></td><td>1 セッションが保持できるトークンの上限</td><td><code>context_used</code> / <code>context_limit</code></td></tr>
 <tr><td><strong>利用枠到達イベント</strong></td><td>クレジット枯渇・レート制限・セッション上限に達した記録</td><td><code>quota_events</code></td></tr>
 </tbody></table></div>

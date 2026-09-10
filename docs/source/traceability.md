@@ -30,9 +30,13 @@ updated: 2026-09-08
 | FR-P-20〜23 | 起動コマンドの解決 | `projects/detect.rs` | `detect::tests::command_*` | 部分 |
 | FR-P-30〜33 | 手動調整 | `projects/overrides.rs` | | |
 | FR-P-40〜47 | git 状態 | `projects/git.rs` | | |
-| FR-P-50〜58 | Copilot 利用状況の紐付け | `projects/copilot_link.rs` | | |
+| FR-P-50〜58 | Copilot 利用状況の紐付け | `projects/copilot_link.rs` | `tools/probe/vscode-sessions.mjs` | |
+| FR-P-51 | workspace.yaml 経由のパース | | | ADR-0003 |
+| FR-P-56 | タイムスタンプの読み取り | | | ADR-0014 |
 | FR-P-60〜68 | dev サーバー | `projects/dev_server.rs`, `platform/win_job.rs` | | |
 | FR-P-63 | URL 自動検出 (純粋) | `util/url_detect.rs` | `url_detect::tests` | 済 |
+| FR-P-50〜58 (OQ-03 検証) | Copilot セッション紐付けの実装基盤 | | `tools/probe/vscode-sessions.mjs` | |
+| FR-P-70〜72 (OQ-04 検証) | IDE 稼働判定 | | `tools/probe/live-detect.mjs` | |
 | FR-P-70〜74 | 外部ツール連携 | `projects/external.rs` | | |
 | FR-P-80〜88 | 一覧 UI | `pages/ProjectsPage.tsx` | `lib/projectList.test.ts` | |
 
@@ -40,30 +44,39 @@ updated: 2026-09-08
 
 | 要求 | 内容 | 実装 | テスト | 状態 |
 |---|---|---|---|---|
-| FR-C-01〜02 | 全期間 / 本文を複製しない | `copilot/indexer.rs` | | |
+| FR-C-01〜02 | 全期間 / 本文を複製しない | `copilot/indexer.rs` | `tools/probe/jsonl-shape.mjs` | ADR-0003 / ADR-0013 |
+| FR-C-02〜08 | セッション記録の形式と変分 | | `tools/probe/jsonl-shape.mjs` | |
 | FR-C-03/05/06 | 差分判定・末尾断片 (純粋) | `copilot/delta.rs` | `delta::tests` | 済 |
 | FR-C-04 | オフセット更新はトランザクション最後 | `copilot/indexer.rs` | | |
 | FR-C-07 | UNIQUE で二重適用を防ぐ | `db/migrations.rs` | | |
 | FR-C-08〜09 | ストリーミング / バッチコミット | `copilot/indexer.rs` | | |
 | FR-C-10〜11 | バックグラウンド / 進捗通知 | `copilot/indexer.rs` | | |
-| FR-C-12〜13 | 防御的パース | `copilot/record.rs` | | |
+| FR-C-12〜13 | 防御的パース | `copilot/record.rs` | `tools/probe/record-kinds.mjs` | |
 | FR-C-14 | 無期限保持 | `db/migrations.rs` | | |
-| FR-C-20 | セッション集計 | `copilot/aggregate.rs` | | |
-| FR-C-21〜29 | サブエージェント系統 | `copilot/aggregate.rs` | | |
-| FR-C-40〜43 | ライブ監視の起動と停止 | `copilot/live.rs`, `hooks/useLivePoll.ts` | | |
+| FR-C-20 | セッション集計 | `copilot/aggregate.rs` | `tools/probe/record-kinds.mjs` | |
+| FR-C-21〜29 | サブエージェント系統 | `copilot/aggregate.rs` | | ADR-0016 |
+| FR-C-40〜43 | ライブ監視の起動と停止 | `copilot/live.rs`, `hooks/useLivePoll.ts` | | ADR-0014 |
 | FR-C-44〜46 | 活動状態の合成 (純粋) | `copilot/activity.rs` | `activity::tests` | 済 |
 | FR-C-47〜49 | 末尾シーク読みとキャッシュ | `copilot/live.rs`, `util/tail.rs` | | |
 | FR-C-50〜52 | 稼働中サブエージェント集合 | `copilot/live.rs` | | |
 | FR-C-53〜57 | セッションカード | `components/SessionCard.tsx` | | |
 | FR-C-58〜60 | 自動インデックスの発火 | `pages/CopilotPage.tsx` | | |
 | FR-C-61 | 稼働サマリー | `components/LiveSummary.tsx` | | |
-| FR-C-70〜72 | IDE ワークスペース | `copilot/live.rs` | | |
+| FR-C-70〜72 | IDE ワークスペース | `copilot/live.rs` | `tools/probe/live-detect.mjs` | ADR-0014 |
 | FR-C-80〜95 | 利用枠ゲージ (純粋部分) | `copilot/quota.rs` | `quota::tests` | 部分 |
+| FR-C-85 | リセット日判定に `quota_reset_date_utc` を使う | | | ADR-0015 / ADR-0017 |
+| FR-C-86 | 鮮度判定と警告色 | | | ADR-0015 |
+| FR-C-89 | 超過表示 | | | ADR-0010 |
 | FR-C-100〜105 | 本日の使用状況 | `copilot/aggregate.rs` | | |
 | FR-C-110〜111 | セッション検索 | `copilot/commands.rs` | | |
 | FR-C-112〜118 | 系統図・ガント (木構築は純粋) | `copilot/tree.rs` | `tree::tests` | 部分 |
 | FR-C-119〜121 | 本文ビューア | `components/TurnViewer.tsx` | | |
-| FR-C-130〜144 | 利用枠の取得経路 | `copilot/quota.rs` | | 保留 (OQ-06) |
+| FR-C-130 | 経路 A: クォータ枠の取得 | | `tools/probe/quota-sdk.mjs` | ADR-0015 / ADR-0017 |
+| FR-C-131 | 適用外の枠は `has_quota === false` で判定 | | | ADR-0015 |
+| FR-C-134 | モデル別単価 | | | ADR-0010 / ADR-0015 |
+| FR-C-138 | 組織の月次消費履歴 | | | 取得不可 / 未検証 (ADR-0018) |
+| FR-C-139 | 個人の月次消費履歴 | | | 取得不可 / 未検証 (ADR-0018) |
+| FR-C-140 | Enterprise 組織の月次消費 | | | 取得不可 / 未検証 (ADR-0018) |
 | FR-C-160〜164 | 表示・設定 | `App.tsx`, `store/appStore.ts` | | |
 
 ## データ要求 (DR)
@@ -74,8 +87,15 @@ updated: 2026-09-08
 | DR-02 | 導出データを永続化しない | (スキーマに存在しないこと) | `migrations::tests::no_derived_tables` | 済 |
 | DR-03 | 例外は索引のみ | `db/migrations.rs` | | 済 |
 | DR-04 | バージョン付きマイグレーション | `db/migrations.rs` | `migrations::tests` | 部分 |
-| DR-05 | 他アプリの DB は読み取り専用 | | | 保留 (OQ-05) |
+| DR-05 | 他アプリの DB は読み取り専用 | | | ADR-0013 |
 | DR-06 | トークンを DB に保存しない | (スキーマに存在しないこと) | | 済 |
+| OQ-02 / FR-C-02〜08 | バイトオフセット方式 (1 レコード 1 行・改行コード・BOM) | | `tools/probe/jsonl-shape.mjs` | |
+| OQ-01 / OQ-07 | レコード種別と構造 | | `tools/probe/record-kinds.mjs` | |
+| OQ-04 / FR-C-70〜72 | IDE 稼働判定経路 | | `tools/probe/live-detect.mjs` | |
+| OQ-03 / FR-P-50〜58 | Copilot セッション紐付け | | `tools/probe/vscode-sessions.mjs` | |
+| OQ-06 / OQ-08 / FR-C-130〜137 | 利用枠 API | | `tools/probe/quota-sdk.mjs` | |
+| OQ-12 / OQ-06 / FR-C-138〜140 | 経路 B: 課金 API | | `tools/probe/quota-rest.mjs` | |
+| OQ-10 | Copilot ディレクトリ構成 | | `tools/probe/copilot-layout.mjs` | |
 | DR-07 | 保持期間を設けるなら書き込みも実装 | | | |
 
 ## インタフェース要求 (IR)

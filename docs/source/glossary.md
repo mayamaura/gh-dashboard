@@ -17,7 +17,7 @@ updated: 2026-09-08
 | **トランスクリプト** | セッションの発話・ツール呼び出し・ツール出力が記録された JSONL 形式のログ | `events.jsonl` |
 | **AI Credit** | Copilot の従量課金の単位。トークン消費 × モデル別レートで消費される | `credits` |
 | **nano-AIU** | Copilot SDK がコストを報告する単位。**10⁹ で割ると AI Credit** | `nano_aiu` / `total_nano_aiu` |
-| **クォータ** | プラン契約に含まれる利用枠。SDK の `account.getQuota` が返す `quotaSnapshots` の単位 | `QuotaGauge.kind` |
+| **クォータ** | プラン契約に含まれる利用枠。SDK の `account.getCurrentAuth` が返す `quota_snapshots` の単位 | `QuotaGauge.kind` |
 | **コンテキストウィンドウ** | 1 セッションが保持できるトークンの上限 | `context_used` / `context_limit` |
 | **利用枠到達イベント** | クレジット枯渇・レート制限・セッション上限に達した記録 | `quota_events` |
 

@@ -181,7 +181,7 @@ live_status_get (2 秒ごと / タブ表示中のみ)
 ```
 quota_get(force)
   ├─ 下限間隔 (5 分) 内かつ force でなければキャッシュを返す     FR-C-142
-  ├─ 経路 A: SDK account.getQuota
+  ├─ 経路 A: SDK account.getCurrentAuth
   │    成功 → source = 実値(sdk)
   │    失敗 → 理由を記録して B へ                               FR-C-136
   ├─ 経路 B: GitHub REST (個人 / 組織の両方を試し、取れた方を使う) FR-C-140

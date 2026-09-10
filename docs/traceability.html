@@ -35,9 +35,13 @@
 <tr><td>FR-P-20〜23</td><td>起動コマンドの解決</td><td><code>projects/detect.rs</code></td><td><code>detect::tests::command_*</code></td><td>部分</td></tr>
 <tr><td>FR-P-30〜33</td><td>手動調整</td><td><code>projects/overrides.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-P-40〜47</td><td>git 状態</td><td><code>projects/git.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-P-50〜58</td><td>Copilot 利用状況の紐付け</td><td><code>projects/copilot_link.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-50〜58</td><td>Copilot 利用状況の紐付け</td><td><code>projects/copilot_link.rs</code></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
+<tr><td><span class="chip id">FR-P-51</span></td><td>workspace.yaml 経由のパース</td><td></td><td></td><td><span class="chip id">ADR-0003</span></td></tr>
+<tr><td><span class="chip id">FR-P-56</span></td><td>タイムスタンプの読み取り</td><td></td><td></td><td><span class="chip id">ADR-0014</span></td></tr>
 <tr><td>FR-P-60〜68</td><td>dev サーバー</td><td><code>projects/dev_server.rs</code>, <code>platform/win_job.rs</code></td><td></td><td></td></tr>
 <tr><td><span class="chip id">FR-P-63</span></td><td>URL 自動検出 (純粋)</td><td><code>util/url_detect.rs</code></td><td><code>url_detect::tests</code></td><td>済</td></tr>
+<tr><td>FR-P-50〜58 (OQ-03 検証)</td><td>Copilot セッション紐付けの実装基盤</td><td></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
+<tr><td>FR-P-70〜72 (OQ-04 検証)</td><td>IDE 稼働判定</td><td></td><td><code>tools/probe/live-detect.mjs</code></td><td></td></tr>
 <tr><td>FR-P-70〜74</td><td>外部ツール連携</td><td><code>projects/external.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-P-80〜88</td><td>一覧 UI</td><td><code>pages/ProjectsPage.tsx</code></td><td><code>lib/projectList.test.ts</code></td><td></td></tr>
 </tbody></table></div>
@@ -45,30 +49,39 @@
 <div class="table-wrap"><table>
 <thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td>FR-C-01〜02</td><td>全期間 / 本文を複製しない</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-01〜02</td><td>全期間 / 本文を複製しない</td><td><code>copilot/indexer.rs</code></td><td><code>tools/probe/jsonl-shape.mjs</code></td><td>ADR-0003 / ADR-0013</td></tr>
+<tr><td>FR-C-02〜08</td><td>セッション記録の形式と変分</td><td></td><td><code>tools/probe/jsonl-shape.mjs</code></td><td></td></tr>
 <tr><td>FR-C-03/05/06</td><td>差分判定・末尾断片 (純粋)</td><td><code>copilot/delta.rs</code></td><td><code>delta::tests</code></td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-04</span></td><td>オフセット更新はトランザクション最後</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
 <tr><td><span class="chip id">FR-C-07</span></td><td>UNIQUE で二重適用を防ぐ</td><td><code>db/migrations.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-08〜09</td><td>ストリーミング / バッチコミット</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-10〜11</td><td>バックグラウンド / 進捗通知</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-12〜13</td><td>防御的パース</td><td><code>copilot/record.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-12〜13</td><td>防御的パース</td><td><code>copilot/record.rs</code></td><td><code>tools/probe/record-kinds.mjs</code></td><td></td></tr>
 <tr><td><span class="chip id">FR-C-14</span></td><td>無期限保持</td><td><code>db/migrations.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-C-20</span></td><td>セッション集計</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-21〜29</td><td>サブエージェント系統</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-40〜43</td><td>ライブ監視の起動と停止</td><td><code>copilot/live.rs</code>, <code>hooks/useLivePoll.ts</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">FR-C-20</span></td><td>セッション集計</td><td><code>copilot/aggregate.rs</code></td><td><code>tools/probe/record-kinds.mjs</code></td><td></td></tr>
+<tr><td>FR-C-21〜29</td><td>サブエージェント系統</td><td><code>copilot/aggregate.rs</code></td><td></td><td><span class="chip id">ADR-0016</span></td></tr>
+<tr><td>FR-C-40〜43</td><td>ライブ監視の起動と停止</td><td><code>copilot/live.rs</code>, <code>hooks/useLivePoll.ts</code></td><td></td><td><span class="chip id">ADR-0014</span></td></tr>
 <tr><td>FR-C-44〜46</td><td>活動状態の合成 (純粋)</td><td><code>copilot/activity.rs</code></td><td><code>activity::tests</code></td><td>済</td></tr>
 <tr><td>FR-C-47〜49</td><td>末尾シーク読みとキャッシュ</td><td><code>copilot/live.rs</code>, <code>util/tail.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-50〜52</td><td>稼働中サブエージェント集合</td><td><code>copilot/live.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-53〜57</td><td>セッションカード</td><td><code>components/SessionCard.tsx</code></td><td></td><td></td></tr>
 <tr><td>FR-C-58〜60</td><td>自動インデックスの発火</td><td><code>pages/CopilotPage.tsx</code></td><td></td><td></td></tr>
 <tr><td><span class="chip id">FR-C-61</span></td><td>稼働サマリー</td><td><code>components/LiveSummary.tsx</code></td><td></td><td></td></tr>
-<tr><td>FR-C-70〜72</td><td>IDE ワークスペース</td><td><code>copilot/live.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-C-70〜72</td><td>IDE ワークスペース</td><td><code>copilot/live.rs</code></td><td><code>tools/probe/live-detect.mjs</code></td><td><span class="chip id">ADR-0014</span></td></tr>
 <tr><td>FR-C-80〜95</td><td>利用枠ゲージ (純粋部分)</td><td><code>copilot/quota.rs</code></td><td><code>quota::tests</code></td><td>部分</td></tr>
+<tr><td><span class="chip id">FR-C-85</span></td><td>リセット日判定に <code>quota_reset_date_utc</code> を使う</td><td></td><td></td><td>ADR-0015 / ADR-0017</td></tr>
+<tr><td><span class="chip id">FR-C-86</span></td><td>鮮度判定と警告色</td><td></td><td></td><td><span class="chip id">ADR-0015</span></td></tr>
+<tr><td><span class="chip id">FR-C-89</span></td><td>超過表示</td><td></td><td></td><td><span class="chip id">ADR-0010</span></td></tr>
 <tr><td>FR-C-100〜105</td><td>本日の使用状況</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-110〜111</td><td>セッション検索</td><td><code>copilot/commands.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-112〜118</td><td>系統図・ガント (木構築は純粋)</td><td><code>copilot/tree.rs</code></td><td><code>tree::tests</code></td><td>部分</td></tr>
 <tr><td>FR-C-119〜121</td><td>本文ビューア</td><td><code>components/TurnViewer.tsx</code></td><td></td><td></td></tr>
-<tr><td>FR-C-130〜144</td><td>利用枠の取得経路</td><td><code>copilot/quota.rs</code></td><td></td><td>保留 (OQ-06)</td></tr>
+<tr><td><span class="chip id">FR-C-130</span></td><td>経路 A: クォータ枠の取得</td><td></td><td><code>tools/probe/quota-sdk.mjs</code></td><td>ADR-0015 / ADR-0017</td></tr>
+<tr><td><span class="chip id">FR-C-131</span></td><td>適用外の枠は <code>has_quota === false</code> で判定</td><td></td><td></td><td><span class="chip id">ADR-0015</span></td></tr>
+<tr><td><span class="chip id">FR-C-134</span></td><td>モデル別単価</td><td></td><td></td><td>ADR-0010 / ADR-0015</td></tr>
+<tr><td><span class="chip id">FR-C-138</span></td><td>組織の月次消費履歴</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
+<tr><td><span class="chip id">FR-C-139</span></td><td>個人の月次消費履歴</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
+<tr><td><span class="chip id">FR-C-140</span></td><td>Enterprise 組織の月次消費</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
 <tr><td>FR-C-160〜164</td><td>表示・設定</td><td><code>App.tsx</code>, <code>store/appStore.ts</code></td><td></td><td></td></tr>
 </tbody></table></div>
 <h2 id="データ要求-dr">データ要求 (DR)</h2>
@@ -79,8 +92,15 @@
 <tr><td><span class="chip id">DR-02</span></td><td>導出データを永続化しない</td><td>(スキーマに存在しないこと)</td><td><code>migrations::tests::no_derived_tables</code></td><td>済</td></tr>
 <tr><td><span class="chip id">DR-03</span></td><td>例外は索引のみ</td><td><code>db/migrations.rs</code></td><td></td><td>済</td></tr>
 <tr><td><span class="chip id">DR-04</span></td><td>バージョン付きマイグレーション</td><td><code>db/migrations.rs</code></td><td><code>migrations::tests</code></td><td>部分</td></tr>
-<tr><td><span class="chip id">DR-05</span></td><td>他アプリの DB は読み取り専用</td><td></td><td></td><td>保留 (OQ-05)</td></tr>
+<tr><td><span class="chip id">DR-05</span></td><td>他アプリの DB は読み取り専用</td><td></td><td></td><td><span class="chip id">ADR-0013</span></td></tr>
 <tr><td><span class="chip id">DR-06</span></td><td>トークンを DB に保存しない</td><td>(スキーマに存在しないこと)</td><td></td><td>済</td></tr>
+<tr><td>OQ-02 / FR-C-02〜08</td><td>バイトオフセット方式 (1 レコード 1 行・改行コード・BOM)</td><td></td><td><code>tools/probe/jsonl-shape.mjs</code></td><td></td></tr>
+<tr><td>OQ-01 / OQ-07</td><td>レコード種別と構造</td><td></td><td><code>tools/probe/record-kinds.mjs</code></td><td></td></tr>
+<tr><td>OQ-04 / FR-C-70〜72</td><td>IDE 稼働判定経路</td><td></td><td><code>tools/probe/live-detect.mjs</code></td><td></td></tr>
+<tr><td>OQ-03 / FR-P-50〜58</td><td>Copilot セッション紐付け</td><td></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
+<tr><td>OQ-06 / OQ-08 / FR-C-130〜137</td><td>利用枠 API</td><td></td><td><code>tools/probe/quota-sdk.mjs</code></td><td></td></tr>
+<tr><td>OQ-12 / OQ-06 / FR-C-138〜140</td><td>経路 B: 課金 API</td><td></td><td><code>tools/probe/quota-rest.mjs</code></td><td></td></tr>
+<tr><td><span class="chip id">OQ-10</span></td><td>Copilot ディレクトリ構成</td><td></td><td><code>tools/probe/copilot-layout.mjs</code></td><td></td></tr>
 <tr><td><span class="chip id">DR-07</span></td><td>保持期間を設けるなら書き込みも実装</td><td></td><td></td><td></td></tr>
 </tbody></table></div>
 <h2 id="インタフェース要求-ir">インタフェース要求 (IR)</h2>

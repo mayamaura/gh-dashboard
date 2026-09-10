@@ -141,18 +141,27 @@
 </tbody></table></div>
 <h2 id="4.-層-c-読み取り専用プローブ">4. 層 C — 読み取り専用プローブ</h2>
 <p>実データと実 API に対して<strong>数字を出すだけ</strong>のスクリプト。合否判定をせず、OQ を潰す材料を作る (NFR-52)。</p>
+<p>実行方法は共通で:</p>
+<pre><code>node tools/probe/&lt;名前&gt;.mjs          人が読む形
+node tools/probe/&lt;名前&gt;.mjs --json   JSON だけ
+COPILOT_HOME=&lt;path&gt; node tools/probe/&lt;名前&gt;.mjs   ~/.copilot の場所を上書き</code></pre>
 <div class="table-wrap"><table>
-<thead><tr><th>スクリプト</th><th>出すもの</th><th>対応 OQ</th></tr></thead>
+<thead><tr><th>スクリプト</th><th>調べるもの</th><th>OQ</th></tr></thead>
 <tbody>
-<tr><td><code>tools/probe/copilot-layout.mjs</code></td><td><code>~/.copilot</code> 配下の構成・ファイル数・総容量・最大ファイルサイズ</td><td><span class="chip id">OQ-10</span></td></tr>
-<tr><td><code>tools/probe/jsonl-shape.mjs</code></td><td>1 レコード = 1 行か / 行内改行の有無 / BOM の有無 / 行長分布</td><td><strong>OQ-02 (設計の分水嶺)</strong></td></tr>
-<tr><td><code>tools/probe/record-kinds.mjs</code></td><td>レコード種別ごとの件数・サイズ・出現位置・フィールド出現率</td><td>OQ-01 / OQ-07</td></tr>
-<tr><td><code>tools/probe/vscode-sessions.mjs</code></td><td><code>workspaceStorage</code> のハッシュと中身から cwd を逆引きできるか</td><td><span class="chip id">OQ-03</span></td></tr>
-<tr><td><code>tools/probe/live-detect.mjs</code></td><td><code>ide/*.lock</code> と <code>logs/process-*.log</code> から稼働セッションを判定できるか</td><td><span class="chip id">OQ-04</span></td></tr>
-<tr><td><code>tools/probe/quota-sdk.mjs</code></td><td><code>account.getQuota</code> が個人アカウントで何を返すか</td><td><span class="chip id">OQ-06</span></td></tr>
+<tr><td><code>copilot-layout.mjs</code></td><td>構成・ファイル数・総容量・最大サイズ</td><td><span class="chip id">OQ-10</span></td></tr>
+<tr><td><code>jsonl-shape.mjs</code></td><td>1 レコード 1 行 / BOM / 改行コード / 行長分布 / <strong>バイトオフセット往復検証</strong></td><td><span class="chip id">OQ-02</span></td></tr>
+<tr><td><code>record-kinds.mjs</code></td><td>レコード種別ごとの件数・バイト数、フィールド出現率、サブエージェント候補キー</td><td>OQ-01 / OQ-07</td></tr>
+<tr><td><code>live-detect.mjs</code></td><td><code>ide/*.lock</code> と <code>logs/process-*.log</code> の PID 生存・対応</td><td><span class="chip id">OQ-04</span></td></tr>
+<tr><td><code>vscode-sessions.mjs</code></td><td><code>workspaceStorage</code> のハッシュ再計算と <code>chatSessions</code> の中身</td><td><span class="chip id">OQ-03</span></td></tr>
+<tr><td><code>quota-sdk.mjs</code></td><td><code>account.getQuota</code> / <code>getCurrentAuth</code> / <code>models.list</code> の戻り値</td><td>OQ-06 / OQ-08</td></tr>
+<tr><td><code>quota-rest.mjs</code></td><td>公開課金 API 10 件の status、<code>copilot_internal/user</code> の中身、SDK との突き合わせ</td><td>OQ-12 / OQ-06</td></tr>
 </tbody></table></div>
+<p><code>quota-sdk.mjs</code> だけは Copilot SDK が要ります。<strong>リポジトリの <code>package.json</code> には足しません</strong> (NFR-10)。準備はこう書いてください:</p>
+<pre><code>mkdir -p tools/probe-sdk &amp;&amp; cd tools/probe-sdk
+npm init -y &amp;&amp; npm install @github/copilot-sdk</code></pre>
+<p><code>COPILOT_SDK_PATH</code> で別の場所を指すこともできます。SDK が無い場合は「SDK 未導入」と出して正常終了します。</p>
 <div class="warning"><span class="note-title">注意</span>
-<p>プローブは<strong>読み取り専用</strong>。書き込み・設定変更を一切行わない (INV-1)。 出力は <code>tools/probe-out/</code> に置き、<strong>コミットしない</strong> (個人のセッション内容を含みうる)。<code>.gitignore</code> 済み。 プローブが値を表示するときも、認証情報に相当するフィールドは伏せる (INV-2)。</p>
+<p>プローブは<strong>読み取り専用</strong>。書き込み・設定変更を一切行わない (INV-1)。 出力は <code>tools/probe-out/</code> (<code>.gitignore</code> 済み)。<strong>個人のセッション内容を含みうるのでコミットしない</strong>。 <strong>実データを作るときは <code>COPILOT_HOME</code> を使い捨てディレクトリに向ける。</strong>ユーザーの実 <code>~/.copilot</code> を測定のために汚さない (INV-1)</p>
 </div>
 <h2 id="5.-層-d-実機確認チェックリスト">5. 層 D — 実機確認チェックリスト</h2>
 <p>各段階の完了条件。<strong>ここを通らないものは未完成。</strong></p>
@@ -214,6 +223,28 @@
 <tbody>
 <tr><td>2026-09-08</td><td><code>~/.copilot/ide/*.lock</code> に <code>headers</code> フィールドが存在する (認証情報を含みうる)</td><td>DTO に <code>headers</code> が無いことをコンパイル時に担保 (INV-2)</td></tr>
 <tr><td>2026-09-08</td><td><code>~/.copilot/</code> に <code>session-state/</code> が存在しないことがある (CLI 未使用の環境)</td><td>ディレクトリ不在で 0 件を正常系として返すテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>events.jsonl</code> の 1 レコードが 36,428 バイトある (<code>system.message</code>)。1 往復の些細なセッションでも 45,354 バイト</td><td>大きい行でオフセット往復が壊れないテスト。行長 p95 17,361 / max 36,428 をケースに使う</td></tr>
+<tr><td>2026-09-08</td><td><code>session.shutdown</code> が 1 ファイルに 4 件現れる (<code>--resume</code> のたびに増える)</td><td>「shutdown を見たら終了」で判定しないテスト。複数 shutdown を含む JSONL で最終活動時刻が正しく出ること</td></tr>
+<tr><td>2026-09-08</td><td><code>--resume</code> は既存部分を書き換えず追記のみ (先頭 133,394 バイトの SHA-256 が一致)</td><td>差分判定がサイズ増加だけで成立することのテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>session.resume</code> の <code>parentId</code> が直前の <code>session.shutdown</code> を指す</td><td>再開をまたいでレコード連鎖が切れないテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>parentId</code> が <code>null</code> になるのは <code>session.start</code> のみ (77 件中 3 件)</td><td><code>parentId: null</code> を欠損として扱わないテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>agentId</code> はサブエージェント所属レコードにのみ付く (77 件中 18 件 = 23.4%)</td><td><code>agentId</code> 不在を「親エージェント」と解釈するテスト</td></tr>
+<tr><td>2026-09-08</td><td>JSON 文字列値の中に改行文字を含む行が 22 件ある (エスケープ済み。行分割は壊れない)</td><td>エスケープ済み改行を含む行で行数 = レコード数が保たれるテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>premium_interactions</code> は <code>entitlement: 0</code> <strong>かつ <code>has_quota: false</code> かつ <code>percent_remaining: 0</code></strong></td><td><code>-1</code> (無制限) と <code>0</code> の両方で 0 除算しないテスト。<strong><code>has_quota: false</code> の枠が危険色にならないテスト</strong></td></tr>
+<tr><td>2026-09-08</td><td><code>remainingPercentage</code> が <code>(entitlement − used)/entitlement</code> と一致しない (99.2% vs 99.0%)</td><td>率を再計算せず API の値を使うテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>resetDate</code> の中身は <code>quota_snapshots.*.timestamp_utc</code> (SDK と REST の同時取得でミリ秒一致)。同一プロセス 3 回連続で不変。<strong>値が変わっていないのに動いた実例あり</strong> (<code>quota_remaining</code> 198.4 のまま 3 時点で変化)</td><td><code>resetDate</code> をリセット日にも鮮度の変化検知にも使わないテスト。<code>quota_reset_date_utc</code> で FR-C-85 の除外を判定するテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>AccountQuotaSnapshot</code> の型宣言に無い <code>hasQuota</code> / <code>tokenBasedBilling</code> が実際には返る</td><td>未知フィールドがあってもパースが落ちないテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>models.list({})</code> が <code>"auto"</code> 1 件だけを返し <code>billing</code> フィールドが無い</td><td>単価が取れないとき金額換算を出さないテスト (ADR-0010)</td></tr>
+<tr><td>2026-09-08</td><td>VS Code の <code>workspaceStorage/&lt;hash&gt;</code> を再計算で照合できたのは 20 件中 6 件のみ</td><td>ハッシュ照合の失敗を正常系として扱い、フォルダ名フォールバックへ落ちるテスト (FR-P-52)</td></tr>
+<tr><td>2026-09-08</td><td>VS Code の <code>chatSessions/*.jsonl</code> は <code>kind:0</code> スナップショット + <code>kind:1</code>/<code>kind:2</code> パッチ行の形式。cwd は <code>kind:0</code> だけでは 0 件、全行走査で 9/26 ファイル</td><td>先頭部分読みだけでは cwd が取れない前提のテスト (FR-P-55)</td></tr>
+<tr><td>2026-09-08</td><td>VS Code セッションの <code>creationDate</code> は epoch ms。<strong>終了時刻フィールドが無い</strong></td><td>終了時刻を <code>null</code> として扱い空欄で埋めないテスト (FR-P-58)</td></tr>
+<tr><td>2026-09-08</td><td><code>workspaceStorage</code> の孤児化 (folder が実在しない) が 20 件中 2 件</td><td>孤児セッションを警告に積んで一覧から落とさないテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>~/.copilot/ide/*.lock</code> の <code>pid</code> は VS Code 本体のもので、<code>logs/process-*.log</code> の PID 集合との交差が 0 件</td><td>lock の PID を稼働セッション判定に使わないテスト (ADR-0014)</td></tr>
+<tr><td>2026-09-08</td><td><code>session-store.db</code> の <code>sessions.repository</code> / <code>host_type</code> / <code>branch</code> が <code>null</code> になる (git 管理外の cwd)</td><td>これらが <code>null</code> でも紐付けが落ちないテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>sessions.updated_at</code> は最後のイベントより 4〜14 秒早い (ターン開始時に書かれる)</td><td>最終活動時刻に <code>updated_at</code> を使わないテスト</td></tr>
+<tr><td>2026-09-08</td><td>同じ消費量が 3 通りの丸めで返る (<code>entitlement − quota_remaining</code> = 1.6 / <code>entitlement − remaining</code> = 2 / <code>credits_used</code> = 1)</td><td>率と消費量が同じ元データから出ることを確かめるテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>quota_reset_at</code> が 3 枠とも <code>0</code> (本物のリセット日は別フィールドの <code>quota_reset_date</code>)</td><td><code>quota_reset_at</code> をリセット日に使わないテスト</td></tr>
+<tr><td>2026-09-08</td><td><code>entitlement</code> に <code>-1</code> (無制限) は<strong>未観測</strong>。<code>unlimited: true</code> も<strong>未観測</strong></td><td>無制限分岐は<strong>未観測であることをテスト名に書く</strong> (例: <code>未観測: entitlement が -1 のとき率を出さない</code>)</td></tr>
 </tbody></table></div>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>

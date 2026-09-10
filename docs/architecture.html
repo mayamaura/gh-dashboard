@@ -154,7 +154,7 @@ UI (操作/5 分)   ──► quota_get       ──► SDK ──失敗──�
 <h3 id="5.3-利用枠の取得と降格-fr-c-80..95-130..144">5.3 利用枠の取得と降格 (FR-C-80..95 / 130..144)</h3>
 <div class="ascii">quota_get(force)
   ├─ 下限間隔 (5 分) 内かつ force でなければキャッシュを返す     FR-C-142
-  ├─ 経路 A: SDK account.getQuota
+  ├─ 経路 A: SDK account.getCurrentAuth
   │    成功 → source = 実値(sdk)
   │    失敗 → 理由を記録して B へ                               FR-C-136
   ├─ 経路 B: GitHub REST (個人 / 組織の両方を試し、取れた方を使う) FR-C-140

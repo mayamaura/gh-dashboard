@@ -26,17 +26,18 @@
 </div>
 <hr />
 <h2 id="段階-0-実データ・api-調査">段階 0 — 実データ・API 調査</h2>
-<p><strong>完了条件</strong>: <strong>バイトオフセット方式が成立するか</strong>と<strong>利用枠が SDK で取れるか</strong>の結論が出ている。</p>
+<p><strong>完了条件</strong>: バイトオフセット方式が成立するかの結論が出ている (OQ-02 = 確定、成立)。<strong>利用枠は経路 A の <code>account.getCurrentAuth</code> で「3 枠の率 + 付与額 + 本物の月次リセット日」まで取れることが分かった</strong> (OQ-06 / ADR-0017)。<strong>経路 B は現行スコープで全滅し、履歴用途に降格した</strong> (OQ-12 / ADR-0018)。T-0.8 完了により<strong>段階 6 のブロッカーは無い</strong>。</p>
 <div class="table-wrap"><table>
 <thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
 <tbody>
 <tr><td><span class="chip id">T-0.1</span></td><td><code>tools/probe/copilot-layout.mjs</code> — 配下の構成・ファイル数・総容量・最大サイズを出す</td><td><span class="chip id">OQ-10</span></td><td>完了</td></tr>
-<tr><td><span class="chip id">T-0.2</span></td><td><code>tools/probe/jsonl-shape.mjs</code> — 1 レコード = 1 行 / 行内改行 / BOM を検査</td><td><span class="chip id">OQ-02</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-0.3</span></td><td><code>tools/probe/record-kinds.mjs</code> — レコード種別ごとの件数・フィールド出現率を集計</td><td>OQ-01 / OQ-07</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-0.4</span></td><td><code>tools/probe/live-detect.mjs</code> — <code>ide/*.lock</code> + <code>logs/process-*.log</code> で稼働判定できるか</td><td><span class="chip id">OQ-04</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-0.5</span></td><td><code>tools/probe/vscode-sessions.mjs</code> — <code>workspaceStorage</code> から cwd を逆引きできるか</td><td><span class="chip id">OQ-03</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-0.6</span></td><td><code>tools/probe/quota-sdk.mjs</code> — <code>account.getQuota</code> が個人アカウントで返す中身</td><td><strong>OQ-06</strong> / OQ-08</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-0.7</span></td><td>結果を <a href="open-questions.html">未決事項</a> に書き戻し、影響を受ける ADR を更新</td><td>—</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-0.2</span></td><td><code>tools/probe/jsonl-shape.mjs</code> — 1 レコード = 1 行 / 行内改行 / BOM を検査</td><td><span class="chip id">OQ-02</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.3</span></td><td><code>tools/probe/record-kinds.mjs</code> — レコード種別ごとの件数・フィールド出現率を集計</td><td>OQ-01 / OQ-07</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.4</span></td><td><code>tools/probe/live-detect.mjs</code> — <code>ide/*.lock</code> + <code>logs/process-*.log</code> で稼働判定できるか</td><td><span class="chip id">OQ-04</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.5</span></td><td><code>tools/probe/vscode-sessions.mjs</code> — <code>workspaceStorage</code> から cwd を逆引きできるか</td><td><span class="chip id">OQ-03</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.6</span></td><td><code>tools/probe/quota-sdk.mjs</code> — <code>account.getQuota</code> が個人アカウントで返す中身</td><td><strong>OQ-06</strong> / OQ-08</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.7</span></td><td>結果を <a href="open-questions.html">未決事項</a> に書き戻し、影響を受ける ADR を更新</td><td>—</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-0.8</span></td><td><code>tools/probe/quota-rest.mjs</code> — 経路 B (課金 API) + SDK / REST の同時比較</td><td><strong>OQ-12</strong> / FR-C-138〜140</td><td>完了</td></tr>
 </tbody></table></div>
 <p><strong>このタスク群はすべて読み取り専用。</strong> 出力は <code>tools/probe-out/</code> (コミットしない)。</p>
 <hr />
@@ -117,10 +118,11 @@
 <tr><td><span class="chip id">T-4.4</span></td><td>バッチコミット (3,000 行) + 15ms スリープ + オフセット更新の順序</td><td>FR-C-04 / 09</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-4.5</span></td><td>バックグラウンド実行 + 多重起動防止</td><td><span class="chip id">FR-C-10</span></td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-4.6</span></td><td>進捗通知 (250〜300ms 間引き)</td><td><span class="chip id">FR-C-11</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.7</span></td><td>セッション集計</td><td><span class="chip id">FR-C-20</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.8</span></td><td>サブエージェント行のマージ (親子両側にあるキー)</td><td>FR-C-21〜23 / 29</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.9</span></td><td>完了通知の 2 段階ゲート + 暫定応答を完了扱いしない</td><td>FR-C-24〜26</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.10</span></td><td>拒否と失敗の区別</td><td><span class="chip id">FR-C-27</span></td><td>未着手</td></tr>
+<tr><td>T-4.2a</td><td><code>copilot::workspace_meta</code> — <code>session-state/&lt;id&gt;/workspace.yaml</code> のパース (cwd / <code>client_name</code> / <code>name</code> / <code>created_at</code> / <code>updated_at</code>)。純粋関数 + テスト</td><td>FR-P-51 / FR-C-40 / FR-C-54 / ADR-0003</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.7</span></td><td>セッション集計 (主ソースは session.shutdown.data。session-store.db に依存しない)</td><td>FR-C-20 / ADR-0013</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.8</span></td><td>サブエージェント行のマージ (親子両側にあるキー)</td><td>FR-C-21〜23 / 29 / ADR-0016</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.9</span></td><td>完了通知の 2 段階ゲート + 暫定応答を完了扱いしない (OQ-11 待ち)</td><td>FR-C-24〜26</td><td>保留(OQ-11 待ち)</td></tr>
+<tr><td><span class="chip id">T-4.10</span></td><td>拒否と失敗の区別 (OQ-11 待ち)</td><td><span class="chip id">FR-C-27</span></td><td>保留(OQ-11 待ち)</td></tr>
 <tr><td><span class="chip id">T-4.11</span></td><td>利用枠到達イベントの抽出</td><td><span class="chip id">FR-C-28</span></td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-4.12</span></td><td><code>turn_body_get</code> — 1 レコードのシーク読み (上限 512KB)</td><td>IR-15 / FR-C-120</td><td>未着手</td></tr>
 </tbody></table></div>
@@ -129,6 +131,9 @@
 <li>ファイル全体をメモリに載せない (FR-C-08)</li>
 <li><strong>オフセット更新はトランザクションの最後</strong> (FR-C-04)</li>
 <li>壊れた行は数えて読み飛ばす。件数を UI に返す (FR-C-12 / NFR-43)</li>
+<li><strong><code>workspace.yaml</code> の <code>name</code> は初回プロンプトの本文がそのまま入る。140 字プレビューの上限を掛けて扱う</strong> (INV-6 / ADR-0003)</li>
+<li><strong><code>session.shutdown</code> は 1 ファイルに複数現れる</strong> (<code>--resume</code> のたび)。<strong>終了の確定シグナルにしない</strong> (ADR-0014)</li>
+<li><strong><code>parentId</code> はレコードの連鎖であってエージェントの木ではない。</strong>サブエージェントの主キーは <code>toolCallId</code> (ADR-0016)</li>
 </ul>
 <hr />
 <h2 id="段階-5-ライブ監視">段階 5 — ライブ監視</h2>
@@ -136,7 +141,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">T-5.1</span></td><td>状態ファイル列挙 + PID 生存確認</td><td><span class="chip id">FR-C-40</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.1</span></td><td>session-state/*/ の列挙 + workspace.yaml 読み + events.jsonl の mtime / 末尾判定</td><td>FR-C-40 / ADR-0014</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-5.2</span></td><td>末尾シーク読み (64KB → 512KB 1 回だけ) と本文レコードの遡り探索</td><td>FR-C-47 / 49</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-5.3</span></td><td><code>(パス, サイズ, mtime)</code> キャッシュと剪定</td><td><span class="chip id">FR-C-48</span></td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-5.4</span></td><td>稼働中サブエージェント<strong>集合</strong>の算出 (件数は length で導出)</td><td>FR-C-50 / 51</td><td>未着手</td></tr>
@@ -148,7 +153,7 @@
 <tr><td><span class="chip id">T-5.10</span></td><td>インライン系統図と自動展開の抑止条件</td><td><span class="chip id">FR-C-56</span></td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-5.11</span></td><td>未インデックスセッションの穏やかな表示 + 1 回だけ再インデックス</td><td><span class="chip id">FR-C-57</span></td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-5.12</span></td><td>自動インデックスの発火判定 (mtime のみ / 下限 10 秒)</td><td>FR-C-58 / 59 / 60</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.13</span></td><td>IDE ワークスペース一覧 (切断済みも残す)</td><td>FR-C-70〜72</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.13</span></td><td>IDE ワークスペース一覧 (切断済みも残す) (lock は FR-C-70〜72 専用。稼働判定には使わない)</td><td>FR-C-70〜72</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-5.14</span></td><td>稼働サマリー (3 数字)</td><td><span class="chip id">FR-C-61</span></td><td>未着手</td></tr>
 </tbody></table></div>
 <p><strong>気をつける点</strong></p>
@@ -157,6 +162,7 @@
 <li>自動展開の抑止が無いと「自動展開 → 失敗 → 閉じる → 自動展開」の 2 秒ループになる (FR-C-56)</li>
 <li>自動インデックスの判定に<strong>固定間隔で更新される値を混ぜない</strong> (FR-C-59)</li>
 <li><strong>IDE の状態ファイルに <code>headers</code> フィールドが存在する。DTO に定義しない</strong> (INV-2 / FR-C-72)</li>
+<li><strong><code>ide/*.lock</code> の <code>pid</code> は VS Code 本体のプロセス ID で、Copilot セッションの生死とは無関係</strong> (実測: lock 側 PID 集合と <code>logs/process-*.log</code> 側 PID 集合の交差 0 件)。稼働判定に使わない (ADR-0014)</li>
 </ul>
 <hr />
 <h2 id="段階-6-利用枠ゲージ">段階 6 — 利用枠ゲージ</h2>
@@ -166,21 +172,28 @@
 <tbody>
 <tr><td><span class="chip id">T-6.1</span></td><td><code>copilot::quota</code> の型定義 (3 状態 × 枠ごと独立)</td><td>FR-C-81 / 84 / ADR-0009</td><td>完了</td></tr>
 <tr><td><span class="chip id">T-6.2</span></td><td>降格判定 (純粋) + テスト</td><td>FR-C-81〜90</td><td>完了</td></tr>
-<tr><td><span class="chip id">T-6.3</span></td><td>経路 A: SDK <code>account.getQuota</code></td><td>FR-C-130 / 131</td><td>保留(OQ-06 待ち)</td></tr>
-<tr><td><span class="chip id">T-6.4</span></td><td>経路 A: <code>session.usage.getMetrics</code> / <code>models.list</code></td><td>FR-C-132 / 134</td><td>保留(OQ-06 待ち)</td></tr>
-<tr><td><span class="chip id">T-6.5</span></td><td>経路 B: GitHub REST (個人 / 組織の両方を試す)</td><td>FR-C-138〜142</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.3</span></td><td>経路 A: SDK <code>account.getCurrentAuth</code> (対象はクォータ 3 枠 + <code>quota_reset_date_utc</code>: chat / completions / premium_interactions)</td><td>FR-C-130 / 131 / ADR-0015 / ADR-0017</td><td>未着手</td></tr>
+<tr><td>T-6.4a</td><td>セッション単位の消費 (<code>totalNanoAiu</code>)。<strong>ローカルの <code>events.jsonl</code> から取る</strong> (SDK 呼び出し不要)</td><td>FR-C-132 / ADR-0013</td><td>未着手</td></tr>
+<tr><td>T-6.4b</td><td><code>models.list</code> からモデル別単価を取得</td><td><span class="chip id">FR-C-134</span></td><td>保留(取得不可を確認済み / ADR-0010)</td></tr>
+<tr><td><span class="chip id">T-6.5</span></td><td>経路 B: GitHub REST (個人 / 組織の両方を試す) (アカウント全体の月次消費履歴 (FR-C-138/139) と組織 / Enterprise (FR-C-140) 専用。再開条件は user スコープ持ちか組織管理下のアカウントでの実測 / ADR-0018)</td><td>FR-C-138〜142 / OQ-12</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-6.6</span></td><td>認証は OS 資格情報ストア / GitHub CLI 参照。<strong>保存しない</strong></td><td>FR-C-141 / NFR-31</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-6.7</span></td><td>経路 C: ログ由来の推定 (60 秒 TTL)</td><td>FR-C-92 / 93 / 143</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-6.8</span></td><td>ゲージ描画 (自前 SVG)。3 段階色分け + 超過の別建て</td><td>FR-C-88 / 89 / 90</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-6.9</span></td><td>鮮度表示 (<code>observed_at</code> 基準) と 15 分超の警告色</td><td><strong>FR-C-86</strong> / 87</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.8</span></td><td>ゲージ描画 (自前 SVG)。3 段階色分け + 超過の別建て (クレジット単位のみ。$ 換算を出さない / ADR-0010)</td><td>FR-C-88 / 89 / 90</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.9</span></td><td>鮮度表示 (<code>observed_at</code> 基準) と 15 分超の警告色。リセット日判定に <code>quota_reset_date_utc</code> を使う (observed_at は自前で保持する。resetDate を使わない / ADR-0015 / ADR-0017)</td><td><strong>FR-C-85</strong> / 86 / 87</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-6.10</span></td><td>長周期タイマー (5 分以上、画面表示中のみ)</td><td>FR-C-135 / NFR-12</td><td>未着手</td></tr>
 <tr><td><span class="chip id">T-6.11</span></td><td><code>quota_source_status_get</code> — 各経路の可用性表示</td><td>IR-18 / FR-C-83</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-6.12</span></td><td><code>has_quota === false</code> の枠を「適用外」として描く (率を出さない / 危険色にしない)</td><td>FR-C-131 / ADR-0015</td><td>未着手</td></tr>
 </tbody></table></div>
 <p><strong>気をつける点</strong></p>
 <ul>
 <li><strong>2 秒ポーリングに絶対載せない</strong> (FR-C-135)</li>
 <li>金額表示に<strong>概算である旨を添える</strong> (NFR-45)</li>
 <li>失敗しても直前の値と「取得できませんでした」を並べる (NFR-07)</li>
+<li><strong><code>remainingPercentage</code> を再計算しない。</strong> 同じ消費が<strong>丸めの異なる 3 つの値</strong>で返る (<code>entitlement − quota_remaining</code> = 1.6 / <code>entitlement − remaining</code> = 2 / <code>credits_used</code> = 1)。<code>percent_remaining</code> は<strong>小数の <code>quota_remaining</code> から厳密に出る</strong> (198.4 / 200 = 99.2)</li>
+<li><strong>適用外の枠は <code>has_quota === false</code> で判定する。</strong> <code>entitlement &lt;= 0</code> は 0 除算ガードとして別に持つ。<strong><code>-1</code> (無制限) は 1 度も観測していない</strong></li>
+<li><strong><code>resetDate</code> の中身はスナップショットの観測時刻</strong> (<code>quota_snapshots.*.timestamp_utc</code> と同値。SDK と REST の同時取得でミリ秒一致)。<strong>リセット日は <code>quota_reset_date</code> (<code>2026-10-01</code>)。<code>quota_reset_at</code> は 3 枠とも <code>0</code> で使えない</strong></li>
+<li><strong><code>usedRequests</code> = <code>entitlement − remaining</code> (整数丸め)。</strong> 真の消費 1.55 が 2 になる。<strong>表示にも計算にも使わない</strong></li>
+<li><strong><code>percent_remaining: 0</code> をそのままゲージに載せない。</strong> <code>premium_interactions</code> が FR-C-88 の危険色 (90% 以上) に該当し、<strong>適用外の枠が真っ赤になる</strong></li>
 </ul>
 <hr />
 <h2 id="段階-7-振り返り-ui">段階 7 — 振り返り UI</h2>
@@ -220,13 +233,13 @@
 <div class="table-wrap"><table>
 <thead><tr><th>段階</th><th>完了 / 全体</th></tr></thead>
 <tbody>
-<tr><td>0. 調査</td><td>1 / 7</td></tr>
+<tr><td>0. 調査</td><td>8 / 8</td></tr>
 <tr><td>1. プロジェクト基盤</td><td>3 / 10</td></tr>
 <tr><td>2. git + 利用状況</td><td>0 / 7</td></tr>
 <tr><td>3. dev サーバー</td><td>0 / 7</td></tr>
-<tr><td>4. 差分インデックス</td><td>1 / 12</td></tr>
+<tr><td>4. 差分インデックス</td><td>1 / 13</td></tr>
 <tr><td>5. ライブ監視</td><td>1 / 14</td></tr>
-<tr><td>6. 利用枠</td><td>2 / 11</td></tr>
+<tr><td>6. 利用枠</td><td>2 / 13</td></tr>
 <tr><td>7. 振り返り UI</td><td>1 / 14</td></tr>
 <tr><td>横断</td><td>0 / 6</td></tr>
 </tbody></table></div>

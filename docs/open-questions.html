@@ -11,8 +11,8 @@
   <aside class="sidebar" data-sidebar></aside>
   <main class="main">
 <h1>未決事項 (OQ)</h1>
-<p class="lede">着手前に実測で確定させる項目。要求 付録 B の写しに、この環境での初期観測を足したもの。<strong>推測で埋めて実装を進めない。</strong></p>
-<div class="doc-meta"><span>進行中</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/open-questions.md</code></span></div>
+<p class="lede">着手前に実測で確定させる項目。要求 付録 B の写しに、段階 0 のプローブ (T-0.1〜0.8) で出た数字を書き戻したもの。<strong>推測で埋めて実装を進めない。</strong></p>
+<div class="doc-meta"><span>進行中</span><span>版 0.3</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/open-questions.md</code></span></div>
 <h2 id="扱い方">扱い方</h2>
 <div class="table-wrap"><table>
 <thead><tr><th>状態</th><th>意味</th></tr></thead>
@@ -26,121 +26,598 @@
 <p><strong>OQ を推測で埋めて実装を進めるのが、この計画で最も高くつく間違い。</strong> 確認できないなら「取得不可」を返す実装にして、ここに残す。それが NFR-40 (推定を実測として表示しない) の実装でもある。</p>
 </div>
 <hr />
-<h2 id="この環境での初期観測-2026-09-08">この環境での初期観測 (2026-09-08)</h2>
-<p><code>~/.copilot/</code> を<strong>読み取り専用で</strong>一覧しただけの、ごく浅い観測。プローブ (T-0.1〜0.6) の代わりにはならない。</p>
+<h2 id="現在の状態-2026-09-08-時点">現在の状態 (2026-09-08 時点)</h2>
 <div class="table-wrap"><table>
-<thead><tr><th>観測</th><th>内容</th><th>影響</th></tr></thead>
+<thead><tr><th>OQ</th><th>題目</th><th>状態</th><th>一言</th></tr></thead>
 <tbody>
-<tr><td><code>~/.copilot/</code> の中身</td><td><code>config.json</code> / <code>ide/</code> / <code>logs/</code> の 3 つのみ。<strong><code>session-state/</code> が存在しない</strong></td><td>OQ-01 / OQ-02 の調査に<strong>先立って、CLI セッションを実際に作る必要がある</strong>。段階 0 の前提作業</td></tr>
-<tr><td><code>~/.copilot/ide/*.lock</code></td><td>JSON。キーは <code>socketPath</code> / <code>scheme</code> / <strong><code>headers</code></strong> / <code>pid</code> / <code>ideName</code> / <code>timestamp</code> / <code>workspaceFolders</code> / <code>isTrusted</code>。1 ファイル 357 バイト</td><td><strong><code>headers</code> は認証情報を含みうる。読まない・DTO に定義しない (INV-2 / FR-C-72)。</strong><code>pid</code> / <code>ideName</code> / <code>workspaceFolders</code> は FR-C-70 にそのまま使える</td></tr>
-<tr><td><code>~/.copilot/logs/process-&lt;epoch_ms&gt;-&lt;pid&gt;.log</code></td><td>1 行 = <code>ISO8601 [LEVEL] メッセージ</code> のテキスト。「CLI server ready (stdio mode)」等</td><td>ファイル名の PID が稼働検出の手掛かりになる (OQ-04)。<strong>ただしファイル名の数字は epoch ミリ秒で、要求が書く <code>{timestamp}</code> と一致する</strong></td></tr>
-<tr><td>VS Code <code>workspaceStorage</code></td><td>20 ワークスペースのうち <strong>15 に <code>chatSessions/</code> が存在</strong></td><td>OQ-03 の調査対象がこの環境に十分ある。ハッシュ再計算と cwd 逆引きの両方を試せる</td></tr>
-</tbody></table></div>
-<p><strong>この 4 行以外は何も分かっていない。</strong></p>
-<p>この観測は <code>node tools/probe/copilot-layout.mjs</code> (T-0.1) の出力から取っている。同じ数字は <code>tools/probe-out/copilot-layout.json</code> に残るが、<strong>コミットしない</strong> (個人のセッション内容を含みうる)。</p>
-<hr />
-<h2 id="oq-01-events.jsonl-のレコードスキーマ">OQ-01 — <code>events.jsonl</code> のレコードスキーマ</h2>
-<p><strong>状態</strong>: 未調査 (前提作業あり)</p>
-<div class="table-wrap"><table>
-<thead><tr><th>項目</th><th>内容</th></tr></thead>
-<tbody>
-<tr><td>知りたいこと</td><td>レコード種別 / ロール / タイムスタンプ / トークン usage / クレジット消費 / ツール呼び出し / サブエージェント・委任タスクの表現</td></tr>
-<tr><td>確認方法</td><td>実データを分類集計するスクリプト (T-0.3) で、種別ごとの件数・サイズ・出現位置・フィールド出現率を出す</td></tr>
-<tr><td>影響範囲</td><td>FR-C-01〜28 のほぼ全部</td></tr>
-<tr><td><strong>前提</strong></td><td>この環境には <code>session-state/</code> がまだ無い。<strong>Copilot CLI で数セッション動かしてから</strong>調査する</td></tr>
+<tr><td><span class="chip id">OQ-01</span></td><td><code>events.jsonl</code> のレコードスキーマ</td><td><strong>一部判明</strong></td><td>16 種 / 77 レコードを分類。利用枠到達イベントは未観測</td></tr>
+<tr><td><span class="chip id">OQ-02</span></td><td>1 レコード = 1 行か</td><td><strong>確定</strong></td><td>成立。バイトオフセット方式を続行してよい (ADR-0003)</td></tr>
+<tr><td><span class="chip id">OQ-03</span></td><td>VS Code の <code>chatSessions</code> とハッシュ</td><td><strong>一部判明</strong></td><td>ハッシュ再計算は 20 中 6 しか当たらない</td></tr>
+<tr><td><span class="chip id">OQ-04</span></td><td>稼働中セッションの検出</td><td><strong>一部判明</strong></td><td><code>ide/*.lock</code> は CLI の生死と対応しない (決定的な否定)</td></tr>
+<tr><td><span class="chip id">OQ-05</span></td><td><code>session-store.db</code> を安全に読めるか</td><td><strong>一部判明</strong></td><td>書き込み中でも 12/12 読めた。ただし writer 不在時は未測定</td></tr>
+<tr><td><span class="chip id">OQ-06</span></td><td>経路 A (Copilot SDK) が返す利用枠</td><td><strong>一部判明</strong></td><td><code>getCurrentAuth</code> なら 3 枠 + 付与額 + 月次リセット日が取れる。<code>getQuota</code> は劣化射影</td></tr>
+<tr><td><span class="chip id">OQ-07</span></td><td>サブエージェント / 委任</td><td><strong>確定</strong></td><td>存在する。親子とも <code>toolCallId</code> を持つ。<strong>縮退不要</strong></td></tr>
+<tr><td><span class="chip id">OQ-08</span></td><td>SDK / REST の認証</td><td><strong>一部判明</strong></td><td>SDK は解決。REST は <code>gh</code> のトークンで通るが <code>user</code> スコープが無い</td></tr>
+<tr><td><span class="chip id">OQ-09</span></td><td>古いセッションの自動削除</td><td><strong>未調査</strong></td><td>据え置き。観測期間が 1 時間では何も言えない</td></tr>
+<tr><td><span class="chip id">OQ-10</span></td><td>実データ量</td><td><strong>一部判明</strong></td><td>3 セッションで 1.0 MB。数百 MB 規模は未再現</td></tr>
+<tr><td><span class="chip id">OQ-11</span></td><td>拒否 / 非同期委任の表現</td><td><strong>未調査</strong></td><td>新規。T-4.9 / T-4.10 がここで止まる</td></tr>
+<tr><td><span class="chip id">OQ-12</span></td><td>経路 B (REST) が個人アカウントで返すもの</td><td><strong>一部判明</strong></td><td>公開課金 API は 10/10 が 404 (5 件は <code>user</code> スコープ不足)。組織 / Enterprise は未検証</td></tr>
 </tbody></table></div>
 <hr />
-<h2 id="oq-02-1-レコード-1-行か-設計の分水嶺">OQ-02 — 1 レコード = 1 行か (設計の分水嶺)</h2>
-<p><strong>状態</strong>: 未調査</p>
+<h2 id="測定環境-数字を読む前に-2026-09-08">測定環境 — 数字を読む前に (2026-09-08)</h2>
+<p><strong>ユーザーの実 <code>~/.copilot</code> は、測定の前後を通してセッションを 1 件も持っていない。</strong> 9 ファイルのみで、内訳は <code>config.json</code> + <code>ide/</code> (lock 3 件) + <code>logs/</code> (<code>process-*.log</code> 5 件)。<strong><code>session-state/</code> も <code>session-store.db</code> も存在しない。</strong> 測定によってこの状態は変わっていない (INV-1 / N-5 を崩していない)。</p>
+<p>そのため、セッションログを要する OQ-01 / 02 / 05 / 07 / 10 は、<strong><code>COPILOT_HOME</code> をスクラッチパッド配下の隔離ディレクトリに向けて</strong> Copilot CLI 1.0.83 を 4 回起動し、3 セッションを生成して測定した。消費は <strong>1.552 AI Credits / API 呼び出し 11 回</strong>。<code>COPILOT_HOME</code> で設定と状態の保存先を丸ごと差し替えられることは OQ-08 の副産物として確認しており、以後のテストでも実データを汚さずに済む。</p>
+<p>OQ-03 (VS Code <code>workspaceStorage</code>) と OQ-04 の <code>ide/*.lock</code> / <code>logs/</code> は、<strong>ユーザーの実データ</strong>での測定。</p>
+<p>利用枠まわり (OQ-06 / OQ-08 / OQ-12) は<strong>ユーザーの実アカウント</strong>での測定。2026-09-07 の T-0.6 (SDK) に加え、<strong>2026-09-08 に T-0.8 (<code>tools/probe/quota-rest.mjs</code>) を実施し、SDK (JSON-RPC + FFI ランタイム) と REST (<code>gh api</code>) を数秒差で別プロセスから取得した</strong>。この同時取得が <code>resetDate</code> の正体を決めた (OQ-06)。</p>
 <div class="table-wrap"><table>
-<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<thead><tr><th>測定対象</th><th>出所</th><th>規模</th></tr></thead>
 <tbody>
-<tr><td>知りたいこと</td><td><code>events.jsonl</code> が <strong>1 レコード = 1 行 / 行内に生の改行を含まない / BOM なし</strong> か</td></tr>
-<tr><td>確認方法</td><td>T-0.2。全ファイルを走査して、行数とレコード数の一致、<code>n</code> を含む文字列値の有無、先頭 3 バイトを検査する</td></tr>
-<tr><td>影響範囲</td><td>FR-C-02〜08</td></tr>
+<tr><td><code>events.jsonl</code> / <code>session-store.db</code> / <code>workspace.yaml</code></td><td>隔離 <code>COPILOT_HOME</code></td><td>3 セッション / 77 レコード / 291,259 バイト</td></tr>
+<tr><td><code>ide/*.lock</code> / <code>logs/process-*.log</code></td><td>ユーザーの実 <code>~/.copilot</code></td><td>lock 3 件 / log 5 件</td></tr>
+<tr><td><code>workspaceStorage/&lt;hash&gt;/</code></td><td>ユーザーの実 <code>%APPDATA%Code</code></td><td>20 ワークスペース / <code>chatSessions</code> 26 ファイル / 1,522,441 バイト</td></tr>
+<tr><td><code>account.getQuota</code> / <code>account.getCurrentAuth</code></td><td>ユーザーの実アカウント</td><td>2026-09-07 に 2 回 (約 11 分間隔) / 2026-09-08 に再取得 + 3 回連続 (約 2.5 秒間隔、計 8 秒)</td></tr>
+<tr><td>GitHub REST (<code>gh api</code>)</td><td>ユーザーの実アカウント (<code>gh</code> 2.95.0、スコープ <code>gist, read:org, repo, workflow</code>)</td><td>13 リクエスト。200 は 1 件のみ</td></tr>
 </tbody></table></div>
 <div class="warning"><span class="note-title">注意</span>
-<p><strong>成立しなければバイトオフセット方式が使えず、索引の設計が根本から変わる (ADR-0003)。</strong> 崩れた場合の代替は 2 つ。(a) レコード境界を別に記録する / (b) <code>session-store.db</code> を読む (OQ-05)。 <strong>どちらを採るかを決めてから段階 4 に着手する。</strong></p>
+<p><strong>サンプルが小さい。</strong> 3 セッション / 77 レコードは、要求が想定する「数百 MB / 数百ファイル」(NFR-01 / 02) の規模を再現していない。 以下の数字はすべて「<strong>この規模で観測した</strong>」という限定つきで読むこと。各 OQ の末尾に「この数字から言えないこと」を置いた。</p>
 </div>
+<p>プローブの生出力は <code>tools/probe-out/*.json</code> に残るが、<strong>コミットしない</strong> (個人のセッション内容と実パスを含みうる)。</p>
 <hr />
-<h2 id="oq-03-vs-code-chatsessions-とハッシュの導出">OQ-03 — VS Code <code>chatSessions</code> とハッシュの導出</h2>
-<p><strong>状態</strong>: 未調査 (対象は実在。20 ワークスペース中 15 に <code>chatSessions/</code> あり)</p>
-<div class="table-wrap"><table>
-<thead><tr><th>項目</th><th>内容</th></tr></thead>
-<tbody>
-<tr><td>知りたいこと</td><td><code>%APPDATA%CodeUserworkspaceStorage&lt;hash&gt;chatSessions</code> の中身と、<code>&lt;hash&gt;</code> の導出アルゴリズム</td></tr>
-<tr><td>確認方法</td><td>T-0.5。ハッシュを再計算して照合できるか / セッションの中身から作業ディレクトリを逆引きできるか、の<strong>両方</strong>を試す</td></tr>
-<tr><td>影響範囲</td><td>FR-P-50〜58</td></tr>
-<tr><td>分かっていること</td><td>フォルダを移動・リネーム・削除すると新しいハッシュが割り当てられ、<strong>過去セッションが孤児化する</strong> (要求 付録 A.2、公式ドキュメントで確認済み)</td></tr>
-</tbody></table></div>
-<p>この性質があるため、パスの完全一致だけに頼る紐付けは壊れる。<strong>FR-P-52 のフォルダ名フォールバックは省略できない。</strong></p>
-<hr />
-<h2 id="oq-04-稼働中セッションの検出方法">OQ-04 — 稼働中セッションの検出方法</h2>
+<h2 id="oq-01-events.jsonl-のレコードスキーマ">OQ-01 — <code>events.jsonl</code> のレコードスキーマ</h2>
 <p><strong>状態</strong>: 一部判明</p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
-<tr><td>知りたいこと</td><td><code>~/.copilot/ide/</code> と <code>logs/process-*.log</code> から<strong>読み取り専用で</strong>稼働判定できるか。できない場合、<code>sessionStart</code> / <code>sessionEnd</code> フックが<strong>どのエントリポイントで発火するか</strong></td></tr>
-<tr><td>確認方法</td><td>T-0.4。CLI interactive / CLI background / VS Code 拡張 / coding agent の 4 経路で実際に動かす</td></tr>
-<tr><td>影響範囲</td><td>FR-C-40〜45</td></tr>
+<tr><td>知りたいこと</td><td>レコード種別 / ロール / タイムスタンプ / トークン usage / クレジット消費 / ツール呼び出し / サブエージェント・委任タスクの表現</td></tr>
+<tr><td>確認方法</td><td>T-0.3 (<code>tools/probe/record-kinds.mjs</code>)</td></tr>
+<tr><td>影響範囲</td><td>FR-C-01〜28 のほぼ全部</td></tr>
 </tbody></table></div>
-<p><strong>観測できた範囲</strong></p>
+<h3 id="保存先とセッション-1-件の構成">保存先とセッション 1 件の構成</h3>
+<p><code>&lt;COPILOT_HOME&gt;/session-state/&lt;session-uuid&gt;/</code> の下に置かれる。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>ファイル</th><th>実測サイズ</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td><code>events.jsonl</code></td><td>45,354 / 103,224 / 142,681 バイト</td><td>レコード列 (本体)</td></tr>
+<tr><td><code>workspace.yaml</code></td><td>375 バイト</td><td>セッション 1 件のメタデータ (下記)</td></tr>
+<tr><td><code>checkpoints/index.md</code></td><td>172 バイト</td><td>見出しだけの空テーブル</td></tr>
+<tr><td><code>rewind-file-snapshots/tracking.json</code></td><td>29 バイト</td><td><code>{"schema":1,"tracking":true}</code></td></tr>
+<tr><td><code>.workspace-fork.lock</code></td><td>0 バイト</td><td></td></tr>
+</tbody></table></div>
+<p><code>workspace.yaml</code> は 3 件とも同じ形で、<strong><code>events.jsonl</code> を開かずにセッションと作業ディレクトリを紐付けられる</strong>。</p>
+<pre><code class="language-yaml">id: &lt;session-uuid&gt;
+cwd: C:\...\work-b
+client_name: github/cli
+name: &lt;初回プロンプトの文面がそのまま入る&gt;
+user_named: false
+summary_count: 0
+fork_count: 0
+created_at: 2026-09-07T17:10:51.671Z
+updated_at: 2026-09-07T17:14:22.666Z</code></pre>
 <ul>
-<li><code>ide/*.lock</code> に <code>pid</code> と <code>workspaceFolders</code> がある → <strong>VS Code 経路は読み取り専用で判定できる見込み</strong></li>
-<li><code>logs/process-&lt;epoch_ms&gt;-&lt;pid&gt;.log</code> のファイル名から PID が取れる → CLI 経路の手掛かりになる</li>
-<li><strong>ただし、lock ファイルがプロセス終了時に必ず消える保証は未確認。</strong>PID 生存確認との併用が必要 (FR-C-40 / FR-P-57)</li>
+<li><code>cwd</code> は Windows のバックスラッシュ絶対パス。<strong><code>session.start.data.context.cwd</code> と同じ値</strong>。FR-P-51 の <code>path_key</code> はここから作れる (FR-P-55 が言う「先頭数十 KB の部分読み」より安い)</li>
+<li><strong><code>client_name</code> はエントリポイントの識別子。</strong> 観測できたのは <code>github/cli</code> の <strong>1 値のみ</strong></li>
+<li><code>name</code> は <code>user_named: false</code> のとき<strong>初回プロンプトの文面がそのまま入る</strong>。FR-C-54 のタイトル・フォールバックに使えるが、<strong>本文であるため 140 字プレビューの上限を掛けて扱う</strong> (FR-C-02 / INV-6)</li>
 </ul>
-<p><strong>未確認</strong>: CLI background と coding agent の経路。セッション ID と PID の対応。lock の stale 具合。</p>
-<p>読み取り専用で足りれば、N-5 の不変条件を一切崩さずに済む。<strong>フックの利用は最後の手段</strong> (設定ファイルへの書き込みを伴うため、ADR-0012 と衝突する)。</p>
+<h3 id="レコードの骨格">レコードの骨格</h3>
+<p><strong>全レコード共通のトップレベルは 6 フィールドのみ</strong> (77 レコード走査)。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>キー</th><th>出現率</th><th>型</th></tr></thead>
+<tbody>
+<tr><td><code>type</code></td><td>100% (77/77)</td><td>string</td></tr>
+<tr><td><code>data</code></td><td>100% (77/77)</td><td>object</td></tr>
+<tr><td><code>id</code></td><td>100% (77/77)</td><td>string (UUID)</td></tr>
+<tr><td><code>timestamp</code></td><td>100% (77/77)</td><td>string (ISO8601)</td></tr>
+<tr><td><code>parentId</code></td><td>94.8% (74/77)、<code>null</code> 3 件</td><td>string / null</td></tr>
+<tr><td><code>agentId</code></td><td>23.4% (18/77)</td><td>string (UUID)</td></tr>
+</tbody></table></div>
+<ul>
+<li><code>parentId</code> は<strong>直前のレコードの <code>id</code></strong> を指す。<code>null</code> は <code>session.start</code> の 3 件のみ。<strong>レコード列は連鎖 (木) を成す</strong></li>
+<li><code>agentId</code> は<strong>サブエージェントに属するレコードだけ</strong>に付く (OQ-07)</li>
+</ul>
+<h3 id="種別ごとの件数とサイズ-16-種-77-レコード-291-259-バイト">種別ごとの件数とサイズ (16 種 / 77 レコード / 291,259 バイト)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>type</th><th>件数</th><th>合計バイト</th><th>平均バイト</th></tr></thead>
+<tbody>
+<tr><td><code>assistant.message</code></td><td>11</td><td>125,053</td><td>11,368</td></tr>
+<tr><td><code>system.message</code></td><td>4</td><td>116,892</td><td>29,223</td></tr>
+<tr><td><code>session.usage_checkpoint</code></td><td>4</td><td>17,307</td><td>4,327</td></tr>
+<tr><td><code>session.shutdown</code></td><td>4</td><td>6,752</td><td>1,688</td></tr>
+<tr><td><code>tool.execution_complete</code></td><td>6</td><td>6,501</td><td>1,084</td></tr>
+<tr><td><code>user.message</code></td><td>5</td><td>3,951</td><td>790</td></tr>
+<tr><td><code>tool.execution_start</code></td><td>6</td><td>3,430</td><td>572</td></tr>
+<tr><td><code>assistant.turn_start</code></td><td>11</td><td>2,809</td><td>255</td></tr>
+<tr><td><code>session.auto_mode_resolved</code></td><td>5</td><td>2,267</td><td>453</td></tr>
+<tr><td><code>assistant.turn_end</code></td><td>11</td><td>2,182</td><td>198</td></tr>
+<tr><td><code>session.start</code></td><td>3</td><td>1,635</td><td>545</td></tr>
+<tr><td><code>session.model_change</code></td><td>3</td><td>759</td><td>253</td></tr>
+<tr><td><code>session.resume</code></td><td>1</td><td>533</td><td>533</td></tr>
+<tr><td><code>subagent.started</code></td><td>1</td><td>492</td><td>492</td></tr>
+<tr><td><code>subagent.completed</code></td><td>1</td><td>434</td><td>434</td></tr>
+<tr><td><code>subagent.configured</code></td><td>1</td><td>262</td><td>262</td></tr>
+</tbody></table></div>
+<p><strong><code>system.message</code> 4 件で全バイトの 40% を占める</strong> (1 件 36,428 バイトが最大レコード)。本文レコード (FR-C-49 が言う「ユーザー / アシスタント」) は <code>user.message</code> / <code>assistant.message</code> の 2 種。</p>
+<h3 id="主要な-data-の構造-値は伏せ-型と構造のみ">主要な <code>data</code> の構造 (値は伏せ、型と構造のみ)</h3>
+<ul>
+<li><code>session.start.data</code> = <code>{sessionId, version:number, producer:"copilot-agent", copilotVersion:"1.0.83", startTime:ISO8601, contextTier:null, sessionLimits:{maxAiCredits:number}, context:{cwd:string}, alreadyInUse:boolean, remoteSteerable:boolean}</code> — <strong><code>context.cwd</code> に作業ディレクトリの絶対パス</strong> (実測 126 文字)。<code>sessionLimits.maxAiCredits</code> は FR-C-95 に使える</li>
+<li><code>session.resume.data</code> = <code>{resumeTime:ISO8601, ...}</code></li>
+<li><code>session.usage_checkpoint.data</code> = <code>{totalNanoAiu:number, totalPremiumRequests:number, modelCacheState:[{modelId, cacheExpiresAt:ISO8601, cacheTtlSeconds}], promptCacheBreakState:[{conversation:"main", models, lastActiveModel, pendingRewriteSources}]}</code></li>
+<li><code>session.shutdown.data</code> = <code>{shutdownType:"routine", totalPremiumRequests, totalNanoAiu, tokenDetails:{input:{tokenCount}, cache_read:{tokenCount}, cache_write:{tokenCount}, output:{tokenCount}}, totalApiDurationMs, sessionStartTime:epoch_ms, eventsFileSizeBytes, codeChanges:{linesAdded, linesRemoved, filesModified}, modelMetrics, agentMetrics, currentModel, currentTokens, systemTokens, conversationTokens, toolDefinitionsTokens}</code> — <strong>FR-C-20 のセッション集計はほぼこの 1 レコードで揃う</strong></li>
+<li><code>tool.execution_start.data</code> = <code>{toolCallId, toolName, arguments, turnId, model}</code> + 子なら <code>parentToolCallId</code>、shell 系なら <code>shellToolInfo</code></li>
+<li><code>assistant.turn_start.data</code> = <code>{turnId:string("0","1",...), interactionId:UUID}</code> / <code>assistant.turn_end.data</code> = <code>{turnId}</code></li>
+</ul>
+<h3 id="消費クレジットとトークン">消費クレジットとトークン</h3>
+<p><strong><code>totalNanoAiu / 10^9 = AI Credits</code> を実測で確認した。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>セッション</th><th>nanoAIU 合計</th><th>CLI フッター表示</th></tr></thead>
+<tbody>
+<tr><td><code>db756c0c…</code></td><td>382,635,000</td><td><strong>0.38 AI Credits</strong> (一致)</td></tr>
+<tr><td><code>240cecb1…</code></td><td>598,806,000 (サブエージェント分込み)</td><td><strong>0.6 AI Credits</strong> (一致)</td></tr>
+</tbody></table></div>
+<p>usage / cost 系キーの出現率 (2 階層目まで): <code>data.totalNanoAiu</code> 8 件 (10.4%) / <code>data.tokenDetails</code> 4 件 (5.2%) / <code>data.currentTokens</code> 4 件 / <code>data.systemTokens</code> 4 件 / <code>data.conversationTokens</code> 4 件 / <code>data.toolDefinitionsTokens</code> 4 件 / <code>data.totalTokens</code> 1 件 (1.3%)。</p>
+<p>タイムスタンプ候補は <code>timestamp</code> (ISO8601、77 件) / <code>data.startTime</code> (ISO8601、3) / <code>data.resumeTime</code> (ISO8601、1) / <code>data.sessionStartTime</code> (<strong>epoch ミリ秒</strong>、4)。<strong>ISO8601 と epoch ミリ秒が混在する。</strong></p>
+<h3 id="fr-c-49-の裏付け">FR-C-49 の裏付け</h3>
+<p>観測した 3 ファイルの<strong>物理的な最終行は、いずれも <code>session.shutdown</code> または <code>session.usage_checkpoint</code></strong> で、本文レコードではなかった。<strong>FR-C-49 (末尾から遡って最初の本文レコードを採る) は実データで必要</strong>である。</p>
+<h3 id="この数字から言えないこと">この数字から言えないこと</h3>
+<ul>
+<li><strong>利用枠到達 / レート制限 / セッションのクレジット上限到達のレコードは 1 件も観測していない</strong> (FR-C-28)。種別名も形も分かっていない</li>
+<li>パースエラー / ツール失敗 / 中断のレコードも未観測</li>
+<li>VS Code 拡張 / coding agent が生成する <code>events.jsonl</code> は 1 件も見ていない。<code>client_name</code> は <code>github/cli</code> の 1 値しか観測できていない</li>
+<li>16 種で全部という保証はない。<code>copilotVersion</code> は <code>1.0.83</code> の 1 バージョンのみ</li>
+</ul>
+<hr />
+<h2 id="oq-02-1-レコード-1-行か-設計の分水嶺">OQ-02 — 1 レコード = 1 行か (設計の分水嶺)</h2>
+<p><strong>状態</strong>: <strong>確定</strong> — 成立する</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>events.jsonl</code> が <strong>1 レコード = 1 行 / 行内に生の改行を含まない / BOM なし</strong>か</td></tr>
+<tr><td>確認方法</td><td>T-0.2 (<code>tools/probe/jsonl-shape.mjs</code>)</td></tr>
+<tr><td>影響範囲</td><td>FR-C-02〜08、ADR-0003</td></tr>
+</tbody></table></div>
+<p>3 ファイル / 291,259 バイトを走査した結果。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>実測</th></tr></thead>
+<tbody>
+<tr><td>行数 / parse 成功レコード数 / parse 失敗</td><td><strong>77 / 77 / 0</strong></td></tr>
+<tr><td>BOM ありファイル</td><td><strong>0 / 3</strong> (先頭 3 バイトは <code>7B 22 74</code> = <code>{"t</code>)</td></tr>
+<tr><td>CRLF 行 / LF のみ行</td><td><strong>0 / 77</strong></td></tr>
+<tr><td>末尾が改行で終わらないファイル</td><td><strong>0 / 3</strong></td></tr>
+<tr><td><strong>バイトオフセット往復検証</strong></td><td><strong>一致 77 / 不一致 0</strong></td></tr>
+<tr><td>行長 (バイト)</td><td>min 184 / median 552 / mean 3,922 / p95 17,361 / <strong>max 36,428</strong></td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p>プローブは「生改行を含む行 22 件」も報告するが、これは <strong>parse 後の文字列値に改行文字が含まれる</strong>という意味であり、<strong>JSON としてはエスケープ済み</strong>。行分割は壊れていない (<strong>parse 失敗 0 件</strong>が根拠)。該当キーは <code>data.content</code> / <code>data.reasoningBlocks.blocks.summary.text</code> / <code>data.reasoningText</code> / <code>data.result.content</code> / <code>data.result.detailedContent</code> / <code>data.transformedContent</code>。 <strong>この区別を曖昧にしないこと。</strong> 「行内に生の改行がある」と読み違えると、成立している前提を誤って捨てることになる。</p>
+</div>
+<h3 id="追記のみであることの直接検証">追記のみであることの直接検証</h3>
+<p><code>--resume</code> で既存セッションを再開して比較した。</p>
+<ul>
+<li>再開前 133,394 バイト → 再開後 142,681 バイト (<strong>+9,287</strong>)</li>
+<li><strong>先頭 133,394 バイトの SHA-256 が一致</strong> (バイト単位で不変。既存部分は書き換えられない)</li>
+<li>追記されたのは 8 レコード: <code>session.resume</code> → <code>session.auto_mode_resolved</code> → <code>user.message</code> → <code>assistant.turn_start</code> → <code>assistant.message</code> → <code>assistant.turn_end</code> → <code>session.usage_checkpoint</code> → <code>session.shutdown</code></li>
+<li><code>session.resume.parentId</code> が<strong>直前の <code>session.shutdown</code> の <code>id</code></strong> を指す (連鎖は再開をまたいで続く)</li>
+</ul>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>1 ファイルに <code>session.shutdown</code> が複数現れる</strong> (3 ファイルに 4 件)。「<code>session.shutdown</code> が来たらセッション終了」と扱うと<strong>再開で壊れる</strong>。終了判定に使えるのは「<strong>末尾から遡って最初のレコードが <code>session.shutdown</code> か</strong>」まで (ADR-0014)。</p>
+</div>
+<h3 id="結論">結論</h3>
+<p><strong>バイトオフセット方式 (ADR-0003) の前提は成立する。</strong> 代替案 (レコード境界を別に記録する / <code>session-store.db</code> を索引の正にする) は採らない。判断と却下理由は ADR-0003 / ADR-0013。</p>
+<h3 id="この数字から言えないこと-2">この数字から言えないこと</h3>
+<ul>
+<li>最大レコードは 36,428 バイトで、FR-C-08 の根拠が言う「数百 KB〜数 MB」は<strong>再現していない</strong>。ストリーミング読みと 512KB 上限 (T-4.12) の必要性は、この測定では証明されていない (<strong>それでも外さない</strong>。外して壊れたときの代償の方が大きい)</li>
+<li>書き込みの<strong>最中</strong>に読んだわけではない。「改行で終わらない末尾断片」(FR-C-05) は <strong>1 度も遭遇していない</strong>。FR-C-05 は依然として必須で、ユニットテストで固める (T-4.1)</li>
+<li>truncate / ファイル入れ替わり (FR-C-06) は観測していない</li>
+</ul>
+<hr />
+<h2 id="oq-03-vs-code-chatsessions-とハッシュの導出">OQ-03 — VS Code <code>chatSessions</code> とハッシュの導出</h2>
+<p><strong>状態</strong>: 一部判明 (<strong>確定にしない</strong>)</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>%APPDATA%CodeUserworkspaceStorage&lt;hash&gt;chatSessions</code> の中身と、<code>&lt;hash&gt;</code> の導出アルゴリズム</td></tr>
+<tr><td>確認方法</td><td>T-0.5 (<code>tools/probe/vscode-sessions.mjs</code>)。ハッシュ再計算と cwd 逆引きの<strong>両方</strong></td></tr>
+<tr><td>影響範囲</td><td>FR-P-50〜58</td></tr>
+</tbody></table></div>
+<h3 id="a-ハッシュ再計算の照合-20-ワークスペース-workspace.json-は-20-20-存在">(a) ハッシュ再計算の照合 — 20 ワークスペース、<code>workspace.json</code> は 20/20 存在</h3>
+<p>30 通りの候補 (uri そのまま / 小文字化 / 末尾スラッシュ有無 / <code>%3a</code> 小文字化 / コロン非エンコード / fsPath 各種 × md5 / sha1 / sha256) を総当たりした。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>候補</th><th>一致数</th></tr></thead>
+<tbody>
+<tr><td>uri そのまま / md5</td><td>5</td></tr>
+<tr><td>uri 末尾スラッシュ除去 / md5</td><td>5 (同一ディレクトリへの重複ヒット)</td></tr>
+<tr><td>uri <code>%3a</code> 小文字化 / md5</td><td>5 (同上)</td></tr>
+<tr><td>uri コロン非エンコード化 / md5</td><td>5 (同上)</td></tr>
+<tr><td>fsPath バックスラッシュ化 + 小文字 / md5</td><td>1</td></tr>
+<tr><td>上記以外 25 候補</td><td>0</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>いずれかの候補で一致: 6 / 20。どの候補でも不一致: 14 / 20</strong></li>
+<li>実質は 2 系統 (素の <code>uri.toString()</code> の MD5 が 5 件、fsPath 変形の MD5 が 1 件)</li>
+</ul>
+<p><strong>帰結</strong>: ハッシュ再計算は<strong>主経路にできない</strong>。FR-P-51 (cwd の完全一致) と FR-P-52 (フォルダ名フォールバック) を主経路とし、ハッシュ再計算には依存しない。</p>
+<h3 id="b-chatsessions-の中身">(b) <code>chatSessions</code> の中身</h3>
+<ul>
+<li><code>chatSessions/</code> を持つのは <strong>15 / 20</strong> ワークスペース。ファイル 26 件、<strong>全て <code>.jsonl</code></strong>、計 1,522,441 バイト、<strong>最大 690,053 バイト</strong></li>
+<li><strong>VS Code 側も JSONL。</strong> 先頭が <code>kind:0</code> のスナップショット、以降が <code>kind:1</code> / <code>kind:2</code> のパッチ行という形式</li>
+<li><code>kind:0</code> のトップレベルキー (26/26 = 100%): <code>version</code> / <code>creationDate</code> / <code>initialLocation</code> / <code>responderUsername</code> / <code>sessionId</code> / <code>hasPendingEdits</code> / <code>requests</code> / <code>pendingRequests</code> / <code>inputState</code></li>
+<li><strong>cwd らしき文字列は <code>kind:0</code> だけを見ると 0 件。</strong> 全行 (パッチ行込み) を走査すると 9/26 ファイルでヒット (行の内訳は kind:0 が 4 / kind:1 が 14 / kind:2 が 28)</li>
+<li>タイムスタンプは <code>creationDate</code> のみ (26/26、<code>number</code> = epoch ミリ秒)。<strong>終了時刻に相当するフィールドは無い</strong></li>
+<li>孤児化 (<code>workspace.json</code> の folder が指すパスが今ディスク上に無い): <strong>2 / 20</strong></li>
+<li><code>&lt;hash&gt;/</code> 直下の出現数: <code>state.vscdb</code> 20 / <code>state.vscdb.backup</code> 18 / <code>workspace.json</code> 20 / <code>chatEditingSessions/</code> 15 / <code>chatSessions/</code> 15 / <code>ms-python.python/</code> 13 / <code>GitHub.copilot-chat/</code> 3</li>
+</ul>
+<h3 id="c-mtime-と-creationdate-のずれ">(c) mtime と <code>creationDate</code> のずれ</h3>
+<p>10 サンプルの差 (ミリ秒): 419,596 / 6,708,065 / 29,571 / 59,743 / 59,652 / 3,518,493 / 59,715 / 1,860,260 / 353,631 / 299,797。<strong>全サンプルで mtime が後</strong>、最小 29,571ms、最大 6,708,065ms (約 1.9 時間)。</p>
+<p><strong>FR-P-56 (mtime を新旧判定に使わない) の裏付け</strong>: <code>creationDate</code> と mtime は最大 1.9 時間ずれる。<strong>mtime で並べると「最後に触った順」にはなっても「セッションの新旧」にはならない。</strong></p>
+<h3 id="この数字から言えないこと-3">この数字から言えないこと</h3>
+<ul>
+<li><strong>不一致 14 件の原因は切り分けられていない。</strong> VS Code のバージョン差 / 多重ルート workspace / <code>vscode-remote://</code> スキーム (2 件は fsPath 候補が生成できず uri 系のみ試行) のいずれか、あるいは複合</li>
+<li><code>kind:1</code> / <code>kind:2</code> のパッチ行の形式 (JSON Patch なのか独自形式なのか) は解析していない。cwd 逆引きを主経路にするなら、この解析が別途要る</li>
+<li><code>chatSessions</code> から<strong>消費クレジット / トークンが取れるか</strong>は見ていない (FR-P-50 の「直近セッションのクレジット消費」に関わる)</li>
+</ul>
+<hr />
+<h2 id="oq-04-稼働中セッションの検出方法">OQ-04 — 稼働中セッションの検出方法</h2>
+<p><strong>状態</strong>: 一部判明 (<strong>決定的な否定が出た</strong>)</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td><code>~/.copilot/ide/</code> と <code>logs/process-*.log</code> から<strong>読み取り専用で</strong>稼働判定できるか</td></tr>
+<tr><td>確認方法</td><td>T-0.4 (<code>tools/probe/live-detect.mjs</code>) + 隔離 <code>COPILOT_HOME</code> での CLI 4 回起動</td></tr>
+<tr><td>影響範囲</td><td>FR-C-40〜45、FR-C-70〜72</td></tr>
+</tbody></table></div>
+<h3 id="ide-.lock-3-件-ユーザーの実データ"><code>ide/*.lock</code> (3 件、ユーザーの実データ)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>pid</th><th>ideName</th><th>workspaceFolders</th><th><code>timestamp</code> − mtime</th><th>PID 生存</th><th>プロセス名</th></tr></thead>
+<tbody>
+<tr><td>42500</td><td>Visual Studio Code</td><td><code>d:masahProjectsgh-dashboard</code></td><td>174ms</td><td>true</td><td><strong>Code</strong></td></tr>
+<tr><td>30592</td><td>Visual Studio Code</td><td><code>c:UsersmasahDocumentsa-i-one</code></td><td>268ms</td><td>true</td><td><strong>Code</strong></td></tr>
+<tr><td>23724</td><td>Visual Studio Code</td><td><code>d:masahProjectsKanjiPractice</code></td><td>141ms</td><td>true</td><td><strong>Code</strong></td></tr>
+</tbody></table></div>
+<p>キーは 3 件とも <code>socketPath</code> / <code>scheme</code> / <code>pid</code> / <code>ideName</code> / <code>timestamp</code> / <code>workspaceFolders</code> / <code>isTrusted</code> + <strong><code>headers</code></strong>。<code>socketPath</code> は <code>\\.\pipe\mcp-&lt;uuid&gt;.sock</code>。</p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong><code>headers</code> の値は一切読み出していない。</strong> INV-2 / FR-C-72 のとおり、読まない・DTO に定義しない・表示しない。OQ-08 で「CLI は資格情報を OS の資格情報ストアに保存し、失敗時は <code>~/.copilot/</code> 配下の平文ファイルに落とす」ことが裏付けられたため、この不変条件はいっそう外せない。</p>
+</div>
+<h3 id="logs-process--.log-5-件-ユーザーの実データ"><code>logs/process-&lt;epoch_ms&gt;-&lt;pid&gt;.log</code> (5 件、ユーザーの実データ)</h3>
+<ul>
+<li>PID 32468 / 40808 / 30068 / 11008 / 36736。<strong>4 件は死亡</strong>。生存している 1 件 (36736) もプロセス名は <code>Code</code> で、<strong>ログ内容 (CLI server) と一致しない → PID 再利用の可能性を排除できない</strong></li>
+<li>ログレベルは <strong>INFO のみ 37 行</strong>。session id / workspace / cwd らしき文字列は <strong>0 件</strong></li>
+<li>最終行は "CLI server prepared for shutdown; transport remains open for RPC response" または "Server started, waiting for requests"</li>
+</ul>
+<h3 id="決定的な否定的結果">決定的な否定的結果</h3>
+<ul>
+<li><strong>lock 側 PID 集合 <code>{42500, 30592, 23724}</code> と log 側 PID 集合 <code>{32468, 40808, 30068, 11008, 36736}</code> の交差は 0 件</strong></li>
+<li>lock の <code>pid</code> は<strong>すべて VS Code 本体 (<code>Code.exe</code>) のプロセス ID</strong> だった</li>
+<li><strong>隔離 <code>COPILOT_HOME</code> で CLI を 4 回起動したが、<code>ide/</code> ディレクトリは 1 つも作られなかった</strong></li>
+</ul>
+<p><strong>結論</strong>: <code>ide/*.lock</code> は <strong>IDE 側 (VS Code) が書くもので、CLI セッションの生死とは対応しない</strong>。<code>logs/process-*.log</code> はセッションを特定できず、PID も信用できない。<strong>FR-C-40 が前提にする「状態ファイル + PID の生存確認」は、CLI 経路には適用できない。</strong></p>
+<h3 id="否定の裏側で分かったこと-logs-と-ide-は別のものを数えている">否定の裏側で分かったこと (<code>logs/</code> と <code>ide/</code> は別のものを数えている)</h3>
+<p>隔離 <code>COPILOT_HOME</code> での実測が、上の否定を「観測できなかった」ではなく「対応しないことが分かった」に変える。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>観測</th><th>隔離 <code>COPILOT_HOME</code> (CLI のみ 4 回起動)</th><th>ユーザーの実 <code>~/.copilot</code> (VS Code のみ)</th></tr></thead>
+<tbody>
+<tr><td><code>logs/process-*.log</code></td><td><strong>4 件</strong> (起動回数と 1:1)</td><td>5 件</td></tr>
+<tr><td><code>ide/*.lock</code></td><td><strong>0 件</strong></td><td>3 件</td></tr>
+<tr><td><code>session-state/</code></td><td>3 セッション</td><td>無し</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong><code>logs/process-*.log</code> は CLI プロセスの起動と 1 対 1 で増える。</strong>ファイル名の PID は CLI プロセスのもの</li>
+<li><strong><code>ide/*.lock</code> は IDE インスタンスと 1 対 1。</strong>ファイル名は UUID で、<code>pid</code> は IDE のもの</li>
+<li>実 <code>~/.copilot</code> の 5 件のログは、<strong>VS Code が CLI を stdio サーバーとして起動したときのもの</strong> (ログ本文が "Starting CLI in server mode (stdio)" で始まる)。<strong>同じ <code>~/.copilot</code> を 2 種類の書き手が共有している</strong></li>
+</ul>
+<p>つまり交差 0 件は偶然ではない。<strong>2 つのファイル群は別のものを数えており、突き合わせても稼働セッションは出てこない。</strong></p>
+<p>ただし <code>logs/</code> も稼働判定には使えない。<strong>セッション ID がログ本文に一切出ないため</strong> (37 行中 0 件)、どのプロセスがどのセッションを持っているかを結び付けられない。</p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>要求の前提が実測と異なるケース。</strong> 要求本文 (FR-C-40) は書き換えない。代替の判定方法は ADR-0014 に書いた。 <code>ide/*.lock</code> は<strong>役割を FR-C-70〜72 (IDE ワークスペース一覧) に限定する</strong>。<code>pid</code> の生存確認は FR-C-71 の「切断済み」表示にそのまま使える (3/3 生存を確認)。</p>
+</div>
+<h3 id="代わりに使える経路-実測">代わりに使える経路 (実測)</h3>
+<p>3 セッションで、鮮度・活動時刻の候補が 3 つあり、<strong>それぞれ数秒ずれる</strong>。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>セッション</th><th><code>sessions.updated_at</code> (DB)</th><th><code>workspace.yaml</code> mtime</th><th><code>events.jsonl</code> mtime</th><th>events サイズ</th></tr></thead>
+<tbody>
+<tr><td>db756c0c</td><td>17:09:15.375</td><td>17:09:15.098</td><td>17:09:17.880</td><td>45,354</td></tr>
+<tr><td>240cecb1</td><td><strong>17:14:22.677</strong></td><td>17:14:22.667</td><td>17:14:26.993</td><td>142,681</td></tr>
+<tr><td>ffb77b8d</td><td>17:13:36.502</td><td>17:13:36.147</td><td>17:13:50.864</td><td>103,224</td></tr>
+</tbody></table></div>
+<ul>
+<li>順序は常に <code>sessions.updated_at</code> ≈ <code>workspace.yaml</code> mtime (差 10ms 以内) <strong>&lt;</strong> <code>events.jsonl</code> mtime</li>
+<li><strong><code>sessions.updated_at</code> は最後のイベントより 4〜14 秒早い。</strong> ターン開始時に書かれ、<code>events.jsonl</code> はその後も追記が続くため</li>
+<li><strong><code>sessions.updated_at</code> は再開でちゃんと進む</strong> (240cecb1 は created 17:10:51 → updated 17:14:22 で、<code>--resume</code> の後)。稼働検出に使える</li>
+<li><strong><code>sessions.updated_at</code> は DB の列であってファイルの mtime ではない。</strong> FR-P-56 が言う「中身のタイムスタンプ」に該当する。mtime とは別物として扱う</li>
+<li>ただしこれは「値が変化したときだけ更新される観測時刻」(FR-C-86) ではなく<strong>書き込み時刻</strong>である。<strong>FR-C-86 の観測時刻は我々の側で持つ必要がある</strong></li>
+</ul>
+<p><code>session.shutdown</code> の有無も終了の手掛かりになるが、<strong>1 ファイルに複数現れる</strong> (OQ-02) ため、「末尾から遡って最初のレコードが <code>session.shutdown</code> か」までしか使えない。</p>
+<p>判定方法の決定は ADR-0014 (<code>events.jsonl</code> の末尾 + mtime を主経路にし、<code>session-store.db</code> には依存しない)。</p>
+<h3 id="sdk-が定義するフックイベント-参考">SDK が定義するフックイベント (参考)</h3>
+<p><code>@github/copilot-sdk</code> の <code>dist/generated/rpc.d.ts</code> に、<code>sessionStart</code> / <code>sessionEnd</code> / <code>postResult</code> / <code>prePRDescription</code> / <code>errorOccurred</code> / <code>agentStop</code> / <strong><code>subagentStart</code> / <code>subagentStop</code></strong> / <code>preCompact</code> / <code>permissionRequest</code> / <code>notification</code> が定義されている。<strong>採用しない</strong> (ADR-0012。ユーザーの設定ファイルへの書き込みを伴う)。</p>
+<h3 id="この数字から言えないこと-4">この数字から言えないこと</h3>
+<ul>
+<li><strong>CLI background / coding agent / VS Code 拡張の 3 経路は 1 度も動かしていない。</strong> 測定できたのは CLI interactive (<code>client_name: github/cli</code>) のみ</li>
+<li><code>events.jsonl</code> の mtime を使う代替経路は<strong>設計として決めただけで、「稼働中に見える / 終了後に消える」ことを通しで確認していない</strong>。段階 5 の実機確認 (T-5.1) で確かめる</li>
+<li>lock ファイルがプロセス終了時に消えるかは未確認 (3 件とも PID 生存中だったため)。FR-C-71 が言う stale な行はまだ観測していない</li>
+<li><strong>N 秒しきい値 (FR-C-50 の目安 120 秒) の妥当性は測っていない。</strong> 上表のずれは 4〜14 秒で、120 秒には収まる</li>
+</ul>
 <hr />
 <h2 id="oq-05-session-store.db-を安全に読めるか">OQ-05 — <code>session-store.db</code> を安全に読めるか</h2>
-<p><strong>状態</strong>: 未調査</p>
+<p><strong>状態</strong>: 一部判明</p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
 <tr><td>知りたいこと</td><td>スキーマと、<strong>他プロセスが開いている最中に安全に読めるか</strong> (WAL / ロック)</td></tr>
-<tr><td>確認方法</td><td>コピーして読む → 読み取り専用オープンを試す (DR-05)</td></tr>
-<tr><td>影響範囲</td><td>FR-C-01〜09。<strong>自前索引を作らずに済む可能性がある</strong></td></tr>
+<tr><td>確認方法</td><td>隔離 <code>COPILOT_HOME</code> で CLI 実行中に読み取り専用オープンを反復</td></tr>
+<tr><td>影響範囲</td><td>FR-C-01〜09、ADR-0003 / ADR-0013</td></tr>
 </tbody></table></div>
-<p>この環境には現時点で <code>session-store.db</code> が存在しない (<code>session-state/</code> と同様、CLI 未使用のため)。</p>
+<p><code>&lt;COPILOT_HOME&gt;/session-store.db</code> + <code>-wal</code> + <code>-shm</code>。<strong><code>PRAGMA journal_mode</code> = <code>wal</code></strong>。</p>
+<h3 id="同時読み取りの実測">同時読み取りの実測</h3>
+<p>CLI が<strong>セッションを実行中 (書き込み中)</strong> に、Node 24 の <code>node:sqlite</code> で <code>new DatabaseSync(path, { readOnly: true })</code> を <strong>1.2 秒間隔で 12 回</strong>試行した。</p>
+<ul>
+<li><strong>12/12 成功。所要 2〜4ms</strong></li>
+<li>その間 WAL は 502,672 → 609,792 バイトに増え、<code>assistant_usage_events</code> が 7 → 10 行に増えるのを<strong>ライブで読めた</strong></li>
+<li><strong>コピー不要</strong> (DR-05 が挙げる「コピーして読む」は不要だった)</li>
+</ul>
+<h3 id="スキーマ">スキーマ</h3>
+<p>テーブルは <code>schema_version</code> / <code>sessions</code> / <code>turns</code> / <code>checkpoints</code> / <code>session_files</code> / <code>session_refs</code> / <code>forge_trajectory_events</code> / <strong><code>assistant_usage_events</code></strong> / <code>forge_skill_proposals</code> / <code>search_index</code> (FTS5 仮想テーブル + 付随 5 テーブル) / <code>dynamic_context_items</code>。</p>
+<pre><code class="language-sql">CREATE TABLE sessions ( id TEXT PRIMARY KEY, cwd TEXT, repository TEXT, host_type TEXT,
+  branch TEXT, summary TEXT, created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')) )
+CREATE INDEX idx_sessions_cwd ON sessions(cwd)
+CREATE INDEX idx_sessions_repo ON sessions(repository)
+
+CREATE TABLE turns ( id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id),
+  turn_index INTEGER NOT NULL, user_message TEXT, assistant_response TEXT,
+  timestamp TEXT DEFAULT (datetime('now')), UNIQUE(session_id, turn_index) )
+
+CREATE TABLE assistant_usage_events ( id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES sessions(id), turn_index INTEGER,
+  agent_id TEXT, parent_tool_call_id TEXT, model TEXT NOT NULL,
+  input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+  cache_write_tokens INTEGER, reasoning_tokens INTEGER, total_nano_aiu INTEGER,
+  request_multiplier REAL, duration_ms INTEGER, time_to_first_token_ms INTEGER,
+  output_ttft_ms REAL, inter_token_latency_ms INTEGER, initiator TEXT, api_endpoint TEXT,
+  reasoning_effort TEXT, finish_reason TEXT, content_filter_triggered INTEGER,
+  token_details_json TEXT, created_at TEXT DEFAULT (datetime('now')) )
+CREATE INDEX idx_assistant_usage_events_session ON assistant_usage_events(session_id, id)
+CREATE INDEX idx_assistant_usage_events_session_turn ON assistant_usage_events(session_id, turn_index)
+CREATE INDEX idx_assistant_usage_events_model ON assistant_usage_events(model)</code></pre>
+<ul>
+<li><code>initiator</code> の実測値: <strong><code>user</code> / <code>agent</code> / <code>sub-agent</code></strong></li>
+<li><code>finish_reason</code> の実測値: <code>stop</code> / <code>tool_calls</code></li>
+<li><code>sessions.cwd</code> は Windows のバックスラッシュ絶対パス。<code>repository</code> / <code>host_type</code> / <code>branch</code> は今回のサンプルでは<strong>すべて <code>null</code></strong> (git リポジトリ外の作業ディレクトリだったため)</li>
+</ul>
+<h3 id="実測行数-3-セッション時点">実測行数 (3 セッション時点)</h3>
+<p><code>sessions</code> 3 / <code>turns</code> <strong>2</strong> / <code>assistant_usage_events</code> 11 / <code>checkpoints</code> 0 / <code>session_files</code> 0 / <code>session_refs</code> 0 / <code>forge_trajectory_events</code> 0 / <code>forge_skill_proposals</code> 0 / <code>dynamic_context_items</code> 0。</p>
+<h3 id="inv-6-との関係">INV-6 との関係</h3>
+<p><strong><code>turns</code> には <code>user_message</code> / <code>assistant_response</code> の本文がそのまま入る。</strong> ただしこれは<strong>我々の DB ではなく Copilot 側の DB</strong> なので、<strong>読むこと自体は INV-6 に触れない</strong> (INV-6 / FR-C-02 が禁じているのは、我々の <code>app.db</code> に本文を複製すること)。</p>
+<p>一方で「<strong>本文を持たない索引</strong>」という設計理由は変わらない。むしろ強まった。</p>
+<ul>
+<li><strong><code>turns</code> は 3 セッションで 2 行しか無い</strong>のに対し <code>events.jsonl</code> は 77 レコード。<code>turns</code> は全レコードを持たず、<strong>本文の正は <code>events.jsonl</code></strong></li>
+<li><code>turns</code> にはバイトオフセットに相当する位置情報が無く、FR-C-120 のビューア (1 レコードだけシーク読み) に使えない</li>
+</ul>
+<p>判断は ADR-0003 (自前索引を続ける) と ADR-0013 (<code>session-store.db</code> の役割を限定する)。</p>
+<h3 id="この数字から言えないこと-5">この数字から言えないこと</h3>
+<ul>
+<li><strong>writer が居ない状態での読み取り専用オープンを測っていない。</strong> 12/12 の成功はすべて CLI が実行中 (= <code>-shm</code> が他プロセスに保持されている状態) での測定である。SQLite は WAL の復旧に <code>-wal</code> / <code>-shm</code> への<strong>書き込み</strong>を要することがあり、それは INV-1 (Copilot 側に書かない) に抵触する。<strong>測っていない条件に賭けない</strong> (ADR-0013)</li>
+<li>行数が小さすぎる。<code>turns</code> が 3 セッションで 2 行しか無い理由 (特定の経路でしか書かれないのか、遅延書き込みなのか) は分かっていない</li>
+<li><code>schema_version</code> の値も、バージョン差でスキーマがどう動くかも見ていない</li>
+<li>数百 MB 規模の <code>session-store.db</code> に対して所要 2〜4ms が保たれるかは分からない</li>
+</ul>
 <hr />
-<h2 id="oq-06-account.getquota-が個人アカウントで何を返すか">OQ-06 — <code>account.getQuota</code> が個人アカウントで何を返すか</h2>
-<p><strong>状態</strong>: 未調査</p>
+<h2 id="oq-06-経路-a-copilot-sdk-が個人アカウントで何を返すか">OQ-06 — 経路 A (Copilot SDK) が個人アカウントで何を返すか</h2>
+<p><strong>状態</strong>: 一部判明 (<strong>設計判断に必要な部分は決着した。確定にはしない</strong>)</p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
-<tr><td>知りたいこと</td><td><code>quotaSnapshots</code> のキーに何が並ぶか / 月次クレジット残高が取れるか / <code>entitlementRequests</code> の意味 (リクエスト数か額か) / <code>1 AI Credit = $0.01</code> の裏取り</td></tr>
-<tr><td>確認方法</td><td>T-0.6。SDK を実アカウントで叩く</td></tr>
+<tr><td>知りたいこと</td><td><code>quotaSnapshots</code> のキーに何が並ぶか / 月次クレジット残高が取れるか / <code>entitlementRequests</code> の意味 / <code>1 AI Credit = $0.01</code> の裏取り</td></tr>
+<tr><td>確認方法</td><td>T-0.6 (<code>tools/probe/quota-sdk.mjs</code>) と T-0.8 (<code>tools/probe/quota-rest.mjs</code> の SDK 比較部)。<code>@github/copilot-sdk</code> 1.0.13</td></tr>
 <tr><td>影響範囲</td><td>FR-C-80〜95、FR-C-130〜144</td></tr>
 </tbody></table></div>
 <div class="warning"><span class="note-title">注意</span>
-<p><strong>取れないなら経路 B (REST) が主役になり、FR-C-130 の優先順が入れ替わる。</strong>段階 6 の設計がここで決まる。 <code>1 AI Credit = $0.01</code> は二次情報。<strong>実装前に実測で確認する</strong> (要求 付録 A.4)。裏が取れないうちは、金額換算を出さずに率だけを出す。</p>
+<p><strong>2026-09-08 の T-0.8 で、このセクションの記述を 3 点訂正した。</strong></p>
+<ol>
+<li><code>resetDate</code> は「<strong>問い合わせ時刻に追従する</strong>」のではない。中身は<strong>利用枠スナップショットの観測時刻</strong> (<code>timestamp_utc</code>) である</li>
+<li><code>remainingPercentage</code> が再計算と一致しない理由が判明した。<strong>丸めの異なる 3 つの消費量が返っている</strong>ためで、単位不明だからではない</li>
+<li><strong>月次の付与額 (分母) と本物のリセット日は、経路 B ではなく経路 A の <code>account.getCurrentAuth</code> で取れる</strong></li>
+</ol>
+<p>訂正前の記述は誤った観測に基づいていた。<strong>訂正前の結論に依存した実装・タスクが無いか確認すること。</strong></p>
 </div>
+<h3 id="経路-a-には-api-が-2-つあり-返る情報量が違う">経路 A には API が 2 つあり、返る情報量が違う</h3>
+<p><code>account.getQuota</code> は <code>account.getCurrentAuth</code> の<strong>劣化した射影</strong>である。同じサーバ側スナップショットを元にしているが、落ちている情報がある。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th><code>account.getQuota</code></th><th><code>account.getCurrentAuth</code></th></tr></thead>
+<tbody>
+<tr><td>枠あたりのフィールド数</td><td><strong>10</strong></td><td><strong>12</strong></td></tr>
+<tr><td>付与額</td><td><code>entitlementRequests</code> (200)</td><td><code>entitlement</code> (200) — <strong>同値</strong></td></tr>
+<tr><td>残率</td><td><code>remainingPercentage</code> (99.2)</td><td><code>percent_remaining</code> (99.2) — <strong>同値</strong></td></tr>
+<tr><td>消費量</td><td><code>usedRequests</code> (2) = <strong>整数丸め</strong></td><td><code>quota_remaining</code> (<strong>198.4</strong>) から小数で出せる</td></tr>
+<tr><td>月次リセット日</td><td><strong>返らない</strong></td><td><strong><code>copilotUser.quota_reset_date</code> = <code>2026-10-01</code></strong></td></tr>
+<tr><td>枠が適用されるか</td><td><code>hasQuota</code> (<strong>型宣言に無い</strong>)</td><td><code>has_quota</code></td></tr>
+<tr><td>プラン識別</td><td>返らない</td><td><code>copilot_plan</code> / <code>access_type_sku</code></td></tr>
+<tr><td>観測時刻</td><td><code>resetDate</code> (<strong>名前が誤り</strong>)</td><td><code>timestamp_utc</code> (<strong>同値</strong>)</td></tr>
+</tbody></table></div>
+<p><code>getQuota</code> が落としている情報: <strong>小数の <code>quota_remaining</code></strong> / <strong>本物の <code>quota_reset_date</code></strong> / <code>quota_id</code> / プラン識別子。加えて <code>timestamp_utc</code> を <strong><code>resetDate</code> という誤った名前</strong>で返している。</p>
+<p><code>getCurrentAuth().authInfo.copilotUser</code> の実測値 (2026-09-08):</p>
+<pre><code>copilot_plan         : individual
+access_type_sku      : free_limited_copilot
+token_based_billing  : true
+quota_reset_date     : 2026-10-01
+quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
+<h3 id="resetdate-の正体-2-経路の同時取得で確定した"><code>resetDate</code> の正体 — 2 経路の同時取得で確定した</h3>
+<p>同じ数秒の間に、<strong>SDK (JSON-RPC + FFI ランタイム) と REST (<code>gh</code> CLI) を別プロセスで</strong>叩いた。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>経路</th><th>値</th></tr></thead>
+<tbody>
+<tr><td>SDK <code>probedAt</code></td><td><code>2026-09-08T11:58:32.827Z</code></td></tr>
+<tr><td>SDK <code>getQuota().quotaSnapshots.chat.resetDate</code></td><td><strong><code>2026-09-08T11:58:34.381Z</code></strong></td></tr>
+<tr><td>REST <code>copilot_internal/user</code> の <code>quota_snapshots.chat.timestamp_utc</code></td><td><strong><code>2026-09-08T04:58:34.381-07:00</code></strong> (= <code>11:58:34.381Z</code>)</td></tr>
+<tr><td>REST <code>probedAt</code></td><td><code>2026-09-08T11:58:35.748Z</code></td></tr>
+</tbody></table></div>
+<ul>
+<li><strong><code>resetDate</code> と <code>timestamp_utc</code> はミリ秒まで同一</strong> (表記は SDK が <code>Z</code>、REST が <code>-07:00</code> オフセット)。<strong>別プロセス・別経路での一致なので、片方のクライアントの癖ではない</strong></li>
+<li>3 枠とも <code>timestamp_utc</code> は同一値 (<code>allTimestampsIdentical: true</code> / <code>uniqueTimestampCount: 1</code>)</li>
+<li><strong><code>quota_reset_at</code> は 3 枠とも <code>0</code></strong> (<code>allQuotaResetAtAreZero: true</code>)。<strong>使えない</strong></li>
+<li><strong>本物のリセット日は <code>copilotUser.quota_reset_date</code> = <code>2026-10-01</code> / <code>quota_reset_date_utc</code> = <code>2026-10-01T00:00:00.000Z</code></strong></li>
+</ul>
+<p><strong>結論</strong>: <code>account.getQuota</code> の <strong><code>resetDate</code> はフィールド名が実体と一致していない</strong>。中身は利用枠スナップショットの観測時刻である。<strong>リセット日として表示しない</strong>という結論は変わらないが、<strong>理由が変わった</strong>。</p>
+<h4 id="訂正-呼ぶたびに動く-は誤りだった">訂正: 「呼ぶたびに動く」は誤りだった</h4>
+<p>同一プロセスで <strong>3 回連続</strong> (約 2.5 秒間隔、計 8 秒) に呼んだ結果:</p>
+<pre><code>#0 getCurrentAuth timestamp_utc = 2026-09-08T04:53:32.286-07:00   getQuota resetDate = 同値
+#1 getCurrentAuth timestamp_utc = 同値                            getQuota resetDate = 同値
+#2 getCurrentAuth timestamp_utc = 同値                            getQuota resetDate = 同値</code></pre>
+<p><strong>3 回とも完全に同一。呼ぶたびに動くのではない。</strong></p>
+<ul>
+<li>2026-09-07 に 11 分あけた 2 回の取得で値が動いて見えたのは、<strong>その間に実際に消費が発生してスナップショットが更新されたため</strong> (CLI セッション 4 回 = 1.552 AI Credits)</li>
+<li>呼び出し時刻との前後関係も一定しない。2026-09-07 の測定では <code>resetDate</code> = <code>17:28:04.715Z</code> に対し <code>probedAt</code> = <code>17:28:31.134Z</code> で <strong>26 秒前</strong>。2026-09-08 の測定では <code>probedAt</code> の <strong>1.5 秒後</strong>。<strong>「呼んだ瞬間の時刻」ではない</strong></li>
+<li>1.5 秒後になるのは <strong>SDK クライアントの起動時 (<code>client.start()</code> に 663ms) にスナップショットが取り直されている</strong>ためと見られるが、<strong>これは推測で、検証していない</strong></li>
+</ul>
+<h4 id="鮮度-fr-c-86-にどこまで使えるか">鮮度 (FR-C-86) にどこまで使えるか</h4>
+<ul>
+<li><strong>使える</strong>: <code>timestamp_utc</code> は FR-C-86 が禁じる「取得しに行った時刻」ではなく、<strong>取得元スナップショットの観測時刻</strong>である。<strong>出所の観測時刻としてはそのまま使える</strong></li>
+<li><strong>足りない</strong>: 「<strong>値が変化したときだけ更新される</strong>」保証が無い。<strong><code>quota_remaining</code> が 198.4 のまま <code>timestamp_utc</code> だけが動いた実例がある</strong> — <code>11:51:22.610</code> / <code>11:53:32.286</code> / <code>11:58:34.381</code> の 3 時点で <code>quota_remaining</code> はいずれも 198.4 (プローブ出力は最終実行で上書きされるため、前 2 者は実行ログからの値)</li>
+<li>したがって「<strong>この値が動いた = 利用枠が変わった</strong>」とは言えない</li>
+<li>→ <strong>FR-C-86 が求める観測時刻は、我々の側で <code>observed_at</code> として持つ必要がある</strong> (値が変わったときだけ更新する)。<strong>この結論は訂正前と同じだが、理由が違う。</strong> 訂正前は「毎回変わるから使えない」、正しくは「<strong>観測時刻としては正しいが、変化検知には使えない</strong>」</li>
+<li><strong>FR-C-85 (リセット日時を過ぎた観測を除外) には <code>quota_reset_date_utc</code> を使う。</strong> <code>resetDate</code> でも <code>quota_reset_at</code> (= 0) でもない</li>
+</ul>
+<h3 id="remainingpercentage-の謎が解けた-同じ消費が-3-通りの丸めで返る"><code>remainingPercentage</code> の謎が解けた — 同じ消費が 3 通りの丸めで返る</h3>
+<p><code>chat</code> 枠の実測 (2026-09-08、<code>copilot_internal/user</code> と <code>getCurrentAuth</code> で同値):</p>
+<div class="table-wrap"><table>
+<thead><tr><th>値</th><th>計算</th><th>実測</th></tr></thead>
+<tbody>
+<tr><td><code>entitlement − quota_remaining</code></td><td>200 − 198.4</td><td><strong>1.6</strong> (小数)</td></tr>
+<tr><td><code>entitlement − remaining</code></td><td>200 − 198</td><td><strong>2</strong> (整数)</td></tr>
+<tr><td><code>credits_used</code></td><td>—</td><td><strong>1</strong> (REST のみ。<code>getCurrentAuth</code> には無い)</td></tr>
+</tbody></table></div>
+<p><strong>3 つとも異なる。</strong> そのうえで:</p>
+<ul>
+<li><strong><code>percent_remaining</code> = <code>quota_remaining / entitlement × 100</code> が厳密一致する</strong> (chat 198.4/200 = 99.2、completions 2000/2000 = 100。プローブの <code>percentMatchesComputedExactly: true</code>)。<code>entitlement = 0</code> の枠だけ計算不能</li>
+<li><code>getQuota</code> の <strong><code>usedRequests</code> は <code>entitlement − remaining</code> (整数丸め) と一致する</strong> (chat 2 / 2)</li>
+</ul>
+<p>→ <strong><code>(entitlementRequests − usedRequests) / entitlementRequests</code> が <code>remainingPercentage</code> と一致しないのは正常。</strong> (200−2)/200 = 99.0% と実値 99.2% (= 198.4/200) の <strong>0.2 ポイント差は丸め誤差そのもの</strong>である。API のバグでも単位不明でもない。</p>
+<p><strong>「再計算しない」という結論は変わらないが、理由が変わった。</strong> 「単位不明の値だから」ではなく「<strong>丸めの異なる 3 つの値が混在しているから</strong>」。</p>
+<p><strong><code>usedRequests</code> についての訂正</strong>: 前の記述は「API 呼び出し数でもトークン量でもない、単位不明の値」としていた。正しくは <strong><code>entitlement − remaining</code>、すなわち整数に丸めた消費量</strong>である。API 呼び出し 11 回に対して 2 しか増えなかったのは、真の消費が <strong>1.55</strong> で整数丸めが効いたため。<strong>API 呼び出し数と一致しないのが正しい。</strong> ただし丸め上げが入るので、<strong>表示にも計算にも使わない</strong>。</p>
+<h3 id="3-枠の実測値と-has_quota">3 枠の実測値と <code>has_quota</code></h3>
+<div class="table-wrap"><table>
+<thead><tr><th>枠</th><th>entitlement</th><th>quota_remaining</th><th>remaining</th><th>credits_used</th><th>percent_remaining</th><th>has_quota</th><th>quota_reset_at</th></tr></thead>
+<tbody>
+<tr><td><code>chat</code></td><td>200</td><td><strong>198.4</strong></td><td>198</td><td>1</td><td><strong>99.2</strong></td><td>true</td><td>0</td></tr>
+<tr><td><code>completions</code></td><td>2000</td><td>2000</td><td>2000</td><td>0</td><td>100</td><td>true</td><td>0</td></tr>
+<tr><td><code>premium_interactions</code></td><td><strong>0</strong></td><td>0</td><td>0</td><td>0</td><td><strong>0</strong></td><td><strong>false</strong></td><td>0</td></tr>
+</tbody></table></div>
+<p>13 フィールドの集合は 3 枠とも同一: <code>overage_count</code> / <code>overage_permitted</code> / <code>percent_remaining</code> / <code>quota_id</code> / <code>quota_remaining</code> / <code>unlimited</code> / <code>timestamp_utc</code> / <code>has_quota</code> / <code>quota_reset_at</code> / <code>token_based_billing</code> / <code>credits_used</code> / <code>remaining</code> / <code>entitlement</code>。<strong><code>getCurrentAuth</code> は <code>credits_used</code> を除く 12 フィールド。</strong></p>
+<p><strong><code>premium_interactions</code> は <code>percent_remaining</code> に <code>0</code> を返す。</strong> これは「残り 0%」ではなく「<strong>この枠は適用されない</strong>」の意味である (<code>has_quota: false</code> / <code>entitlement: 0</code>)。</p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong><code>0</code> をそのままゲージに載せると「枠を使い切った」と読める。</strong> FR-C-88 のしきい値では <code>90% 以上 = 危険</code> に該当し、<strong>適用外の枠が真っ赤なゲージになる。</strong> 適用外の判定は <strong><code>has_quota === false</code> を第一基準</strong>にする。<code>entitlement &lt;= 0</code> は 0 除算ガードとして併用する (FR-C-131)。</p>
+</div>
+<h3 id="entitlement-の単位-ai-credits-建ての可能性が高い-2-点-いずれも導出"><code>entitlement</code> の単位 — AI Credits 建ての可能性が高い (2 点、いずれも導出)</h3>
+<p><code>quota_remaining</code> は<strong>小数第 1 位までしか返らない</strong>ため、報告値から真の消費は<strong>区間としてしか読めない</strong>。ローカルの <code>assistant_usage_events.total_nano_aiu</code> 合計 (= <code>totalNanoAiu / 10^9</code>) と突き合わせた。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>時点</th><th>サーバ側の報告</th><th>そこから読める真の消費</th><th>ローカル実測</th><th>収まるか</th></tr></thead>
+<tbody>
+<tr><td>2026-09-07 17:10 (セッション 1 件のみ完了)</td><td><code>remainingPercentage</code> = 99.8</td><td>(0.35, 0.45]</td><td><strong>0.3826</strong> (382,635,000 nanoAIU)</td><td><strong>収まる</strong></td></tr>
+<tr><td>2026-09-08 (4 セッション / API 11 回すべて完了後)</td><td><code>quota_remaining</code> = 198.4</td><td>(1.55, 1.65]</td><td><strong>1.5525</strong> (1,552,497,000 nanoAIU)</td><td><strong>収まる</strong></td></tr>
+</tbody></table></div>
+<p><strong>2 点とも収まる。</strong> <code>token_based_billing: true</code> とも整合する。→ <strong><code>chat</code> 枠の <code>entitlement: 200</code> は「200 AI Credits」である可能性が高い。</strong></p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>2 点とも「区間に収まる」という導出であって、独立した実測ではない。</strong></p>
+<ul>
+<li>1 点目は <code>remainingPercentage</code> (小数第 1 位) からの逆算。生の <code>quota_remaining</code> を記録していないため、丸めの見込み方によって区間は (0.35, 0.45] から (0.3, 0.5] まで広がる。<strong>どちらの読み方でも 0.3826 は収まる</strong>が、区間が広い分だけ弱い</li>
+<li>2 点目は「<strong>この期間の chat 消費はすべて隔離 <code>COPILOT_HOME</code> のセッションによる</strong>」という前提に依存する。実 <code>~/.copilot</code> にセッションが 1 件も無いこと (測定環境) がその根拠だが、VS Code 経由の chat 消費までは排除できていない</li>
+<li><strong>1 アカウント・1 プランのみ。</strong> <code>copilot_plan: individual</code> / <code>access_type_sku: free_limited_copilot</code> = <strong>無料枠</strong></li>
+<li>要求 付録 A.4 は「<strong>月額プラン料金と同額のクレジットが毎月付与される</strong>」と書くが、<strong>このアカウントは無料プランで <code>entitlement: 200</code></strong>。<strong>有料プランで <code>entitlement</code> が何を意味するかは測れていない</strong></li>
+</ul>
+<p>→ <strong>枠の名前は API が返す <code>quota_id</code> (<code>chat</code> / <code>completions</code> / <code>premium_interactions</code>) をそのまま使い、<code>chat</code> を「月次 AI Credits」と読み替えない</strong> (ADR-0015 / INV-7)。</p>
+</div>
+<h3 id="models.list-と単価-t-0.6-から変更なし"><code>models.list</code> と単価 (T-0.6 から変更なし)</h3>
+<p><strong><code>models.list({})</code> は呼べたが、返ったのは <code>"auto"</code> 1 件のみで <code>billing</code> フィールドが無い</strong> (2026-09-08 の再取得でも同じ。<code>modelCount: 1</code> / <code>billingKeys: null</code>)。→ <strong>FR-C-134 が前提にしている「単価を実行時に読む」経路が、この呼び方では成立しない。</strong></p>
+<p><strong><code>1 AI Credit = $0.01</code> の裏取り材料は依然として無い。</strong> → ADR-0010 のとおり金額 ($) 換算を出さない。</p>
+<p>ただし <strong><code>totalNanoAiu / 10^9 = AI Credits</code> は実測で一致した</strong> (OQ-01)。「<strong>AI Credit をいくら使ったか</strong>」はローカルで正確に出せる。分かっていないのは「<strong>1 credit が何ドルか</strong>」の 1 点に絞られた (<strong>分母は経路 A で取れるようになった</strong>)。</p>
+<h3 id="この数字から言えないこと-6">この数字から言えないこと</h3>
+<ul>
+<li><strong>アカウントは 1 つ、プランも 1 つ</strong> (<code>individual</code> / <code>free_limited_copilot</code>)。<strong>組織 / Enterprise 管理下・有料プランで同じキー / 同じ <code>entitlement</code> の意味になるかは分からない</strong></li>
+<li><strong><code>overage</code> / <code>overage_count</code> / <code>overage_permitted</code> は 3 枠とも <code>0</code> / <code>false</code>。</strong> FR-C-90 (超過の別建て) が実際にどう返るかを <strong>1 件も観測していない</strong>。<code>overage_permitted: false</code> なので、このアカウントでは原理的に超過が起きない</li>
+<li><strong><code>unlimited</code> は 3 枠とも <code>false</code>、<code>entitlement</code> に <code>-1</code> は 1 度も現れていない。</strong> FR-C-131 が名指しする「<code>-1</code> = 無制限」は<strong>未観測</strong>。実在したのは <code>0</code> + <code>has_quota: false</code> の方</li>
+<li><strong><code>credits_used</code> の定義が分からない</strong> (chat で <code>1</code>。他の 2 つの消費量 1.6 / 2 と一致しない)。切り捨てなのか別のカウンタなのか不明。<strong><code>getCurrentAuth</code> には無い</strong>フィールドなので使わない</li>
+<li>~~<code>getCurrentAuth</code> の戻り値の型宣言を確認していない~~ → <strong>2026-09-08 に <code>dist/generated/rpc.d.ts</code> で確認済み。</strong><code>quota_snapshots</code> / <code>quota_reset_date</code> / <code>quota_reset_date_utc</code> はいずれも<strong>宣言あり</strong>。<code>CopilotUserResponseQuotaSnapshotsChat</code> の 12 フィールド (<code>entitlement</code> / <code>quota_remaining</code> / <code>percent_remaining</code> / <code>has_quota</code> / <code>timestamp_utc</code> / <code>unlimited</code> / <code>overage_count</code> / <code>overage_permitted</code> / <code>quota_id</code> / <code>remaining</code> / <code>quota_reset_at</code> / <code>token_based_billing</code>) も<strong>全部宣言あり</strong>。<code>copilotUser?</code> は <code>AuthInfo</code> の 8 バリアント<strong>すべて</strong>に宣言されている。<strong><code>credits_used</code> だけが型に無く</strong>、<code>getCurrentAuth</code> が返さない理由の説明がつく (詳細と帰結は ADR-0017)。<strong>ただし全フィールドが optional (<code>?</code>) なので、防御的パースは依然として必須</strong></li>
+<li><code>models.list</code> が <code>"auto"</code> 1 件しか返さない理由 (引数の与え方 / セッション未接続 / プラン依存) を切り分けていない。<strong><code>billing</code> が原理的に取れないのか、呼び方が違うだけなのかが分かっていない</strong></li>
+<li><strong>リセット (<code>2026-10-01</code>) をまたいだ挙動を見ていない。</strong> FR-C-85 の除外判定は実測で確かめられていない</li>
+<li>Rust から SDK を叩く経路は試していない (OQ-08)。<strong>測定はすべて Node の TypeScript バインディング</strong></li>
+</ul>
 <hr />
 <h2 id="oq-07-サブエージェント-委任タスクの概念があるか">OQ-07 — サブエージェント / 委任タスクの概念があるか</h2>
-<p><strong>状態</strong>: 未調査</p>
+<p><strong>状態</strong>: <strong>確定</strong> — 存在する。<strong>縮退不要</strong></p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
-<tr><td>知りたいこと</td><td><code>agents/*.agent.md</code> や coding agent への委任に相当する概念があるか。その親子関係が <code>events.jsonl</code> に残るか</td></tr>
-<tr><td>確認方法</td><td>T-0.3 と同じデータから。実際に委任を使ったセッションを作って観察する</td></tr>
+<tr><td>知りたいこと</td><td>委任に相当する概念があるか。その親子関係が <code>events.jsonl</code> に残るか</td></tr>
+<tr><td>確認方法</td><td>T-0.3。実際に委任するセッションを作って観察</td></tr>
 <tr><td>影響範囲</td><td>FR-C-21〜27、FR-C-112〜118</td></tr>
 </tbody></table></div>
-<p><strong>無ければ FR-C-21〜27 と系統図・ガントは大幅に縮退する。</strong> その場合は段階 7 のタスク T-7.5〜7.9 を落とし、セッション単位のガントだけにする。</p>
+<ul>
+<li>サブエージェントは<strong>一級の概念</strong>。<code>.github/agents/&lt;name&gt;.agent.md</code> (frontmatter に <code>name</code> / <code>description</code> / <code>tools</code>) で定義し、CLI の <strong><code>task</code> ツール</strong>で委任される</li>
+<li>委任時の <code>tool.execution_start.data</code> = <code>{toolCallId, toolName:"task", arguments:{description, prompt, agent_type, name, mode:"sync"}, turnId, model}</code></li>
+<li><code>events.jsonl</code> に <strong><code>subagent.started</code> / <code>subagent.configured</code> / <code>subagent.completed</code></strong> が残る (各 1 件)</li>
+<li><code>subagent.started.data</code> = <code>{toolCallId, agentName, agentDisplayName, agentDescription, model, resumable, agentType, executionMode}</code>。<code>parentId</code> は<strong>親の <code>tool.execution_start</code> の <code>id</code></strong></li>
+<li><code>subagent.completed.data</code> = <code>{toolCallId, agentName, agentDisplayName, model, firstDispatchedModel, totalToolCalls, totalTokens, durationMs}</code></li>
+<li>サブエージェントは<strong>入れ子でターンを回す</strong>。実測で、子が turnId 0 → 1 → 2 と 3 ターン回す間、親は 1 ターンのままだった</li>
+</ul>
+<h3 id="親子リンクは両側にある-fr-c-22-が満たせる">親子リンクは両側にある (FR-C-22 が満たせる)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>候補キー</th><th>件数</th><th>出現率</th><th>ユニーク数</th></tr></thead>
+<tbody>
+<tr><td><code>parentId</code></td><td>77</td><td>100.0%</td><td>74</td></tr>
+<tr><td><code>agentId</code></td><td>18</td><td>23.4%</td><td>1</td></tr>
+<tr><td><code>data.parentToolCallId</code></td><td>7</td><td>9.1%</td><td>1</td></tr>
+<tr><td><code>data.parentAgentTaskId</code></td><td>5</td><td>6.5%</td><td>5</td></tr>
+<tr><td><code>data.agentMetrics</code></td><td>4</td><td>5.2%</td><td>—</td></tr>
+<tr><td><code>data.agentName</code></td><td>2</td><td>2.6%</td><td>—</td></tr>
+<tr><td><code>data.agentDisplayName</code></td><td>2</td><td>2.6%</td><td>—</td></tr>
+<tr><td><code>data.agentDescription</code></td><td>1</td><td>1.3%</td><td>—</td></tr>
+<tr><td><code>data.agentType</code></td><td>1</td><td>1.3%</td><td>—</td></tr>
+</tbody></table></div>
+<ul>
+<li>子レコードの <code>agentId</code> (23.4%、<strong>子側のみ</strong>)</li>
+<li>子のツール呼び出しの <code>data.parentToolCallId</code> が<strong>親の <code>toolCallId</code></strong> を指す</li>
+<li><code>session.shutdown.data.agentMetrics</code> が <code>main</code> と <code>&lt;agentId&gt;</code> をキーに <code>agentName</code> / <code>agentDisplayName</code> / <code>totalApiDurationMs</code> / <code>totalNanoAiu</code> / <code>modelMetrics</code> を持つ</li>
+<li>DB 側にも <code>assistant_usage_events.agent_id</code> / <code>parent_tool_call_id</code> / <code>initiator='sub-agent'</code> がある</li>
+</ul>
+<p><strong>主キーは <code>toolCallId</code> にする</strong> — 親の <code>tool.execution_start.data.toolCallId</code> と、子の <code>subagent.*.data.toolCallId</code> の<strong>両方に存在する</strong>唯一の識別子だから。判断と却下理由は ADR-0016。</p>
+<h3 id="この数字から言えないこと-7">この数字から言えないこと</h3>
+<ul>
+<li><strong>委任は 1 件しか観測していない</strong> (<code>subagent.started</code> / <code>configured</code> / <code>completed</code> が各 1 件)。深さは 2 段 (親 → 子) のみで、<strong>N 段の木 (FR-C-21) は再現していない</strong></li>
+<li><strong><code>mode</code> / <code>executionMode</code> は <code>sync</code> しか観測していない。</strong> FR-C-24 が警戒する「起動しただけの暫定応答」は<strong>非同期実行でこそ起きる</strong>はずだが、その経路を踏んでいない</li>
+<li><strong>拒否された委任 (FR-C-27 の「拒否」) を 1 件も観測していない。</strong> 拒否時に <code>tool.execution_start</code> が書かれるのか、<code>toolCallId</code> が振られるのかが分かっていない</li>
+<li>失敗 / 中断した委任も未観測</li>
+</ul>
+<p>→ <strong>OQ-11 として切り出した。T-4.9 / T-4.10 はそこが埋まるまで着手しない。</strong></p>
 <hr />
 <h2 id="oq-08-sdk-rest-の認証方法">OQ-08 — SDK / REST の認証方法</h2>
-<p><strong>状態</strong>: 未調査</p>
+<p><strong>状態</strong>: 一部判明 (SDK 側は解決、REST 側は未測定)</p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
 <tr><td>知りたいこと</td><td>認証方法と、GitHub CLI の資格情報を再利用できるか。SDK が Copilot CLI の同梱を要求するか</td></tr>
-<tr><td>確認方法</td><td>実装検証 (T-0.6 と同時)</td></tr>
+<tr><td>確認方法</td><td>T-0.6 と同時</td></tr>
 <tr><td>影響範囲</td><td>FR-C-130〜141</td></tr>
 </tbody></table></div>
-<p><strong>制約は決まっている</strong>: 認証情報をアプリが管理しない。OS の資格情報ストアまたは既存の GitHub CLI 資格情報を参照する。<strong>平文で DB / 設定ファイルに保存しない</strong> (FR-C-141 / NFR-31)。</p>
+<ul>
+<li><strong>SDK は自前ランタイムを同梱する</strong> (<code>optionalDependencies</code> に <code>@github/copilot-sdk-win32-x64</code> 等、koffi FFI 経由)。<code>client.start()</code> が <strong>663ms</strong> で成功し、<strong>Copilot CLI の別途インストールを要求しなかった</strong></li>
+<li>CLI / SDK は環境変数のトークンを <strong><code>COPILOT_GITHUB_TOKEN</code> → <code>GH_TOKEN</code> → <code>GITHUB_TOKEN</code></strong> の優先順で使う</li>
+<li><strong><code>gh auth token</code> の値を <code>GH_TOKEN</code> に渡して CLI セッションが実行でき、SDK の <code>getQuota</code> も通った。</strong> 現在の gh スコープは <code>gist, read:org, repo, workflow</code> で <strong><code>copilot</code> スコープは無い</strong>が、それでも通った</li>
+<li>SDK は<strong>引数無しでも</strong>既存の Copilot 資格情報を自力で解決できた。<code>gitHubToken</code> を明示した場合と<strong>戻り値が完全に同一</strong></li>
+<li><strong>classic PAT (<code>ghp_</code>) は非対応。</strong> fine-grained PAT は "Copilot Requests" 権限が要る</li>
+<li><strong><code>COPILOT_HOME</code> で設定と状態の保存先を丸ごと差し替えられる</strong> (今回の測定はこれで実 <code>~/.copilot</code> を汚さずに行った)</li>
+</ul>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>INV-2 の実裏付け。</strong> CLI は資格情報を <strong>OS の資格情報ストア</strong>に保存し、<strong>失敗時は <code>~/.copilot/</code> 配下の平文設定ファイルに落とす</strong> (公式ヘルプの記述)。 つまり <code>~/.copilot/config.json</code> は<strong>平文の資格情報を含みうる</strong>。INV-2 (認証情報を読まない・持たない・表示しない / DTO にフィールドを定義しない) と FR-C-72 は、推測ではなく<strong>この事実に基づく</strong>。</p>
+</div>
+<p><strong>トークンの値は一切測定しておらず、記録もしていない。</strong></p>
+<h3 id="この数字から言えないこと-8">この数字から言えないこと</h3>
+<ul>
+<li><strong>REST (経路 B) は T-0.8 で叩いた。</strong> <code>gh</code> のトークン (<code>gho_</code> 始まり / 40 文字 / スコープ <code>gist, read:org, repo, workflow</code>) で <code>copilot_internal/user</code> は <strong>200</strong> を返す。<strong><code>copilot</code> スコープが無くても通る</strong></li>
+<li>一方 <strong>公開課金 API は 10/10 が 404</strong>。うち 5 件は <code>gh</code> が <code>This API operation needs the "user" scope</code> を出しており、<strong>404 の真因はスコープ不足</strong> (OQ-12)</li>
+<li><strong><code>gh auth refresh -s user</code> は実行していない。</strong> ユーザーの資格情報 (スコープ) を変更する操作であり、調査のために勝手に広げない。<strong>スコープを足した再測定は未実施</strong></li>
+<li>fine-grained PAT / OAuth device flow は試していない</li>
+<li>Rust から SDK を叩く経路 (FR-C-137 が言う言語バインディング) は試していない。<strong>測定は Node の TypeScript バインディングで行った</strong>。Rust 側でどう呼ぶかは段階 6 の設計事項として残る</li>
+</ul>
 <hr />
 <h2 id="oq-09-古いセッションが自動削除されるか">OQ-09 — 古いセッションが自動削除されるか</h2>
-<p><strong>状態</strong>: 未調査</p>
+<p><strong>状態</strong>: 未調査 (<strong>据え置き</strong>)</p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
@@ -148,7 +625,8 @@
 <tr><td>確認方法</td><td>ドキュメント + 実データの経時観察</td></tr>
 <tr><td>影響範囲</td><td><span class="chip id">NFR-44</span></td></tr>
 </tbody></table></div>
-<p><strong>削除されるなら「累計セッション数」は原理的に取得できない。</strong>その場合は「保持されているセッション数」と表記する。分かるまでは後者の表記で実装する (取れない値を提示しない方が常に安全)。</p>
+<p><strong>観測期間が 1 時間以内 / 4 回起動 / 3 セッションでは何も言えない。</strong> 削除は観測されていないが、それは「削除されない」の根拠にならない。</p>
+<p><strong>削除されるなら「累計セッション数」は原理的に取得できない。</strong> 分かるまでは「<strong>保持されているセッション数</strong>」と表記して実装する (取れない値を提示しない方が常に安全)。</p>
 <hr />
 <h2 id="oq-10-実データ量">OQ-10 — 実データ量</h2>
 <p><strong>状態</strong>: 一部判明</p>
@@ -156,16 +634,119 @@
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
 <tr><td>知りたいこと</td><td>総容量 / ファイル数 / 行数 / 最大ファイルサイズ</td></tr>
-<tr><td>確認方法</td><td><span class="chip id">T-0.1</span></td></tr>
+<tr><td>確認方法</td><td>T-0.1 (<code>tools/probe/copilot-layout.mjs</code>)</td></tr>
 <tr><td>影響範囲</td><td>NFR-01 / 02 の目標値の確定</td></tr>
 </tbody></table></div>
-<p><strong>観測</strong>: この環境の <code>~/.copilot/</code> は <code>logs/</code> に複数のプロセスログがあるのみで、<strong>セッションログはまだ存在しない</strong>。要求が想定する「数百 MB / 数百ファイル」の規模は、この環境ではまだ再現していない。</p>
-<p><strong>帰結</strong>: NFR-01 (5 秒以内) / NFR-02 (1 秒未満) の妥当性は、実際にセッションが溜まってから再評価する。<strong>現時点の測定値を根拠に「達成した」と判断しない。</strong></p>
+<h3 id="隔離-copilot_home-3-セッション">隔離 <code>COPILOT_HOME</code> (3 セッション)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>実測</th></tr></thead>
+<tbody>
+<tr><td>総量</td><td>23 ファイル / 1.0 MB</td></tr>
+<tr><td>直下の構成</td><td><code>config.json</code> / <code>installed-plugins/</code> / <code>logs/</code> / <code>session-state/</code> / <code>session-store.db</code> (+ <code>-shm</code> + <code>-wal</code>)</td></tr>
+<tr><td><code>events.jsonl</code></td><td>3 件 / 計 291,259 バイト / 最大 142,681 バイト</td></tr>
+<tr><td>1 レコード最大</td><td>36,428 バイト</td></tr>
+<tr><td><code>session-store.db</code> 本体</td><td>4,096 バイト</td></tr>
+<tr><td><code>session-store.db-wal</code></td><td><strong>609,792 バイト</strong> (チェックポイント前)</td></tr>
+</tbody></table></div>
+<p><strong>1 往復の些細なセッション (「OK とだけ返して」) でも <code>events.jsonl</code> は 45,354 バイト。</strong> うち <code>system.message</code> 1 レコードが 36,428 バイトを占める。→ <strong>セッション 1 件あたりの下限がおよそ 45KB。</strong> 数百 MB に達するにはセッションが数千件必要になる。</p>
+<h3 id="ユーザーの実-.copilot-無傷">ユーザーの実 <code>~/.copilot</code> (無傷)</h3>
+<p>9 ファイル。<code>config.json</code> + <code>ide/</code> (lock 3) + <code>logs/</code> (log 5)。<strong><code>session-state/</code> は存在しない。</strong></p>
+<h3 id="帰結">帰結</h3>
+<ul>
+<li><strong>NFR-01 (5 秒以内) / NFR-02 (1 秒未満) の妥当性は、この測定では判断できない。</strong> 現時点の測定値を根拠に「達成した」と判断しない</li>
+<li><strong><code>session-store.db</code> 本体 4,096 バイトに対し WAL が 609,792 バイト</strong>という比率は、DB を読む設計にした場合「本体だけコピーしても中身が無い」ことを意味する (ADR-0013 でコピー案を却下した根拠のひとつ)</li>
+<li>最大レコード 36,428 バイトは、FR-C-47 (末尾 64KB のシーク読み) と T-4.12 (1 レコード 512KB 上限) の budget に収まる</li>
+</ul>
+<h3 id="この数字から言えないこと-9">この数字から言えないこと</h3>
+<ul>
+<li>数百 MB / 数百ファイル規模での挙動は<strong>一切未測定</strong>。差分インデックスの実測 (段階 4 の完了条件) は、実データが溜まってから改めて行う</li>
+<li>長時間セッション / 巨大なツール出力を含むセッションを作っていない</li>
+</ul>
+<hr />
+<h2 id="oq-11-拒否された委任と非同期委任の表現-新規">OQ-11 — 拒否された委任と非同期委任の表現 (新規)</h2>
+<p><strong>状態</strong>: 未調査</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>(a) 親が <code>task</code> 呼び出しを<strong>拒否</strong>したとき <code>events.jsonl</code> に何が残るか (<code>tool.execution_start</code> は書かれるか、<code>toolCallId</code> は振られるか)。(b) <strong>非同期 / バックグラウンド委任</strong>があるか。あるなら「起動しただけの暫定応答」がどのレコードで来て、本当の完了がどれで来るか。(c) 失敗 / 中断した委任の表現</td></tr>
+<tr><td>確認方法</td><td>委任を拒否するセッションと、非同期委任を使うセッションを隔離 <code>COPILOT_HOME</code> で作る</td></tr>
+<tr><td>影響範囲</td><td><strong>FR-C-24 / 25 / 26 / 27</strong>、タスク T-4.9 / T-4.10</td></tr>
+</tbody></table></div>
+<p>OQ-07 で観測できたのは <code>mode: "sync"</code> の委任 1 件だけで、<strong>拒否も非同期も 1 件も見ていない</strong>。</p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>FR-C-24〜26 は「非同期委任が存在する」ことを前提にした要求である。</strong> その前提自体がまだ実測されていない。 <strong>推測でゲートを組まない。</strong> 実測できるまで T-4.9 / T-4.10 に着手せず、FR-C-27 の「拒否」状態は<strong>値としては定義するが、遷移させる経路を持たない</strong>実装にしておく (ADR-0016)。</p>
+</div>
+<hr />
+<h2 id="oq-12-経路-b-github-rest-が個人アカウントで返すもの">OQ-12 — 経路 B (GitHub REST) が個人アカウントで返すもの</h2>
+<p><strong>状態</strong>: 一部判明 (<strong>現行スコープでは公開課金 API が全滅。ただし経路 B への依存はもう無い</strong>)</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>知りたいこと</td><td>個人アカウントの課金 API (<code>/users/{USERNAME}/settings/billing/ai_credit/usage</code> 等) が <strong>AI Credits の消費額と付与額</strong>を返すか。認証に必要なスコープ。組織 / Enterprise 管理下との差</td></tr>
+<tr><td>確認方法</td><td>T-0.8 (<code>tools/probe/quota-rest.mjs</code>)。<code>gh api</code> 経由で実アカウントを叩く</td></tr>
+<tr><td>影響範囲</td><td>FR-C-80 ①、FR-C-138〜142、ADR-0015 / ADR-0018</td></tr>
+</tbody></table></div>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>このセクションの前提を訂正した。</strong> 「<strong>月次 AI Credits の分母は経路 B にしか無い</strong>」は<strong>誤りだった</strong>。 <strong><code>account.getCurrentAuth</code> (公開 SDK API、経路 A) が <code>entitlement</code> (付与額) と <code>quota_reset_date</code> (本物の月次リセット日) を返す</strong> (OQ-06)。 したがって <strong>OQ-12 は段階 6 のブロッカーではなくなった。</strong> 経路 B が埋まらなくてもゲージは分母つきで描ける。</p>
+</div>
+<h3 id="測定環境">測定環境</h3>
+<p><code>gh</code> 2.95.0 / ログイン済み (<code>mayamaura</code>、keyring) / スコープ <strong><code>gist, read:org, repo, workflow</code></strong> (<strong><code>user</code> も <code>copilot</code> も無い</strong>)。総リクエスト <strong>13 件</strong>。</p>
+<h3 id="a-公開課金エンドポイントは全滅-11-件中-10-件が-404">(a) 公開課金エンドポイントは全滅 — 11 件中 10 件が 404</h3>
+<p>404 の本文は 10 件すべて <code>{message, documentation_url, status}</code> の 3 キー。<strong><code>documentation_url</code> の中身で 2 グループにはっきり分かれる。この 2 つを混同しない。</strong></p>
+<p><strong>グループ 1 (5 件) — 具体的なアンカー付きの <code>documentation_url</code> が返り、<code>gh</code> も scope 不足を告げる。エンドポイントは実在し、404 の真因はスコープ不足</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>path (先頭スラッシュ無し)</th><th><code>documentation_url</code> のアンカー</th></tr></thead>
+<tbody>
+<tr><td><code>users/{login}/settings/billing/ai_credit/usage</code></td><td><code>#get-billing-ai-credit-usage-report-for-a-user</code></td></tr>
+<tr><td><code>users/{login}/settings/billing/usage</code></td><td><code>#get-billing-usage-report-for-a-user</code></td></tr>
+<tr><td><code>users/{login}/settings/billing/premium_request/usage</code></td><td><code>#get-billing-premium-request-usage-report-for-a-user</code></td></tr>
+<tr><td><code>users/{login}/settings/billing/shared-storage</code></td><td><code>#get-shared-storage-billing-for-a-user</code></td></tr>
+<tr><td><code>users/{login}/settings/billing/actions</code></td><td><code>#get-github-actions-billing-for-a-user</code></td></tr>
+</tbody></table></div>
+<p>5 件とも <code>gh</code> の stderr に <code>This API operation needs the "user" scope. To request it, run: gh auth refresh -h github.com -s user</code>。</p>
+<p><strong>グループ 2 (5 件) — 汎用トップ (<code>https://docs.github.com/rest</code>) しか返らない。パス名自体が実在しない可能性がある</strong></p>
+<p><code>users/{login}/settings/billing/copilot</code> / <code>users/{login}/copilot/metrics</code> / <code>user/settings/billing/usage</code> / <code>user/copilot/metrics</code> / <code>user/settings/billing/actions</code>。</p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>グループ 2 はプローブ作成時に推測で並べたパスを含む。</strong> 「404 だった」を「そのエンドポイントは使えない」と読まないこと。 <strong>存在しないパスを叩いた結果と、権限不足の結果は別物である。</strong></p>
+<p>また <strong><code>gh auth refresh -s user</code> は実行していない</strong> (ユーザーの資格情報を変更するため)。<strong>グループ 1 の 5 件が <code>user</code> スコープで 200 を返すかは分かっていない</strong> — 無料プラン / 個人アカウントでは 404 のまま、という可能性も残る。</p>
+</div>
+<h3 id="b-200-が返った唯一のエンドポイントは非公開の内部-api">(b) 200 が返った唯一のエンドポイントは非公開の内部 API</h3>
+<p><strong><code>copilot_internal/user</code> のみ 200。</strong> トップレベル 25 キーで、<code>quota_snapshots</code> (3 枠 × 13 フィールド) / <code>quota_reset_date</code> / <code>quota_reset_date_utc</code> / <code>copilot_plan</code> / <code>access_type_sku</code> / <code>token_based_billing</code> を含む。<strong>現在の <code>gh</code> トークン (<code>copilot</code> スコープ無し) で通る。</strong></p>
+<p><strong>それでも実装には採らない</strong> (ADR-0017 の却下案)。</p>
+<ul>
+<li><strong>公開 API ではない。</strong> <code>docs.github.com/rest</code> に記載が無く、パスも <code>copilot_internal/</code>。互換性の約束が無い</li>
+<li><strong><code>getCurrentAuth</code> (経路 A) との差は <code>credits_used</code> 1 フィールドだけ。</strong> 残り 12 フィールドは同一値。<strong>払う risk に対して得るものが 1 フィールドしかない</strong></li>
+<li>その <code>credits_used</code> (chat で <code>1</code>) は他の 2 つの消費量 (1.6 / 2) と一致せず、<strong>定義が分からない</strong>。使い道が無い</li>
+</ul>
+<h3 id="c-組織-enterprise-は試行対象そのものが無かった">(c) 組織 / Enterprise は試行対象そのものが無かった</h3>
+<p><code>user/orgs</code> の件数 <strong>0</strong> (<code>organization_list</code> / <code>organization_login_list</code> とも長さ 0)。<code>orgs/{org}/settings/billing/usage</code> と <code>enterprises/{ent}/settings/billing/usage</code> は <strong><code>attempted: false</code></strong>。</p>
+<p><strong>FR-C-140 が言う「組織 / Enterprise 管理下」の経路は完全に未検証。</strong> 実装するなら、その環境を持つアカウントでの実測が先。</p>
+<h3 id="経路-b-の位置づけ-更新">経路 B の位置づけ (更新)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>用途</th><th>従来の想定</th><th>T-0.8 の後</th></tr></thead>
+<tbody>
+<tr><td>月次の付与額 (ゲージの分母)</td><td><strong>経路 B にしか無い</strong></td><td><strong>経路 A (<code>getCurrentAuth.entitlement</code>) で取れる</strong></td></tr>
+<tr><td>月次リセット日</td><td>経路 B</td><td><strong>経路 A (<code>quota_reset_date</code> = <code>2026-10-01</code>)</strong></td></tr>
+<tr><td>アカウント全体の月次消費額 (過去 24 か月の履歴)</td><td>経路 B</td><td><strong>依然として経路 B のみ。現行スコープでは取れない</strong> (FR-C-138)</td></tr>
+<tr><td>日次の <code>ai_credits_used</code></td><td>経路 B</td><td>同上 (FR-C-139)</td></tr>
+<tr><td>組織 / Enterprise の枠</td><td>経路 B</td><td>同上 (FR-C-140)。<strong>未検証</strong></td></tr>
+</tbody></table></div>
+<p>→ <strong>経路 B は「あれば嬉しい履歴」の経路に降格する。</strong> ゲージの分母を埋めるための必須経路ではなくなった (ADR-0018)。</p>
+<h3 id="この数字から言えないこと-10">この数字から言えないこと</h3>
+<ul>
+<li><strong><code>user</code> スコープを足したときに 200 が返るかは未測定。</strong> 404 の真因がスコープ不足であることは <code>gh</code> のメッセージと <code>documentation_url</code> から言えるが、<strong>通った先に何が入っているかは分からない</strong></li>
+<li>グループ 2 の 5 件は <strong>実在しないパスを叩いただけかもしれない</strong>。エンドポイント名の正しさを検証していない</li>
+<li><strong>組織 / Enterprise は 1 度も叩いていない</strong> (試行対象が 0 件)</li>
+<li>レート制限 (FR-C-142) には触れていない。13 リクエストでは何も起きない</li>
+<li><strong>測定は 1 アカウント・無料プラン (<code>free_limited_copilot</code>) のみ。</strong> 有料プランなら公開課金 API が 200 を返す可能性は否定できない</li>
+<li><code>copilot_internal/user</code> が<strong>いつまで同じ形で返るか</strong>は分からない (非公開エンドポイント)</li>
+</ul>
 <hr />
 <h2 id="新しく分かったことの書き方">新しく分かったことの書き方</h2>
 <ol>
 <li>「観測」に<strong>数字か実物</strong>を書く (「〜のようだ」は観測ではない)</li>
-<li>状態を更新する</li>
+<li>状態を更新する。<strong>根拠が足りる範囲だけ格上げする</strong></li>
+<li>「<strong>この数字から言えないこと</strong>」を必ず残す</li>
 <li>影響を受ける ADR (<a href="decisions.html">設計判断</a>) と タスク (<a href="implementation-plan.html">実装計画</a>) を更新する</li>
 <li>実データで見つかった例外パターンは <a href="test-strategy.html">テスト戦略</a> 7 節にテストケースとして追記する (NFR-51)</li>
 </ol>

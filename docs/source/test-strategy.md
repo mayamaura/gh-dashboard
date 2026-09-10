@@ -145,19 +145,37 @@ NFR-50 が名指ししている 8 つ。それぞれ「壊れ方」が要求に�
 
 実データと実 API に対して**数字を出すだけ**のスクリプト。合否判定をせず、OQ を潰す材料を作る (NFR-52)。
 
-| スクリプト | 出すもの | 対応 OQ |
+実行方法は共通で:
+
+```
+node tools/probe/<名前>.mjs          人が読む形
+node tools/probe/<名前>.mjs --json   JSON だけ
+COPILOT_HOME=<path> node tools/probe/<名前>.mjs   ~/.copilot の場所を上書き
+```
+
+| スクリプト | 調べるもの | OQ |
 |---|---|---|
-| `tools/probe/copilot-layout.mjs` | `~/.copilot` 配下の構成・ファイル数・総容量・最大ファイルサイズ | OQ-10 |
-| `tools/probe/jsonl-shape.mjs` | 1 レコード = 1 行か / 行内改行の有無 / BOM の有無 / 行長分布 | **OQ-02 (設計の分水嶺)** |
-| `tools/probe/record-kinds.mjs` | レコード種別ごとの件数・サイズ・出現位置・フィールド出現率 | OQ-01 / OQ-07 |
-| `tools/probe/vscode-sessions.mjs` | `workspaceStorage` のハッシュと中身から cwd を逆引きできるか | OQ-03 |
-| `tools/probe/live-detect.mjs` | `ide/*.lock` と `logs/process-*.log` から稼働セッションを判定できるか | OQ-04 |
-| `tools/probe/quota-sdk.mjs` | `account.getQuota` が個人アカウントで何を返すか | **OQ-06** |
+| `copilot-layout.mjs` | 構成・ファイル数・総容量・最大サイズ | OQ-10 |
+| `jsonl-shape.mjs` | 1 レコード 1 行 / BOM / 改行コード / 行長分布 / **バイトオフセット往復検証** | OQ-02 |
+| `record-kinds.mjs` | レコード種別ごとの件数・バイト数、フィールド出現率、サブエージェント候補キー | OQ-01 / OQ-07 |
+| `live-detect.mjs` | `ide/*.lock` と `logs/process-*.log` の PID 生存・対応 | OQ-04 |
+| `vscode-sessions.mjs` | `workspaceStorage` のハッシュ再計算と `chatSessions` の中身 | OQ-03 |
+| `quota-sdk.mjs` | `account.getQuota` / `getCurrentAuth` / `models.list` の戻り値 | OQ-06 / OQ-08 |
+| `quota-rest.mjs` | 公開課金 API 10 件の status、`copilot_internal/user` の中身、SDK との突き合わせ | OQ-12 / OQ-06 |
+
+`quota-sdk.mjs` だけは Copilot SDK が要ります。**リポジトリの `package.json` には足しません** (NFR-10)。準備はこう書いてください:
+
+```
+mkdir -p tools/probe-sdk && cd tools/probe-sdk
+npm init -y && npm install @github/copilot-sdk
+```
+
+`COPILOT_SDK_PATH` で別の場所を指すこともできます。SDK が無い場合は「SDK 未導入」と出して正常終了します。
 
 > [!注意]
 > プローブは**読み取り専用**。書き込み・設定変更を一切行わない (INV-1)。
-> 出力は `tools/probe-out/` に置き、**コミットしない** (個人のセッション内容を含みうる)。`.gitignore` 済み。
-> プローブが値を表示するときも、認証情報に相当するフィールドは伏せる (INV-2)。
+> 出力は `tools/probe-out/` (`.gitignore` 済み)。**個人のセッション内容を含みうるのでコミットしない**。
+> **実データを作るときは `COPILOT_HOME` を使い捨てディレクトリに向ける。**ユーザーの実 `~/.copilot` を測定のために汚さない (INV-1)
 
 ## 5. 層 D — 実機確認チェックリスト
 
@@ -225,3 +243,25 @@ NFR-50 が名指ししている 8 つ。それぞれ「壊れ方」が要求に�
 |---|---|---|
 | 2026-09-08 | `~/.copilot/ide/*.lock` に `headers` フィールドが存在する (認証情報を含みうる) | DTO に `headers` が無いことをコンパイル時に担保 (INV-2) |
 | 2026-09-08 | `~/.copilot/` に `session-state/` が存在しないことがある (CLI 未使用の環境) | ディレクトリ不在で 0 件を正常系として返すテスト |
+| 2026-09-08 | `events.jsonl` の 1 レコードが 36,428 バイトある (`system.message`)。1 往復の些細なセッションでも 45,354 バイト | 大きい行でオフセット往復が壊れないテスト。行長 p95 17,361 / max 36,428 をケースに使う |
+| 2026-09-08 | `session.shutdown` が 1 ファイルに 4 件現れる (`--resume` のたびに増える) | 「shutdown を見たら終了」で判定しないテスト。複数 shutdown を含む JSONL で最終活動時刻が正しく出ること |
+| 2026-09-08 | `--resume` は既存部分を書き換えず追記のみ (先頭 133,394 バイトの SHA-256 が一致) | 差分判定がサイズ増加だけで成立することのテスト |
+| 2026-09-08 | `session.resume` の `parentId` が直前の `session.shutdown` を指す | 再開をまたいでレコード連鎖が切れないテスト |
+| 2026-09-08 | `parentId` が `null` になるのは `session.start` のみ (77 件中 3 件) | `parentId: null` を欠損として扱わないテスト |
+| 2026-09-08 | `agentId` はサブエージェント所属レコードにのみ付く (77 件中 18 件 = 23.4%) | `agentId` 不在を「親エージェント」と解釈するテスト |
+| 2026-09-08 | JSON 文字列値の中に改行文字を含む行が 22 件ある (エスケープ済み。行分割は壊れない) | エスケープ済み改行を含む行で行数 = レコード数が保たれるテスト |
+| 2026-09-08 | `premium_interactions` は `entitlement: 0` **かつ `has_quota: false` かつ `percent_remaining: 0`** | `-1` (無制限) と `0` の両方で 0 除算しないテスト。**`has_quota: false` の枠が危険色にならないテスト** |
+| 2026-09-08 | `remainingPercentage` が `(entitlement − used)/entitlement` と一致しない (99.2% vs 99.0%) | 率を再計算せず API の値を使うテスト |
+| 2026-09-08 | `resetDate` の中身は `quota_snapshots.*.timestamp_utc` (SDK と REST の同時取得でミリ秒一致)。同一プロセス 3 回連続で不変。**値が変わっていないのに動いた実例あり** (`quota_remaining` 198.4 のまま 3 時点で変化) | `resetDate` をリセット日にも鮮度の変化検知にも使わないテスト。`quota_reset_date_utc` で FR-C-85 の除外を判定するテスト |
+| 2026-09-08 | `AccountQuotaSnapshot` の型宣言に無い `hasQuota` / `tokenBasedBilling` が実際には返る | 未知フィールドがあってもパースが落ちないテスト |
+| 2026-09-08 | `models.list({})` が `"auto"` 1 件だけを返し `billing` フィールドが無い | 単価が取れないとき金額換算を出さないテスト (ADR-0010) |
+| 2026-09-08 | VS Code の `workspaceStorage/<hash>` を再計算で照合できたのは 20 件中 6 件のみ | ハッシュ照合の失敗を正常系として扱い、フォルダ名フォールバックへ落ちるテスト (FR-P-52) |
+| 2026-09-08 | VS Code の `chatSessions/*.jsonl` は `kind:0` スナップショット + `kind:1`/`kind:2` パッチ行の形式。cwd は `kind:0` だけでは 0 件、全行走査で 9/26 ファイル | 先頭部分読みだけでは cwd が取れない前提のテスト (FR-P-55) |
+| 2026-09-08 | VS Code セッションの `creationDate` は epoch ms。**終了時刻フィールドが無い** | 終了時刻を `null` として扱い空欄で埋めないテスト (FR-P-58) |
+| 2026-09-08 | `workspaceStorage` の孤児化 (folder が実在しない) が 20 件中 2 件 | 孤児セッションを警告に積んで一覧から落とさないテスト |
+| 2026-09-08 | `~/.copilot/ide/*.lock` の `pid` は VS Code 本体のもので、`logs/process-*.log` の PID 集合との交差が 0 件 | lock の PID を稼働セッション判定に使わないテスト (ADR-0014) |
+| 2026-09-08 | `session-store.db` の `sessions.repository` / `host_type` / `branch` が `null` になる (git 管理外の cwd) | これらが `null` でも紐付けが落ちないテスト |
+| 2026-09-08 | `sessions.updated_at` は最後のイベントより 4〜14 秒早い (ターン開始時に書かれる) | 最終活動時刻に `updated_at` を使わないテスト |
+| 2026-09-08 | 同じ消費量が 3 通りの丸めで返る (`entitlement − quota_remaining` = 1.6 / `entitlement − remaining` = 2 / `credits_used` = 1) | 率と消費量が同じ元データから出ることを確かめるテスト |
+| 2026-09-08 | `quota_reset_at` が 3 枠とも `0` (本物のリセット日は別フィールドの `quota_reset_date`) | `quota_reset_at` をリセット日に使わないテスト |
+| 2026-09-08 | `entitlement` に `-1` (無制限) は**未観測**。`unlimited: true` も**未観測** | 無制限分岐は**未観測であることをテスト名に書く** (例: `未観測: entitlement が -1 のとき率を出さない`) |
