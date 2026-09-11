@@ -13,7 +13,7 @@
 
 <h1>gh-dashboard ドキュメント</h1>
 <p class="lede">GitHub Copilot 稼働ダッシュボード / プロジェクトダッシュボード。Windows 常駐型デスクトップアプリ (Tauri v2 + Rust + React) の設計・実装ドキュメント一式。</p>
-<div class="doc-meta"><span>状態: 設計完了 / 実装は段階 0 から</span><span>更新 2026-09-08</span><span>個人利用</span></div>
+<div class="doc-meta"><span>状態: 設計完了 / 実装は段階 0 から</span><span>更新 2026-09-12</span><span>個人利用</span></div>
 
 <div class="note">
   <span class="note-title">最初に読むもの</span>
@@ -119,10 +119,7 @@
 
 <h2 id="build">ドキュメントの直し方</h2>
 
-<p>この HTML は生成物です。編集するのは <code>docs/source/*.md</code> だけで、<code>docs/*.html</code> を直接編集しないでください (次回生成で消えます)。判断の背景は <a href="decisions.html#adr-0008-ドキュメントは-markdown-原本-html-生成">ADR-0008</a>。</p>
-
-<pre><code>npm run docs:build   # docs/source/*.md -> docs/*.html を再生成
-npm run docs:check   # 生成物が原本と一致するか検査 (書き込まない)</code></pre>
+<p><code>docs/*.html</code> が唯一の原本です。中間の Markdown は無く、このページ自体を直接編集します。判断の背景は <a href="decisions.html#adr-0022-ドキュメントは-docs-html-を直接の原本にする">ADR-0022</a> (旧 <a href="decisions.html#adr-0008-ドキュメントは-markdown-原本-html-生成">ADR-0008</a> を置換)。</p>
 
 <p>ページを増やすときは <code>docs/assets/docs.js</code> の <code>NAV</code> に 1 行足します。このページ (<code>docs/index.html</code>) だけはカード配置のため手書きなので、カードも足してください。</p>
 

@@ -12,7 +12,7 @@
   <main class="main">
 <h1>IPC API 仕様</h1>
 <p class="lede">UI とコアの境界。要求 8 章 (IR-01..46) の実装形。フロントから <code>invoke</code> を書いてよいのは <code>src/ipc/commands.ts</code> だけ。</p>
-<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/api-spec.md</code></span></div>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span></div>
 <h2 id="1.-引数名の規約-最初に読むこと">1. 引数名の規約 — 最初に読むこと</h2>
 <div class="warning"><span class="note-title">注意</span>
 <p><strong>すべてのコマンドに <code>#[tauri::command(rename_all = "snake_case")]</code> を付ける。</strong> Tauri は既定で引数名を <code>camelCase</code> に変換する。<code>path_key</code> を渡したつもりが <code>pathKey</code> を要求されて失敗する事故は、<strong>型検査でも lint でも検出できず、実際に呼ぶまで気づけない</strong> (IR-30)。規約でしか防げない。</p>

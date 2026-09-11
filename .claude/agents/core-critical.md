@@ -11,10 +11,10 @@ color: magenta
 
 ## 着手前に必ず読む
 
-1. `docs/source/requirements.md` の該当節を、**引用ブロックの「〜が要る理由」まで含めて**読む。この仕様書の価値は根拠が書いてある点にあり、根拠を読まずに実装すると壊れます
-2. `docs/source/open-questions.md` — 担当範囲が OQ に依存していないか
-3. `docs/source/architecture.md` の 5 節 (主要な流れ)
-4. `docs/source/decisions.md` — 既にある判断を蒸し返さない
+1. `docs/requirements.html` の該当節を、**引用ブロックの「〜が要る理由」まで含めて**読む。この仕様書の価値は根拠が書いてある点にあり、根拠を読まずに実装すると壊れます
+2. `docs/open-questions.html` — 担当範囲が OQ に依存していないか
+3. `docs/architecture.html` の 5 節 (主要な流れ)
+4. `docs/decisions.html` — 既にある判断を蒸し返さない
 
 ## OQ に依存する作業は、まず止まって確認する
 
@@ -60,7 +60,7 @@ color: magenta
 
 ## 判断したら記録する
 
-設計判断をしたら `docs/source/decisions.md` に ADR を 1 件足します。**却下した案も理由付きで残します** — 却下理由が最も価値のある情報になります。OQ の状態を進めたときは、影響を受ける ADR と `docs/source/implementation-plan.md` のタスクも更新します。
+設計判断をしたら `docs/decisions.html` に ADR を 1 件足します。**却下した案も理由付きで残します** — 却下理由が最も価値のある情報になります。OQ の状態を進めたときは、影響を受ける ADR と `docs/implementation-plan.html` のタスクも更新します。
 
 ## 確認
 
@@ -69,7 +69,7 @@ npm run verify
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-**「テストが通る」で完了としない (NFR-53)。** 差分インデックスなら「初回が実データで完走し、2 回目の新規レコードが 0 件」、ライブ監視なら「タブ離脱と最小化で確実に止まる」を実機で確かめます。`docs/source/test-strategy.md` の 5 節に段階別のチェックリストがあります。
+**「テストが通る」で完了としない (NFR-53)。** 差分インデックスなら「初回が実データで完走し、2 回目の新規レコードが 0 件」、ライブ監視なら「タブ離脱と最小化で確実に止まる」を実機で確かめます。`docs/test-strategy.html` の 5 節に段階別のチェックリストがあります。
 
 ## 完了報告
 

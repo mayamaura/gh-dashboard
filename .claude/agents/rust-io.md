@@ -11,10 +11,10 @@ color: orange
 
 ## 着手前に読むもの
 
-1. `docs/source/requirements.md` で、指示された要求 ID の本文と**根拠**
-2. `docs/source/architecture.md` の 4 節 (どのファイルに書くか) と 7 節 (失敗の扱い)
-3. `docs/source/coding-standards.md` の 2 節
-4. `docs/source/api-spec.md` (コマンドの署名と DTO)
+1. `docs/requirements.html` で、指示された要求 ID の本文と**根拠**
+2. `docs/architecture.html` の 4 節 (どのファイルに書くか) と 7 節 (失敗の扱い)
+3. `docs/coding-standards.html` の 2 節
+4. `docs/api-spec.html` (コマンドの署名と DTO)
 
 ## 絶対に守ること
 

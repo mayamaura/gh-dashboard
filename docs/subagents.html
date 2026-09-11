@@ -12,7 +12,7 @@
   <main class="main">
 <h1>サブエージェント構成</h1>
 <p class="lede">作業を誰に振るか。仕様が表として確定している作業は安いモデルへ、判断が要る作業だけ高いモデルへ振り分ける。定義の実体は <code>.claude/agents/*.md</code>。</p>
-<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/subagents.md</code></span></div>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.2</span><span>更新 2026-09-12</span></div>
 <h2 id="1.-考え方">1. 考え方</h2>
 <p>このリポジトリの作業は、<strong>仕様がどれだけ確定しているか</strong>で 3 つに分かれます。</p>
 <div class="table-wrap"><table>
@@ -36,7 +36,7 @@
 <p><strong>Haiku 4.5 は <code>effort</code> パラメータを受け付けません</strong> (400 が返る)。Haiku 系のエージェント定義に <code>effort</code> を書かないこと。また 200K しかないので、Haiku には<strong>ファイル全体を読ませる仕事を振らない</strong> — <code>spec-lookup</code> が grep で当たり行の周辺だけを読む設計にしてあるのはこのためです。</p>
 </div>
 <h3 id="一番効くコスト削減は-モデル選択ではなく-読ませない-こと">一番効くコスト削減は、モデル選択ではなく「読ませない」こと</h3>
-<p><code>docs/source/requirements.md</code> は 77KB、生成後の HTML は 115KB あります。要求 ID を 1 つ確認するためにこれを親の文脈へ載せると、以降そのセッションの<strong>全リクエスト</strong>が重くなります。</p>
+<p><code>docs/requirements.html</code> は 115KB あります。要求 ID を 1 つ確認するためにこれを親の文脈へ載せると、以降そのセッションの<strong>全リクエスト</strong>が重くなります。</p>
 <p><code>spec-lookup</code> (Haiku) はこれを避けるためだけに存在します。数行を返すのが仕事で、その数行のために親が 115KB を抱え込まずに済みます。<strong>モデルを 1 段落とすより効きます。</strong></p>
 <h2 id="3.-8-体の構成">3. 8 体の構成</h2>
 <p>定義は <code>.claude/agents/&lt;名前&gt;.md</code>。</p>
@@ -44,7 +44,7 @@
 <thead><tr><th>エージェント</th><th>モデル</th><th>effort</th><th>役割</th><th>ツール</th></tr></thead>
 <tbody>
 <tr><td><code>spec-lookup</code></td><td>Haiku</td><td>—</td><td>要求 ID / ADR / OQ / タスクの本文と<strong>根拠</strong>を引く</td><td>読取のみ</td></tr>
-<tr><td><code>docs-sync</code></td><td>Haiku</td><td>—</td><td>traceability・実装計画の状態更新、<code>docs:build</code></td><td>編集可 (docs/source のみ)</td></tr>
+<tr><td><code>docs-sync</code></td><td>Haiku</td><td>—</td><td>traceability・実装計画の <code>docs/*.html</code> を直接更新</td><td>編集可 (docs/*.html のみ)</td></tr>
 <tr><td><code>probe-writer</code></td><td>Sonnet</td><td>medium</td><td>段階 0 の読み取り専用プローブを書いて回し、<strong>数字を出す</strong></td><td>編集可</td></tr>
 <tr><td><code>pure-fn</code></td><td>Sonnet</td><td>medium</td><td>純粋関数 + ユニットテスト</td><td>編集可</td></tr>
 <tr><td><code>rust-io</code></td><td>Sonnet</td><td>medium</td><td>IO を伴う Rust (段階 1〜3)</td><td>編集可</td></tr>

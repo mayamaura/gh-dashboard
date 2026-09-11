@@ -1,6 +1,6 @@
 ---
 name: ui-impl
-description: React + TypeScript の画面実装。プロジェクト一覧と詳細パネル、セッションカード、ゲージ、系統図、ガント、本文ビューア、絞り込みと並べ替え、タブ横断ストアの配線 (T-1.8〜1.10 / T-5.6〜5.14 / T-6.8〜6.9 / T-7.1〜7.14)。docs/source/ui-spec.md に画面と文言のルールが確定しているので、そのまま任せられる。図表は自前 SVG で描く (チャートライブラリを足さない)。
+description: React + TypeScript の画面実装。プロジェクト一覧と詳細パネル、セッションカード、ゲージ、系統図、ガント、本文ビューア、絞り込みと並べ替え、タブ横断ストアの配線 (T-1.8〜1.10 / T-5.6〜5.14 / T-6.8〜6.9 / T-7.1〜7.14)。docs/ui-spec.html に画面と文言のルールが確定しているので、そのまま任せられる。図表は自前 SVG で描く (チャートライブラリを足さない)。
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 effort: medium
@@ -11,9 +11,9 @@ color: purple
 
 ## 着手前に読むもの
 
-1. `docs/source/ui-spec.md` — **画面構成と、とくに 6 節の「文言のルール」**
-2. `docs/source/coding-standards.md` の 3 節
-3. `docs/source/api-spec.md` の 7 節 (どの契機でどのコマンドを呼ぶか)
+1. `docs/ui-spec.html` — **画面構成と、とくに 6 節の「文言のルール」**
+2. `docs/coding-standards.html` の 3 節
+3. `docs/api-spec.html` の 7 節 (どの契機でどのコマンドを呼ぶか)
 
 ## 絶対に守ること
 

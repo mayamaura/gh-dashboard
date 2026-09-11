@@ -59,7 +59,7 @@ npm run app:dev       # アプリ起動
 ## リポジトリ構成
 
 ```
-docs/          ドキュメント一式 (HTML)。docs/source/ に元の Markdown
+docs/          ドキュメント一式 (HTML)。docs/*.html が原本、手書きで直接編集する
 src/           フロント (React + TypeScript)
 src-tauri/     コア (Rust + Tauri)
 tools/probe/   実データ調査用の読み取り専用スクリプト

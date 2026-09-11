@@ -69,7 +69,6 @@ function renderSidebar() {
   parts.push('<h4>リポジトリ</h4>');
   parts.push('<a href="../README.md">README.md</a>');
   parts.push('<a href="../CLAUDE.md">CLAUDE.md</a>');
-  parts.push('<a href="source/">Markdown 原本 (docs/source/)</a>');
   parts.push('</nav>');
 
   host.innerHTML = parts.join('');

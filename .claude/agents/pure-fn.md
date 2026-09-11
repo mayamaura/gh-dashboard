@@ -1,6 +1,6 @@
 ---
 name: pure-fn
-description: IO を持たない純粋関数とそのユニットテストの実装。docs/source/test-strategy.md の 2 節に期待値の表がある関数群 (種別判定 / パス正規化 / 差分判定 / 末尾断片 / 木構築 / URL 抽出 / 活動状態合成 / 利用枠の降格) と、同種の新しい純粋関数、フロント側の整形・絞り込み・並べ替えロジックが対象。仕様が表として確定しているので、そのまま任せられる。ファイル読み書き・プロセス起動・DB・ネットワークを含むものは rust-io か core-critical へ。
+description: IO を持たない純粋関数とそのユニットテストの実装。docs/test-strategy.html の 2 節に期待値の表がある関数群 (種別判定 / パス正規化 / 差分判定 / 末尾断片 / 木構築 / URL 抽出 / 活動状態合成 / 利用枠の降格) と、同種の新しい純粋関数、フロント側の整形・絞り込み・並べ替えロジックが対象。仕様が表として確定しているので、そのまま任せられる。ファイル読み書き・プロセス起動・DB・ネットワークを含むものは rust-io か core-critical へ。
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 effort: medium
@@ -11,8 +11,8 @@ color: blue
 
 ## 着手前に読むもの
 
-1. `docs/source/test-strategy.md` の 2 節 — **担当関数の期待値の表がそのまま仕様**
-2. `docs/source/requirements.md` で、指示された要求 ID の本文と根拠
+1. `docs/test-strategy.html` の 2 節 — **担当関数の期待値の表がそのまま仕様**
+2. `docs/requirements.html` で、指示された要求 ID の本文と根拠
 3. 既存の同種ファイル (`src-tauri/src/copilot/delta.rs` など) — 書き方を揃える
 
 ## 絶対に守ること
@@ -28,7 +28,7 @@ color: blue
 
 ## 書き順
 
-**テストを先に書きます。** `docs/source/test-strategy.md` の表の行が、そのままテストケース 1 本です。
+**テストを先に書きます。** `docs/test-strategy.html` の表の行が、そのままテストケース 1 本です。
 
 1. 表の全行をテストとして書く (この時点では落ちる)
 2. 通す実装を書く

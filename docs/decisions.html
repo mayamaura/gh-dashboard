@@ -12,7 +12,7 @@
   <main class="main">
 <h1>設計判断 (ADR)</h1>
 <p class="lede">「なぜそれを選んだか」の記録。後から読む人 (と AI エージェント) が同じ判断を蒸し返さないための文書。依存を増やすときは、先にここへ 1 件書く。</p>
-<div class="doc-meta"><span>進行中</span><span>版 0.3</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/decisions.md</code></span></div>
+<div class="doc-meta"><span>進行中</span><span>版 0.4</span><span>更新 2026-09-12</span></div>
 <h2 id="書き方">書き方</h2>
 <p>1 件 = 1 見出し。<code>採用</code> / <code>保留</code> / <code>却下</code> / <code>再検討</code> のいずれかの状態を持つ。<strong>却下したものも消さない。</strong>却下理由が最も価値のある情報になる。</p>
 <hr />
@@ -101,8 +101,8 @@
 <p><strong>理由</strong>: 共有したい状態は「インデックス進捗」「最終取得時刻」「タブ別スナップショット」「アニメーション設定」程度で、非同期の複雑な合成を必要としない。React 標準の <code>useSyncExternalStore</code> で足りる (NFR-13)。</p>
 <hr />
 <h2 id="adr-0008-ドキュメントは-markdown-原本-html-生成">ADR-0008 — ドキュメントは Markdown 原本 + HTML 生成</h2>
-<p><strong>状態</strong>: 採用</p>
-<p><strong>文脈</strong>: ドキュメント一式を HTML で提供する必要がある。一方で、手書きの HTML を十数枚維持するのは差分レビューにも AI エージェントの編集にも向かない。</p>
+<p><strong>状態</strong>: 置換 (<strong>2026-09-12、ADR-0022 に置換</strong>)</p>
+<p><strong>文脈</strong>: ドキュメント一式を HTML で提供する必要がある。一方で、手書きの HTML を十数枚維持するのは差分レビューにも AI エージェントの編集にも向かない、と当時は判断した。</p>
 <p><strong>判断</strong>: <code>docs/source/*.md</code> を原本とし、<code>tools/md2doc.mjs</code> で <code>docs/*.html</code> を生成する。生成物もコミットする (ビルドなしでブラウザから読めるようにするため)。</p>
 <p><strong>運用</strong>:</p>
 <ul>
@@ -111,6 +111,7 @@
 <li><code>docs/index.html</code> だけは手書き (カード配置のため)。ナビゲーションは <code>docs/assets/docs.js</code> の <code>NAV</code> に一本化</li>
 </ul>
 <p><strong>代償</strong>: 変換器が対応する記法の範囲でしか書けない。凝った記法が必要になったら、記法を増やすのではなく書き方を変える。</p>
+<p><strong>置換の理由</strong>: 原本と生成物の二層構成は、AI エージェントに「どちらを読み・どちらを編集するか」を毎回判断させるコストを生んだ。詳細は ADR-0022。</p>
 <hr />
 <h2 id="adr-0009-利用枠は-取れないこと-を一級の状態として扱う">ADR-0009 — 利用枠は「取れないこと」を一級の状態として扱う</h2>
 <p><strong>状態</strong>: 採用 (<strong>2026-09-08、OQ-06 の実測で補強。同日 T-0.8 で実測 2 点を訂正</strong>)</p>
@@ -499,6 +500,29 @@
 <li>解釈できない書式は<strong>エラーではなく <code>None</code></strong> を返す (NFR-43 / 防御的パース)</li>
 <li>UI 側はそのまま「値なし」として表示できる (推定で埋めない)</li>
 </ul>
+<hr />
+<h2 id="adr-0022-ドキュメントは-docs-html-を直接の原本にする">ADR-0022 — ドキュメントは <code>docs/*.html</code> を直接の原本にする</h2>
+<p><strong>状態</strong>: 採用 (ADR-0008 を置換)</p>
+<p><strong>日付</strong>: 2026-09-12</p>
+<p><strong>文脈</strong>: ADR-0008 で採用した「<code>docs/source/*.md</code> 原本 + <code>tools/md2doc.mjs</code> 生成」の二層構成には、運用してみて次のコストがあった。</p>
+<ul>
+<li>AI エージェントが参照するたびに「原本 (<code>docs/source/*.md</code>) を読むか、生成物 (<code>docs/*.html</code>) を読むか」を毎回判断し直す必要があった。<code>spec-lookup</code> は原本、それ以外の多くの箇所は生成物へのリンクを張っており、統一されていなかった</li>
+<li>ページを 1 つ直すのに「<code>docs/source/*.md</code> を編集 → <code>npm run docs:build</code> → 生成物も一緒にコミット」という 3 手順が必要で、<code>docs:check</code> を通さないと不整合に気付けなかった</li>
+<li>変換器 (<code>tools/md2doc.mjs</code>) が対応する記法の範囲でしか書けない制約があったが、出力先が最終的に HTML である以上、その制約自体に価値がなかった</li>
+</ul>
+<p><strong>判断</strong>: <code>docs/source/*.md</code> と <code>tools/md2doc.mjs</code>、および <code>npm run docs:build</code> / <code>docs:check</code> を廃止する。<strong><code>docs/*.html</code> を唯一の原本とし、直接編集する。</strong></p>
+<p><strong>運用</strong>:</p>
+<ul>
+<li>ドキュメントを直すときは対象の <code>docs/*.html</code> を直接編集する。中間の Markdown は無い</li>
+<li>ページを増やすときは <code>docs/assets/docs.js</code> の <code>NAV</code> に 1 行足す。<code>docs/index.html</code> は引き続き手書き (カード配置のため)</li>
+<li>表の要求 ID チップ (<code>&lt;span class="chip id"&gt;</code>) や優先度チップなど、旧変換器が自動整形していた装飾は、以後は素の HTML で直接書く</li>
+</ul>
+<p><strong>理由</strong>: 二層構成が想定していた「Markdown の方が書きやすい」というメリットより、「どちらが正か」を都度確認するコストの方が実際には大きかった。生成ステップが無くなることで、編集 → コミットが 1 手順になり、原本と生成物の不一致も構造的に起こらなくなる。</p>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>docs/source/*.html</code> を原本にし、<code>docs/*.html</code> へコピーする二層構成を維持</strong> — ディレクトリが増えるだけで変換器が単純なコピーになり、二層構成そのものが持つ「原本/生成物のどちらを見るか」という判断コストは解消しない</li>
+</ul>
+<p><strong>代償</strong>: Markdown のテーブル記法や箇条書きが使えなくなり、表・チップ・見出し ID は素の HTML タグで書く必要がある。ページ数が今後大きく増える場合は、この判断を再検討する。</p>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
       <span>gh-dashboard</span>

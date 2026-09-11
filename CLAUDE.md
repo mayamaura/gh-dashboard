@@ -92,7 +92,7 @@ src-tauri/src/
 | やること | 振り先 | モデル |
 |---|---|---|
 | 要求 ID / ADR / OQ の本文と根拠を引く | `spec-lookup` | Haiku |
-| 記録の更新 (traceability / 実装計画 / `docs:build`) | `docs-sync` | Haiku |
+| 記録の更新 (`docs/traceability.html` / `docs/implementation-plan.html` を直接編集) | `docs-sync` | Haiku |
 | 段階 0 のプローブを書いて**数字を出す** | `probe-writer` | Sonnet |
 | 純粋関数 + ユニットテスト | `pure-fn` | Sonnet |
 | IO を伴う Rust (段階 1〜3) | `rust-io` | Sonnet |

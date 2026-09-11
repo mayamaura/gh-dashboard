@@ -18,9 +18,7 @@
     "rs:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "rs:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "rs:lint": "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
-    "verify": "npm run typecheck && npm run test && npm run rs:test && npm run docs:check",
-    "docs:build": "node tools/md2doc.mjs",
-    "docs:check": "node tools/md2doc.mjs --check"
+    "verify": "npm run typecheck && npm run test && npm run rs:test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

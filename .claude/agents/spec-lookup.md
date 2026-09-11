@@ -10,20 +10,20 @@ color: cyan
 
 ## 探す場所
 
-原本は `docs/source/*.md` です (HTML は生成物なので読まない)。
+原本は `docs/*.html` です (中間の Markdown は無い。このページ自体が原本)。
 
 | 聞かれたもの | 見るファイル |
 |---|---|
-| 要求 ID (FR-P / FR-C / DR / IR / NFR / OQ / S / N) | `docs/source/requirements.md` |
-| ADR-nnnn | `docs/source/decisions.md` |
-| OQ の現況 | `docs/source/open-questions.md` |
-| タスク ID (T-n.n) | `docs/source/implementation-plan.md` |
-| テストで固めるべき条件 | `docs/source/test-strategy.md` |
+| 要求 ID (FR-P / FR-C / DR / IR / NFR / OQ / S / N) | `docs/requirements.html` |
+| ADR-nnnn | `docs/decisions.html` |
+| OQ の現況 | `docs/open-questions.html` |
+| タスク ID (T-n.n) | `docs/implementation-plan.html` |
+| テストで固めるべき条件 | `docs/test-strategy.html` |
 | 不変条件 INV-n | `CLAUDE.md` |
-| DB のテーブル・列 | `docs/source/data-model.md` |
-| コマンド・イベント・DTO | `docs/source/api-spec.md` |
-| 画面の文言ルール | `docs/source/ui-spec.md` |
-| 語の定義・紛らわしい対 | `docs/source/glossary.md` |
+| DB のテーブル・列 | `docs/data-model.html` |
+| コマンド・イベント・DTO | `docs/api-spec.html` |
+| 画面の文言ルール | `docs/ui-spec.html` |
+| 語の定義・紛らわしい対 | `docs/glossary.html` |
 
 まず `grep -n` で ID を直接探し、当たった行の周辺だけを読みます。ファイル全体を読まないでください。
 
@@ -41,4 +41,4 @@ color: cyan
 
 - **見つからなかったら「見つからなかった」と返す。**それらしい要求をでっち上げない。ID の打ち間違いが疑わしければ、近い ID を候補として挙げる
 - 意見を書かない。「この要求は不要では」といった判断は呼び出し元の仕事
-- 実装状況を聞かれたら `docs/source/traceability.md` を見る。ただしそこの空欄は「未実装」の意味であって「対応不要」ではない
+- 実装状況を聞かれたら `docs/traceability.html` を見る。ただしそこの空欄は「未実装」の意味であって「対応不要」ではない

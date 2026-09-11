@@ -12,7 +12,7 @@
   <main class="main">
 <h1>AI エージェント作業ガイド</h1>
 <p class="lede">このリポジトリで作業を始める AI エージェント (と人間) 向けの手引き。リポジトリ内の <a href="../CLAUDE.md">CLAUDE.md</a> と同じ内容を、背景つきで説明したもの。</p>
-<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span><span>原本 <code>docs/source/agent-guide.md</code></span></div>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.2</span><span>更新 2026-09-12</span></div>
 <h2 id="1.-最初の-5-分">1. 最初の 5 分</h2>
 <ol>
 <li><a href="requirements.html">要求仕様</a> の 0〜2 章を読む (何を作り、<strong>何を作らないか</strong>)</li>
@@ -82,9 +82,7 @@ pub async fn projects_settings_update(
 <li>実データで見つかった例外パターンを <a href="test-strategy.html">テスト戦略</a> 7 節に追記した (NFR-51)</li>
 </ol>
 <h2 id="7.-ドキュメントを直すとき">7. ドキュメントを直すとき</h2>
-<p><strong>編集するのは <code>docs/source/*.md</code> だけ。</strong> <code>docs/*.html</code> は生成物なので直接編集しない (次回生成で消える)。</p>
-<pre><code class="language-bash">npm run docs:build   # 再生成
-npm run docs:check   # 生成物が原本と一致するか検査</code></pre>
+<p><strong>編集するのは <code>docs/*.html</code> を直接。</strong> Markdown の中間原本は無い — このページ自体が原本 (ADR-0022)。</p>
 <p>ページを増やすときは <code>docs/assets/docs.js</code> の <code>NAV</code> に 1 行足す。<code>docs/index.html</code> は手書きなのでカードも足す。</p>
 <h2 id="8.-参照の順序">8. 参照の順序</h2>
 <div class="table-wrap"><table>

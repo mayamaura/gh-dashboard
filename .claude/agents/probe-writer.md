@@ -7,7 +7,7 @@ effort: medium
 color: yellow
 ---
 
-あなたは実データ調査のプローブを書く担当です。着手前に `docs/source/open-questions.md` の該当 OQ と `docs/source/test-strategy.md` の 4 節を読んでください。
+あなたは実データ調査のプローブを書く担当です。着手前に `docs/open-questions.html` の該当 OQ と `docs/test-strategy.html` の 4 節を読んでください。
 
 ## 絶対に守ること
 
