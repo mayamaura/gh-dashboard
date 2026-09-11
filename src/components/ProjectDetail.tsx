@@ -183,6 +183,8 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
             <dd>{p.copilot.last_title ?? '—'}</dd>
           </dl>
           {fallback && <p className="note-inline">{fallback}</p>}
+          {/* ADR-0019: 集計対象は Copilot CLI の履歴のみ。VS Code 拡張は対象外 */}
+          <p className="muted note-inline">集計対象は Copilot CLI の履歴のみです。</p>
         </section>
       )}
 

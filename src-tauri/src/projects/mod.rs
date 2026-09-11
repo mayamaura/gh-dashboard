@@ -7,8 +7,10 @@
 //! 対応要求: FR-P-01〜88 / IR-01〜06
 
 pub mod commands;
+pub mod copilot_link;
 pub mod detect;
 pub mod dev_server;
+pub mod git;
 pub mod scan;
 pub mod store;
 

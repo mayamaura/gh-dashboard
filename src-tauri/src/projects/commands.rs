@@ -15,9 +15,89 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::{AppError, AppResult};
 use crate::projects::{
-    scan, store, DevState, Project, ProjectOverride, ProjectOverrideRequest, ProjectsSnapshot,
+    git, scan, store, DevState, Project, ProjectOverride, ProjectOverrideRequest, ProjectsSnapshot,
 };
 use crate::state::AppState;
+
+/// git 状態取得の同時実行数上限 (FR-P-45)。
+const GIT_STATUS_CONCURRENCY: usize = 8;
+
+/// スナップショット中の各プロジェクトの git 状態を取得して埋める。
+///
+/// `git::git_status` は同期関数なので `spawn_blocking` で包み、
+/// `tokio::sync::Semaphore` で同時実行数を制限する (NFR-20 / FR-P-45)。
+async fn fill_git_status(projects: &mut [Project]) {
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(GIT_STATUS_CONCURRENCY));
+    let tasks: Vec<_> = projects
+        .iter()
+        .map(|p| {
+            let root = p.root_path.clone();
+            let semaphore = semaphore.clone();
+            tokio::spawn(async move {
+                // Semaphore は閉じない限り acquire は失敗しない。
+                let _permit = semaphore.acquire_owned().await.ok();
+                tokio::task::spawn_blocking(move || git::git_status(Path::new(&root)))
+                    .await
+                    .unwrap_or(None)
+            })
+        })
+        .collect();
+
+    for (project, task) in projects.iter_mut().zip(tasks) {
+        project.git = task.await.unwrap_or(None);
+    }
+}
+
+/// スナップショットに Copilot 利用状況を埋める (FR-P-50〜58)。
+///
+/// 読み取りと紐付けは同期処理なので `spawn_blocking` で包む (INV-10 / NFR-20)。
+/// 失敗してもスキャン全体は落とさない — 警告を積んで `copilot` は `None` のまま進める
+/// (NFR-24)。読めない件数・紐付かない件数は `warnings` に積む (NFR-43)。
+async fn fill_copilot_usage(snapshot: &mut ProjectsSnapshot) {
+    let project_keys: Vec<String> = snapshot
+        .projects
+        .iter()
+        .map(|p| p.path_key.clone())
+        .collect();
+    let now = now_ms();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let collected = crate::copilot::sessions::collect_candidates(now);
+        let link_result =
+            crate::projects::copilot_link::link(&project_keys, &collected.candidates);
+        (collected, link_result)
+    })
+    .await;
+
+    let Ok((collected, link_result)) = outcome else {
+        snapshot
+            .warnings
+            .push("Copilot 利用状況の取得に失敗しました".to_string());
+        return;
+    };
+
+    for project in snapshot.projects.iter_mut() {
+        project.copilot = link_result.usage.get(&project.path_key).cloned();
+    }
+
+    if collected.unreadable_sessions > 0 {
+        snapshot.warnings.push(format!(
+            "読み取れなかった Copilot セッション: {} 件",
+            collected.unreadable_sessions
+        ));
+    }
+    if collected.skipped_lines > 0 {
+        snapshot.warnings.push(format!(
+            "解釈できなかった Copilot ログ行: {} 件",
+            collected.skipped_lines
+        ));
+    }
+    if link_result.unmatched_sessions > 0 {
+        snapshot.warnings.push(format!(
+            "プロジェクトに紐付かなかった Copilot セッション: {} 件",
+            link_result.unmatched_sessions
+        ));
+    }
+}
 
 /// 未実装のコマンドが「静かに空を返す」ことを防ぐ。
 fn todo_err(task: &str) -> AppError {
@@ -126,6 +206,9 @@ async fn scan_and_cache(app: &AppHandle, state: &AppState) -> AppResult<Projects
         default_warnings.extend(snapshot.warnings);
         snapshot.warnings = default_warnings;
     }
+
+    fill_git_status(&mut snapshot.projects).await;
+    fill_copilot_usage(&mut snapshot).await;
 
     *state.projects_cache.lock().map_err(cache_lock_err)? = Some(snapshot.clone());
 
@@ -239,12 +322,23 @@ pub async fn projects_settings_update(
         .await
         .map_err(spawn_err)??;
 
+    let mut rebuilt = rebuilt;
+    rebuilt.git = tokio::task::spawn_blocking({
+        let root = rebuilt.root_path.clone();
+        move || git::git_status(Path::new(&root))
+    })
+    .await
+    .map_err(spawn_err)?;
+
     let mut new_snapshot = snapshot;
     if let Some(slot) = new_snapshot
         .projects
         .iter_mut()
         .find(|p| p.path_key == path_key)
     {
+        // 再スキャンせず、直前のキャッシュに付いていた copilot 値をそのまま引き継ぐ
+        // (FR-P-05: フル再計算は行わない。path_key が同じなら引き継ぎは常に正しい)
+        rebuilt.copilot = slot.copilot.clone();
         *slot = rebuilt;
     }
     new_snapshot.warnings.extend(merge_warnings);

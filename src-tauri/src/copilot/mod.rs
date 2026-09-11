@@ -14,7 +14,9 @@
 pub mod activity;
 pub mod commands;
 pub mod delta;
+pub mod parser;
 pub mod quota;
+pub mod sessions;
 pub mod tree;
 
 use serde::{Deserialize, Serialize};
@@ -178,6 +180,38 @@ pub struct UsageToday {
     pub top_folders: Vec<(String, i64)>,
     /// 集計から除外した件数。**無言で欠落させない** (NFR-43)
     pub excluded_records: i64,
+}
+
+/// 段階 2 の紐付け用に、セッション 1 件から読み取った生の候補 (FR-P-50〜52)。
+///
+/// `Serialize` を derive しない。IPC DTO ではなく中間データ。
+#[derive(Debug, Clone)]
+pub struct SessionCandidate {
+    pub session_id: String,
+    pub cwd_raw: Option<String>,
+    /// 正規化済み。`None` なら紐付け対象外
+    pub path_key: Option<String>,
+    /// `path_key` 由来の末尾フォルダ名 (FR-P-52 の条件②)
+    pub folder_name: Option<String>,
+    /// FR-P-52 の条件①。IO 層が `is_dir()` で埋める。純粋側は stat しない
+    pub cwd_exists: bool,
+    pub client_name: Option<String>,
+    /// `workspace.yaml` の `name` に 140 字プレビューを掛けたもの
+    pub title: Option<String>,
+    /// 中身のタイムスタンプ (FR-P-56)。mtime ではない
+    pub last_used_at: Option<i64>,
+    pub last_used_source: TimeSource,
+    pub total_nano_aiu: Option<i64>,
+    pub lines_added: Option<i64>,
+    pub lines_removed: Option<i64>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeSource {
+    EventsTail,
+    WorkspaceYaml,
+    None,
 }
 
 /// アニメーション設定 (FR-C-162 / IR-19)。

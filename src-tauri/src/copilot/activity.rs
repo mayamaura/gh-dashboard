@@ -107,6 +107,24 @@ pub fn is_idle(last_activity_age_ms: i64) -> bool {
     last_activity_age_ms >= IDLE_THRESHOLD_MS
 }
 
+/// 「直近 N 秒に追記があったか」の窓 (FR-C-50 の目安 120 秒)。
+///
+/// 段階 2 (FR-P-57) と段階 5 (FR-C-40) で同じ値を使う。
+pub const ACTIVE_MTIME_WINDOW_MS: i64 = 120_000;
+
+/// セッションが稼働中か (ADR-0014)。
+///
+/// * `mtime_age_ms` — `now - events.jsonl の mtime`。ファイルが無ければ `None`
+/// * `ended_by_shutdown` — 末尾から遡って最初のレコードが `session.shutdown` か
+///
+/// 未来 mtime (時計ずれ) は同じ窓幅で対称に許容する。
+pub fn is_session_active(mtime_age_ms: Option<i64>, ended_by_shutdown: bool) -> bool {
+    match mtime_age_ms {
+        Some(age) if age.abs() <= ACTIVE_MTIME_WINDOW_MS => !ended_by_shutdown,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,5 +238,43 @@ mod tests {
     fn idle_threshold_is_30_minutes() {
         assert!(!is_idle(29 * 60 * 1000));
         assert!(is_idle(30 * 60 * 1000));
+    }
+
+    // ---- is_session_active (ADR-0014 / FR-P-57) ----
+
+    #[test]
+    fn zero_age_and_not_shutdown_is_active() {
+        assert!(is_session_active(Some(0), false));
+    }
+
+    #[test]
+    fn within_119_seconds_is_active() {
+        assert!(is_session_active(Some(119_000), false));
+    }
+
+    #[test]
+    fn beyond_121_seconds_is_not_active() {
+        assert!(!is_session_active(Some(121_000), false));
+    }
+
+    #[test]
+    fn fresh_but_ended_by_shutdown_is_not_active() {
+        assert!(!is_session_active(Some(0), true));
+    }
+
+    #[test]
+    fn missing_mtime_is_not_active() {
+        assert!(!is_session_active(None, false));
+    }
+
+    #[test]
+    fn future_mtime_within_window_is_active() {
+        // 時計ずれ対策として未来側も同じ窓幅で許容する
+        assert!(is_session_active(Some(-30_000), false));
+    }
+
+    #[test]
+    fn future_mtime_far_out_is_not_active() {
+        assert!(!is_session_active(Some(-365 * 24 * 3600 * 1000), false));
     }
 }

@@ -70,6 +70,24 @@ pub fn split_committed(buf: &[u8]) -> CommittedLines<'_> {
     CommittedLines { lines, consumed }
 }
 
+/// 末尾ウィンドウ読みの先頭側の切れた行を落とす (FR-P-55)。
+///
+/// `split_committed` の鏡像。ファイルの途中 (末尾から一定バイト) から読むと、
+/// 先頭の行が途中から始まっている可能性がある。その断片を解釈すると壊れた
+/// レコードを拾ってしまうので、最初の改行までを切り捨てる。
+///
+/// `from_file_start` が `true` (読み取りがオフセット 0 から始まった) なら、
+/// 先頭は正しい行頭なので何も落とさない。
+pub fn drop_leading_partial(buf: &[u8], from_file_start: bool) -> &[u8] {
+    if from_file_start {
+        return buf;
+    }
+    match buf.iter().position(|&b| b == b'\n') {
+        Some(i) => &buf[i + 1..],
+        None => &[],
+    }
+}
+
 /// 空行を落として、実際にパース対象になる行だけを返す。
 pub fn non_empty(lines: &[&[u8]]) -> Vec<usize> {
     lines
@@ -171,5 +189,31 @@ mod tests {
         let buf = b"aa\nbb\ncc";
         let r = split_committed(buf);
         assert_eq!(&buf[r.consumed..], b"cc");
+    }
+
+    // ---- drop_leading_partial (FR-P-55) ----
+
+    #[test]
+    fn leading_fragment_before_first_newline_is_dropped() {
+        let buf = b"artial}\n{\"b\":2}\n";
+        assert_eq!(drop_leading_partial(buf, false), b"{\"b\":2}\n".as_slice());
+    }
+
+    #[test]
+    fn leading_newline_exactly_at_start_drops_nothing_after_it() {
+        let buf = b"\n{\"b\":2}\n";
+        assert_eq!(drop_leading_partial(buf, false), b"{\"b\":2}\n".as_slice());
+    }
+
+    #[test]
+    fn from_file_start_keeps_everything() {
+        let buf = b"{\"a\":1}\n{\"b\":2}\n";
+        assert_eq!(drop_leading_partial(buf, true), buf.as_slice());
+    }
+
+    #[test]
+    fn no_newline_at_all_yields_empty_slice() {
+        let buf = b"not a complete line";
+        assert_eq!(drop_leading_partial(buf, false), b"".as_slice());
     }
 }
