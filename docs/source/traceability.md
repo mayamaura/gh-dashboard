@@ -29,10 +29,12 @@ updated: 2026-09-08
 | FR-P-22 / 23 | 起動コマンドの解決 (自己参照検出) | `projects/scan.rs::is_self_source` | `scan.rs` tests、実機 (gh-dashboard が起動不可) | 済 |
 | FR-P-30 / 31 | 手動調整 (保存と取得) | `projects/store.rs::override_upsert`, `Project.override_values` | `store.rs` tests、実機 (保存後にフォームへ値が戻る) | 済 |
 | FR-P-32 | 手動調整の検証 | `projects/commands.rs::projects_settings_update` | 実機 (`does-not-exist` が拒否され DB 未書き込み) | 済 |
-| FR-P-40〜47 | git 状態 | `projects/git.rs` | | |
-| FR-P-50〜58 | Copilot 利用状況の紐付け | `projects/copilot_link.rs` | `tools/probe/vscode-sessions.mjs` | |
-| FR-P-51 | workspace.yaml 経由のパース | | | ADR-0003 |
-| FR-P-56 | タイムスタンプの読み取り | | | ADR-0014 |
+| FR-P-40〜47 | git 状態 | `projects/git.rs` | `git.rs` 内のユニットテスト 5 本 | 済 |
+| FR-P-50〜54, 58 | Copilot 利用状況の紐付け | `projects/copilot_link.rs` | `copilot_link.rs` 内のユニットテスト 15 本 | 済 |
+| FR-P-55 | セッション履歴の部分読み | `copilot/sessions.rs` (read_tail, TAIL_READ_BYTES) / `copilot/parser.rs` (scan_tail) | `parser.rs` 内のユニットテスト | 済 |
+| FR-P-56 | タイムスタンプの読み取り (mtime と中身の区別) | `copilot/sessions.rs` (`last_used_at` は中身のタイムスタンプ) | — | 済 |
+| FR-P-57 | 稼働中判定 | `copilot/activity.rs` (`is_session_active`, `ACTIVE_MTIME_WINDOW_MS = 120000`) | `activity.rs` 内のユニットテスト 7 本 | 済 |
+| NFR-41 (FR-P-53 関連) | 旧パスの履歴表示 | `src/lib/format.ts` の `matchedByLabel` (段階 1 で先行実装) | `format.test.ts` | 済 |
 | FR-P-60〜68 | dev サーバー | `projects/dev_server.rs`, `platform/win_job.rs` | | |
 | FR-P-63 | URL 自動検出 (純粋) | `util/url_detect.rs` | `url_detect::tests` | 済 |
 | FR-P-50〜58 (OQ-03 検証) | Copilot セッション紐付けの実装基盤 | | `tools/probe/vscode-sessions.mjs` | |

@@ -72,16 +72,17 @@
 <hr />
 <h2 id="段階-2-git-copilot-利用状況">段階 2 — git + Copilot 利用状況</h2>
 <p><strong>完了条件</strong>: フォルダ名フォールバックが実データで期待どおり効く。</p>
+<p><strong>実機確認済み (2026-09-11)</strong>: ユーザーの実 <code>~/.copilot/session-state</code> に 49 件のセッションが実在し、うち 6 件が既存プロジェクト (agent-deck) に完全一致で紐付き、43 件が未紐付けとして正しく警告表示された。INV-1 (mtime とサイズが実行前後で不変) を確認済み。フォールバック判定ロジック自体はユニットテスト 15 本で全条件 (3 条件の AND、競合解決の優先順位、決定性) を検証済み。ただし実データでフォルダ名フォールバック分岐 (完全一致が無くリネームされたフォルダ) が実際に発火したケースは今回は観測されなかった (ユーザーの実環境にリネームされたプロジェクトが無かったため) — この限界を明記します。</p>
 <div class="table-wrap"><table>
 <thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">T-2.1</span></td><td><code>projects::git</code> — ブランチ / 変更有無 / リモート / 最終コミット</td><td>FR-P-40〜47</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-2.2</span></td><td>同時実行上限 (8) と <code>CREATE_NO_WINDOW</code></td><td>FR-P-45 / 46</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-2.3</span></td><td>セッション履歴の部分読み (末尾数 KB / 先頭数十 KB)</td><td><span class="chip id">FR-P-55</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-2.4</span></td><td><code>projects::copilot_link</code> — 完全一致の紐付け</td><td><span class="chip id">FR-P-51</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-2.5</span></td><td>フォルダ名フォールバック (3 条件すべて成立時のみ) + テスト</td><td>FR-P-52 / 54</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-2.6</span></td><td>UI に「旧パスの履歴 (フォルダ名で照合)」表示</td><td>FR-P-53 / NFR-41</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-2.7</span></td><td>稼働中判定 (状態ファイル + PID 生存確認)</td><td><span class="chip id">FR-P-57</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-2.1</span></td><td><code>projects::git</code> — ブランチ / 変更有無 / リモート / 最終コミット</td><td>FR-P-40〜47</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-2.2</span></td><td>同時実行上限 (8) と <code>CREATE_NO_WINDOW</code></td><td>FR-P-45 / 46</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-2.3</span></td><td>セッション履歴の部分読み (末尾数 KB / 先頭数十 KB)</td><td><span class="chip id">FR-P-55</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-2.4</span></td><td><code>projects::copilot_link</code> — 完全一致の紐付け</td><td><span class="chip id">FR-P-51</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-2.5</span></td><td>フォルダ名フォールバック (3 条件すべて成立時のみ) + テスト</td><td>FR-P-52 / 54</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-2.6</span></td><td>UI に「旧パスの履歴 (フォルダ名で照合)」表示</td><td>FR-P-53 / NFR-41</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-2.7</span></td><td>稼働中判定 (状態ファイル + PID 生存確認)</td><td><span class="chip id">FR-P-57</span></td><td>完了</td></tr>
 </tbody></table></div>
 <p><strong>気をつける点</strong></p>
 <ul>
@@ -240,7 +241,7 @@
 <tbody>
 <tr><td>0. 調査</td><td>8 / 8</td></tr>
 <tr><td>1. プロジェクト基盤</td><td>10 / 10</td></tr>
-<tr><td>2. git + 利用状況</td><td>0 / 7</td></tr>
+<tr><td>2. git + 利用状況</td><td>7 / 7</td></tr>
 <tr><td>3. dev サーバー</td><td>0 / 7</td></tr>
 <tr><td>4. 差分インデックス</td><td>1 / 13</td></tr>
 <tr><td>5. ライブ監視</td><td>1 / 14</td></tr>

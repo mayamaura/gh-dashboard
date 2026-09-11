@@ -422,6 +422,83 @@
 <li>FR-C-83 の「何をすれば取れるようになるか」に、<strong><code>user</code> スコープが要る旨を出す</strong>。取れないことを黙って隠さない</li>
 <li><strong>FR-C-140 (個人 / 組織で叩くエンドポイントが違う) は未検証のまま残る。</strong> 要求本文は書き換えず、OQ-12 に記録した</li>
 </ul>
+<hr />
+<h2 id="adr-0019-段階-2-の-copilot-利用状況は-cli-の-session-state-だけを母集団にする">ADR-0019 — 段階 2 の Copilot 利用状況は CLI の <code>session-state</code> だけを母集団にする</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-11</p>
+<p><strong>文脈</strong>: OQ-03 の実測 (VS Code chatSessions の cwd は kind:0 で 0 件・全行走査で 9/26 ファイルのみ、ハッシュ再計算は 6/20、終了時刻フィールド無し、クレジット取得可否未確認)。</p>
+<p><strong>判断</strong>: <code>CopilotUsage</code> の母集団は Copilot CLI の <code>session-state</code> のみとし、VS Code 拡張のセッションは段階 2 の対象外とする。</p>
+<p><strong>理由</strong>:</p>
+<ul>
+<li>VS Code 側は、CLI 側に比べて<strong>セッション検出の信頼性が低い</strong>。cwd は先頭部分読みでは 0 件、全行走査で 9/26 ファイルに留まる</li>
+<li><strong>ハッシュ再計算による照合が壊れている。</strong> 20 ワークスペース中 6 件しか当たらず、不一致 14 件の原因も切り分けられない (OQ-03)</li>
+<li><strong>終了時刻フィールドが無く、FR-P-57 の稼働判定が作れない</strong></li>
+<li><strong>クレジット / トークン消費情報が取れるか未確認</strong> (段階 4 の集計に必要)</li>
+</ul>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong>全行走査してハッシュ再計算と cwd 文字列探索の両方を試す</strong> — コストが高く、ヒット率も低い (6/20 / 9/26)</li>
+<li><strong>ハッシュ再計算を補助経路にする</strong> — 6/20 で当たるので「<strong>一部は埋まる</strong>」が、表が誤解を招く。埋まるまでの理由が分かっていない</li>
+<li><strong><code>workspace.json</code> の folder から逆引きする</strong> — Copilot を使ったかどうかとは無関係。デコイになるだけ</li>
+<li><strong>VS Code セッションを「クレジット消費なし」として合算表示する</strong> — NFR-43 違反。取得不可は取得不可として表現する</li>
+</ul>
+<p><strong>帰結</strong>:</p>
+<ul>
+<li>UI に「集計対象は Copilot CLI の履歴のみです」と静的注記を付ける</li>
+<li>VS Code 拡張の cwd 抽出はユースケースとして OQ-03 に残す。段階 3 以降で余力があれば再検討</li>
+</ul>
+<hr />
+<h2 id="adr-0020-fr-p-57-の稼働判定は-adr-0014-と同一のロジック・同一の定数を使う">ADR-0020 — FR-P-57 の稼働判定は ADR-0014 と同一のロジック・同一の定数を使う</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-11</p>
+<p><strong>文脈</strong>: FR-P-57 の要求本文は「<strong>状態ファイル + PID 生存確認</strong>」だが、ADR-0014 (OQ-04) の実測で CLI セッションにその状態ファイルが存在しないことが確定済み。段階 2 (T-2.7) で同じ稼働判定ロジックが必要になった。</p>
+<p><strong>判断</strong>: 閾値・ロジックを段階 2 (FR-P-57) と段階 5 (FR-C-40) で共有する。<strong><code>copilot::activity::ACTIVE_MTIME_WINDOW_MS = 120_000</code> の 1 箇所のみで管理</strong>し、ロジックも <code>is_session_active</code> の 1 関数に統一。</p>
+<p><strong>ロジック</strong> (ADR-0014 と同一):</p>
+<ul>
+<li>(a) <code>events.jsonl</code> の mtime が直近 N 秒以内 <strong>かつ</strong></li>
+<li>(b) 末尾から遡って最初のレコードが <code>session.shutdown</code> でない</li>
+</ul>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong>状態ファイル + PID 生存確認をそのまま実装</strong> — CLI に該当ファイルが存在しない (実測: 隔離 <code>COPILOT_HOME</code> で 4 回起動、0 件)</li>
+<li><strong>段階 2 だけ別の短い閾値を採る</strong> — 2 つの真実ができ、段階 5 実装時に食い違いが生まれる。<strong>測っていない N 秒値を 2 つ持たない</strong></li>
+<li><strong><code>workspace.yaml</code> の <code>updated_at</code> で判定</strong> — 最後のイベントより 4〜14 秒早いため、ずれが見えてしまう (OQ-04)</li>
+</ul>
+<p><strong>帰結</strong>:</p>
+<ul>
+<li><strong>要求本文 (FR-P-57 / FR-C-40) は書き換えない。</strong> 差異は OQ-04 / ADR-0014 に既存記録あり</li>
+<li>実装上の詳細は ADR-0014 を参照。段階 2 (T-2.7) と段階 5 (T-5.1〜5.5) は同じロジックを使う</li>
+</ul>
+<hr />
+<h2 id="adr-0021-workspace.yaml-と-iso8601-は自前の最小パーサで読む">ADR-0021 — <code>workspace.yaml</code> と ISO8601 は自前の最小パーサで読む</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-11</p>
+<p><strong>文脈</strong>: NFR-10 (依存を増やす前に ADR)。<code>workspace.yaml</code> は実測 375 バイトのフラットなスカラー 9 キーのみ、ISO8601 は <code>...Z</code> 固定書式のみ観測。タイムスタンプパースは段階 2 の利用状況紐付け (T-2.1〜2.7) で初出現。</p>
+<p><strong>判断</strong>: <code>workspace.yaml</code> は列 0 の <code>key: value</code> だけを拾う自前パーサ (<code>src-tauri/src/copilot/parser.rs::parse_workspace_yaml</code>)、ISO8601 は固定書式のみ対応する自前パーサ (<code>src-tauri/src/util/time.rs::parse_iso8601_ms</code>) を実装。</p>
+<p><strong>理由</strong>:</p>
+<ul>
+<li><strong><code>serde_yaml</code></strong> — メンテナンス終了済み。不要な攻撃面。実測では複雑な YAML 機能を 1 つも使わない (ブロックスカラー / アンカー / エイリアス / マルチラインキーなし)</li>
+<li><strong><code>chrono</code> / <code>time</code> crate</strong> — バイナリサイズ・ビルド時間に対して、1 書式のみの対応では割に合わない。常駐アプリの軽さ (NFR-10)</li>
+<li><strong>自前パーサの実装コスト</strong> — <code>workspace.yaml</code> は行走査 + 正規表現 1 つ (実装 20 行程度)。ISO8601 は固定書式なので substring / split で対応 (実装 15 行程度)。テストは別 (5 ケース / 4 ケース)</li>
+</ul>
+<p><strong>サポート範囲</strong>:</p>
+<ul>
+<li><code>workspace.yaml</code>: キー = <code>id</code> / <code>cwd</code> / <code>client_name</code> / <code>name</code> / <code>created_at</code> / <code>updated_at</code> のみ</li>
+<li>ISO8601: RFC3339 の <code>YYYY-MM-DDTHH:MM:SS.sssZ</code> と <code>YYYY-MM-DDTHH:MM:SS.sss±HH:MM</code> (オフセット付き) のみ</li>
+</ul>
+<p><strong>拡張の条件</strong> (手書きパーサの限界):</p>
+<ul>
+<li>実データで ブロックスカラー / 複雑な構造 / 別の ISO8601 書式が観測されたら、その時点で ライブラリ導入を再検討</li>
+</ul>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>serde_yaml</code> / <code>chrono</code> をそのまま入れる</strong> — NFR-10 に反する。段階 1 時点で「常駐の軽さ」が最優先要件として確定済み</li>
+</ul>
+<p><strong>帰結</strong>:</p>
+<ul>
+<li>解釈できない書式は<strong>エラーではなく <code>None</code></strong> を返す (NFR-43 / 防御的パース)</li>
+<li>UI 側はそのまま「値なし」として表示できる (推定で埋めない)</li>
+</ul>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
       <span>gh-dashboard</span>

@@ -253,6 +253,16 @@ updated_at: 2026-09-07T17:14:22.666Z</code></pre>
 <li><code>kind:1</code> / <code>kind:2</code> のパッチ行の形式 (JSON Patch なのか独自形式なのか) は解析していない。cwd 逆引きを主経路にするなら、この解析が別途要る</li>
 <li><code>chatSessions</code> から<strong>消費クレジット / トークンが取れるか</strong>は見ていない (FR-P-50 の「直近セッションのクレジット消費」に関わる)</li>
 </ul>
+<h3 id="段階-2-での扱い-2026-09-11-t-2.3-2.7-で決定・実装済み">段階 2 での扱い (2026-09-11、T-2.3〜2.7 で決定・実装済み)</h3>
+<p><strong>VS Code 拡張のセッションは段階 2 の集計母集団に入れない</strong> (ADR-0019)。理由は (b) の実測数字そのもの — cwd は kind:0 で 0 件・全行走査で 9/26、ハッシュ再計算は 6/20、終了時刻フィールドが無く FR-P-57 の稼働判定が作れない。<code>CopilotUsage</code> は Copilot CLI の <code>session-state</code> のみから作る。</p>
+<p><strong>残件 (この OQ を「確定」にするために必要なこと)</strong>:</p>
+<ol>
+<li><code>kind:1</code> / <code>kind:2</code> パッチ行の形式 (JSON Patch か独自形式か)。cwd 逆引きを主経路にするならこれが先</li>
+<li><code>chatSessions</code> からクレジット / トークンが取れるか (FR-P-50 の項目が埋まるか)</li>
+<li>未検証の別案: <code>&lt;hash&gt;/workspace.json</code> の folder (20/20 存在) からワークスペースのパスを取り、<code>chatSessions/</code> の有無と件数だけを紐付ける経路。日時は <code>creationDate</code> 止まり、消費クレジットは取れない</li>
+<li>ハッシュ不一致 14 件の原因 (VS Code バージョン差 / 多重ルート / <code>vscode-remote://</code>)</li>
+</ol>
+<p><strong>実機確認 (2026-09-11)</strong>: ユーザーの実 <code>~/.copilot/session-state</code> に 49 件のセッションが実在し、うち 6 件が既存プロジェクト (agent-deck) に完全一致で紐付き、43 件が未紐付けとして正しく警告表示された。INV-1 (mtime とサイズが実行前後で不変) を確認済み。</p>
 <hr />
 <h2 id="oq-04-稼働中セッションの検出方法">OQ-04 — 稼働中セッションの検出方法</h2>
 <p><strong>状態</strong>: 一部判明 (<strong>決定的な否定が出た</strong>)</p>

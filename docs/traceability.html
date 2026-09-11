@@ -34,10 +34,12 @@
 <tr><td>FR-P-22 / 23</td><td>起動コマンドの解決 (自己参照検出)</td><td><code>projects/scan.rs::is_self_source</code></td><td><code>scan.rs</code> tests、実機 (gh-dashboard が起動不可)</td><td>済</td></tr>
 <tr><td>FR-P-30 / 31</td><td>手動調整 (保存と取得)</td><td><code>projects/store.rs::override_upsert</code>, <code>Project.override_values</code></td><td><code>store.rs</code> tests、実機 (保存後にフォームへ値が戻る)</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-P-32</span></td><td>手動調整の検証</td><td><code>projects/commands.rs::projects_settings_update</code></td><td>実機 (<code>does-not-exist</code> が拒否され DB 未書き込み)</td><td>済</td></tr>
-<tr><td>FR-P-40〜47</td><td>git 状態</td><td><code>projects/git.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-P-50〜58</td><td>Copilot 利用状況の紐付け</td><td><code>projects/copilot_link.rs</code></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
-<tr><td><span class="chip id">FR-P-51</span></td><td>workspace.yaml 経由のパース</td><td></td><td></td><td><span class="chip id">ADR-0003</span></td></tr>
-<tr><td><span class="chip id">FR-P-56</span></td><td>タイムスタンプの読み取り</td><td></td><td></td><td><span class="chip id">ADR-0014</span></td></tr>
+<tr><td>FR-P-40〜47</td><td>git 状態</td><td><code>projects/git.rs</code></td><td><code>git.rs</code> 内のユニットテスト 5 本</td><td>済</td></tr>
+<tr><td>FR-P-50〜54, 58</td><td>Copilot 利用状況の紐付け</td><td><code>projects/copilot_link.rs</code></td><td><code>copilot_link.rs</code> 内のユニットテスト 15 本</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-55</span></td><td>セッション履歴の部分読み</td><td><code>copilot/sessions.rs</code> (read_tail, TAIL_READ_BYTES) / <code>copilot/parser.rs</code> (scan_tail)</td><td><code>parser.rs</code> 内のユニットテスト</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-56</span></td><td>タイムスタンプの読み取り (mtime と中身の区別)</td><td><code>copilot/sessions.rs</code> (<code>last_used_at</code> は中身のタイムスタンプ)</td><td>—</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-P-57</span></td><td>稼働中判定</td><td><code>copilot/activity.rs</code> (<code>is_session_active</code>, <code>ACTIVE_MTIME_WINDOW_MS = 120000</code>)</td><td><code>activity.rs</code> 内のユニットテスト 7 本</td><td>済</td></tr>
+<tr><td>NFR-41 (FR-P-53 関連)</td><td>旧パスの履歴表示</td><td><code>src/lib/format.ts</code> の <code>matchedByLabel</code> (段階 1 で先行実装)</td><td><code>format.test.ts</code></td><td>済</td></tr>
 <tr><td>FR-P-60〜68</td><td>dev サーバー</td><td><code>projects/dev_server.rs</code>, <code>platform/win_job.rs</code></td><td></td><td></td></tr>
 <tr><td><span class="chip id">FR-P-63</span></td><td>URL 自動検出 (純粋)</td><td><code>util/url_detect.rs</code></td><td><code>url_detect::tests</code></td><td>済</td></tr>
 <tr><td>FR-P-50〜58 (OQ-03 検証)</td><td>Copilot セッション紐付けの実装基盤</td><td></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
