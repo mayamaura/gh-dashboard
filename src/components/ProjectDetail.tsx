@@ -7,11 +7,23 @@
 import { useEffect, useState } from 'react'
 
 import type { Project, ProjectOverrideRequest } from '../types/dto'
-import { projectsSettingsUpdate } from '../ipc/commands'
+import { projectsDevLogsGet, projectsSettingsUpdate } from '../ipc/commands'
+import { onDevLog } from '../ipc/events'
 import { appStore } from '../store/appStore'
 import { launchState } from '../lib/projectList'
 import { describeError, matchedByLabel, relativeTime } from '../lib/format'
-import { openAgent, openBrowser, openFolder, openTerminal, openVscode } from '../lib/projectsActions'
+import {
+  openAgent,
+  openBrowser,
+  openFolder,
+  openTerminal,
+  openVscode,
+  startDevServer,
+  stopDevServer,
+} from '../lib/projectsActions'
+
+/** ログ表示側の上限。バックエンドのリングバッファと同じ (FR-P-64) */
+const LOG_DISPLAY_LIMIT = 500
 
 function devStateText(p: Project): string {
   const d = p.dev
@@ -64,6 +76,31 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
   const [archived, setArchived] = useState(ov?.archived ?? false)
   const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // dev サーバーのログ (IR-05 の初期表示 + IR-42 のライブ追記)。バックエンドの
+  // リングバッファが正なので、選択が変わるたびに取り直せば十分 (FR-P-84)。
+  const [logs, setLogs] = useState<string[]>([])
+  useEffect(() => {
+    let cancelled = false
+    let unlisten: (() => void) | undefined
+
+    setLogs([])
+    void projectsDevLogsGet(p.path_key).then((lines) => {
+      if (!cancelled) setLogs(lines)
+    })
+    void onDevLog(({ path_key, lines }) => {
+      if (path_key !== p.path_key) return
+      setLogs((prev) => [...prev, ...lines].slice(-LOG_DISPLAY_LIMIT))
+    }).then((fn) => {
+      if (cancelled) fn()
+      else unlisten = fn
+    })
+
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [p.path_key])
 
   // 選択が切り替わったら、または保存後に新しい値が届いたら、フォームを合わせる
   useEffect(() => {
@@ -131,7 +168,7 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
         <button onClick={() => void openTerminal(p.path_key)}>ターミナルで開く</button>
         <button onClick={() => void openAgent(p.path_key)}>Copilot CLI を起動</button>
         {p.dev.state === 'running' && p.dev.url && (
-          <button onClick={() => openBrowser(p.dev.state === 'running' ? p.dev.url ?? '' : '')}>
+          <button onClick={() => void openBrowser(p.dev.state === 'running' ? p.dev.url ?? '' : '')}>
             ブラウザで開く
           </button>
         )}
@@ -141,14 +178,25 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
         <h3>dev サーバー</h3>
         <p>{devStateText(p)}</p>
         <div className="button-row">
-          <button disabled title="段階 3 (T-3.2) で実装">
+          {/* FR-P-23: UI のボタン無効化はあくまで補助。バックエンドでも再チェックする */}
+          <button
+            onClick={() => void startDevServer(p.path_key)}
+            disabled={p.dev.state === 'starting' || p.dev.state === 'running' || launch.reason != null}
+          >
             起動
           </button>
-          <button disabled title="段階 3 (T-3.2) で実装">
+          <button
+            onClick={() => void stopDevServer(p.path_key)}
+            disabled={p.dev.state !== 'starting' && p.dev.state !== 'running'}
+          >
             停止
           </button>
         </div>
-        <p className="muted">ログはありません。</p>
+        {logs.length === 0 ? (
+          <p className="muted">ログはありません。</p>
+        ) : (
+          <pre className="dev-log">{logs.join('\n')}</pre>
+        )}
       </section>
 
       <section className="detail-section">

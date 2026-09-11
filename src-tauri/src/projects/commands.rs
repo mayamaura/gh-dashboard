@@ -7,7 +7,7 @@
 //! 変更系は「検証 → 永続化 → スナップショット → イベント + 戻り値」(IR-32)。
 //!
 //! 実装状況: T-1.4 / T-1.7 でプロジェクト系コマンドを実装済み。dev サーバー起動・
-//! 外部ツール起動は段階 3 (T-3.x) で実装する。
+//! 外部ツール起動は T-3.2〜3.7 で実装済み。
 
 use std::path::Path;
 
@@ -15,7 +15,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::{AppError, AppResult};
 use crate::projects::{
-    git, scan, store, DevState, Project, ProjectOverride, ProjectOverrideRequest, ProjectsSnapshot,
+    dev_server, external, git, scan, store, DevState, Project, ProjectOverride,
+    ProjectOverrideRequest, ProjectsSnapshot,
 };
 use crate::state::AppState;
 
@@ -97,14 +98,6 @@ async fn fill_copilot_usage(snapshot: &mut ProjectsSnapshot) {
             link_result.unmatched_sessions
         ));
     }
-}
-
-/// 未実装のコマンドが「静かに空を返す」ことを防ぐ。
-fn todo_err(task: &str) -> AppError {
-    AppError::unavailable(
-        format!("未実装です ({task})"),
-        Some("docs/implementation-plan.html の該当タスクを参照してください".to_string()),
-    )
 }
 
 /// スナップショット更新イベント (IR-40)。
@@ -386,32 +379,161 @@ pub async fn projects_scan_folder_remove(
 
 // ---------------------------------------------------------------- IR-04..05
 
+/// キャッシュ済みスナップショットから 1 プロジェクトを引く。dev 操作・外部ツール
+/// 起動はどれもここから `working_dir` / `root_path` / `resolved_command` 等を得る。
+fn cached_project(state: &AppState, path_key: &str) -> AppResult<Project> {
+    state
+        .projects_cache
+        .lock()
+        .map_err(cache_lock_err)?
+        .clone()
+        .and_then(|s| s.projects.into_iter().find(|p| p.path_key == path_key))
+        .ok_or_else(|| AppError::not_found("プロジェクト"))
+}
+
+/// `app.emit` を包む `StatusHook` / `LogHook` を組み立てる。`dev_server` は
+/// `AppHandle` を知らない (テストしやすさのため) ので、ここで橋渡しする。
+fn dev_hooks(app: &AppHandle) -> (dev_server::StatusHook, dev_server::LogHook) {
+    let status_app = app.clone();
+    let on_status: dev_server::StatusHook = std::sync::Arc::new(move |path_key, state| {
+        let _ = status_app.emit(
+            "projects-dev-status",
+            serde_json::json!({ "path_key": path_key, "state": state }),
+        );
+    });
+    let log_app = app.clone();
+    let on_logs: dev_server::LogHook = std::sync::Arc::new(move |path_key, lines| {
+        let _ = log_app.emit(
+            "projects-dev-log",
+            serde_json::json!({ "path_key": path_key, "lines": lines }),
+        );
+    });
+    (on_status, on_logs)
+}
+
+/// プロセスツリーごと強制終了する。**結果は見ない** — dev_stop は冪等に「停止中」
+/// を返す仕様なので (FR-P-66)、`taskkill` 自体の成否で分岐しない。
+async fn kill_process_tree(pid: u32) {
+    let _ = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .output()
+    })
+    .await;
+}
+
 /// IR-04: 起動。**起動可否は UI のボタン無効化だけに頼らず、ここでも再チェックする** (FR-P-23)。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn projects_dev_start(
-    _state: State<'_, AppState>,
-    _path_key: String,
-    _command: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path_key: String,
+    command: Option<String>,
 ) -> AppResult<DevState> {
-    // TODO(T-3.2): 子プロセスを起こし、Job Object に割り当てる (FR-P-61)
-    //   - stdout/stderr を非同期に行読みし、url_detect で URL を拾う (FR-P-63)
-    Err(todo_err("T-3.2"))
+    // 二重起動防止。UI がボタンを無効化していても、直接呼ばれた場合に備える
+    if matches!(
+        state.dev.state_of(&path_key),
+        DevState::Starting | DevState::Running { .. }
+    ) {
+        return Ok(state.dev.state_of(&path_key));
+    }
+
+    let project = cached_project(&state, &path_key)?;
+    let (on_status, on_logs) = dev_hooks(&app);
+
+    // FR-P-23: 起動不可 (自アプリ自身など) はここでも弾く。5 状態の一部として
+    // `Failed` を返す — IPC エラーにはしない (起動試行の「結果」として扱う)
+    if let Some(reason) = project.launch_blocked_reason {
+        let failed = DevState::Failed { reason };
+        state.dev.set_state(&path_key, failed.clone());
+        on_status(&path_key, &failed);
+        return Ok(failed);
+    }
+
+    let resolved = command
+        .filter(|c| !c.trim().is_empty())
+        .or(project.resolved_command);
+    let Some(resolved) = resolved else {
+        let failed = DevState::Failed {
+            reason: "起動コマンドがありません。手動調整で起動コマンドを設定してください".to_string(),
+        };
+        state.dev.set_state(&path_key, failed.clone());
+        on_status(&path_key, &failed);
+        return Ok(failed);
+    };
+
+    Ok(dev_server::start(
+        state.dev.clone(),
+        state.job.clone(),
+        path_key,
+        project.working_dir,
+        resolved,
+        on_status,
+        on_logs,
+    )
+    .await)
 }
 
 /// IR-04: 停止。**未起動でもエラーにせず「停止中」を返す** (冪等。FR-P-66)。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn projects_dev_stop(
+    app: AppHandle,
     state: State<'_, AppState>,
     path_key: String,
 ) -> AppResult<DevState> {
-    // TODO(T-3.2): 実プロセスの停止。現状は状態のリセットのみ。
-    Ok(state.dev.mark_stopped(&path_key))
+    // **先に `Stopped` にしてから** `taskkill` を待つ。逆順だと、バックグラウンドの
+    // 終了検出 (`mark_exited`) が taskkill の完了より先に届き、`Exited` → `Stopped`
+    // と一瞬で二重に状態変化イベントが飛ぶことがある。先に `Stopped` にしておけば
+    // `mark_exited` の pid ガードで無視される (dev_server.rs)。
+    let pid = match state.dev.state_of(&path_key) {
+        DevState::Running { pid, .. } => Some(pid),
+        _ => None,
+    };
+    let stopped = state.dev.mark_stopped(&path_key);
+    let _ = app.emit(
+        "projects-dev-status",
+        serde_json::json!({ "path_key": path_key, "state": stopped }),
+    );
+    if let Some(pid) = pid {
+        kill_process_tree(pid).await;
+    }
+    Ok(stopped)
 }
 
 /// IR-04: すべて停止。UI 側で二段階確認を挟む (FR-P-67)。
 #[tauri::command(rename_all = "snake_case")]
-pub async fn projects_dev_stop_all(_state: State<'_, AppState>) -> AppResult<ProjectsSnapshot> {
-    Err(todo_err("T-3.2"))
+pub async fn projects_dev_stop_all(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<ProjectsSnapshot> {
+    for key in state.dev.running_keys() {
+        // 単体の `projects_dev_stop` と同じ理由で、`Stopped` にしてから kill する
+        let pid = match state.dev.state_of(&key) {
+            DevState::Running { pid, .. } => Some(pid),
+            _ => None,
+        };
+        let stopped = state.dev.mark_stopped(&key);
+        let _ = app.emit(
+            "projects-dev-status",
+            serde_json::json!({ "path_key": key, "state": stopped }),
+        );
+        if let Some(pid) = pid {
+            kill_process_tree(pid).await;
+        }
+    }
+
+    // 再スキャンはせず、キャッシュの dev 状態だけ最新化する (FR-P-05 と同じ考え方)
+    let cached = state.projects_cache.lock().map_err(cache_lock_err)?.clone();
+    let mut snapshot = match cached {
+        Some(s) => s,
+        None => return scan_and_cache(&app, &state).await,
+    };
+    for p in snapshot.projects.iter_mut() {
+        p.dev = state.dev.state_of(&p.path_key);
+    }
+    *state.projects_cache.lock().map_err(cache_lock_err)? = Some(snapshot.clone());
+    let _ = app.emit(EVENT_SNAPSHOT, &snapshot);
+    Ok(snapshot)
 }
 
 /// IR-05: ログ最大 500 行。詳細パネルを開いた直後の初期表示用。
@@ -430,25 +552,50 @@ pub async fn projects_dev_logs_get(
 // explorer.exe は正常時でも終了コード 1 を返す。
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn projects_open_vscode(_state: State<'_, AppState>, _path_key: String) -> AppResult<()> {
-    Err(todo_err("T-3.7"))
+pub async fn projects_open_vscode(state: State<'_, AppState>, path_key: String) -> AppResult<()> {
+    let dir = cached_project(&state, &path_key)?.root_path;
+    tokio::task::spawn_blocking(move || external::open_vscode(&dir))
+        .await
+        .map_err(spawn_err)?
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn projects_open_folder(_state: State<'_, AppState>, _path_key: String) -> AppResult<()> {
-    Err(todo_err("T-3.7"))
+pub async fn projects_open_folder(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path_key: String,
+) -> AppResult<()> {
+    let dir = cached_project(&state, &path_key)?.root_path;
+    tokio::task::spawn_blocking(move || external::open_folder(&app, &dir))
+        .await
+        .map_err(spawn_err)?
 }
 
 /// Windows Terminal を優先し、失敗したら PowerShell にフォールバック (FR-P-74)。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn projects_open_terminal(
-    _state: State<'_, AppState>,
-    _path_key: String,
+    state: State<'_, AppState>,
+    path_key: String,
 ) -> AppResult<()> {
-    Err(todo_err("T-3.7"))
+    let dir = cached_project(&state, &path_key)?.working_dir;
+    tokio::task::spawn_blocking(move || external::open_terminal(&dir))
+        .await
+        .map_err(spawn_err)?
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn projects_open_agent(_state: State<'_, AppState>, _path_key: String) -> AppResult<()> {
-    Err(todo_err("T-3.7"))
+pub async fn projects_open_agent(state: State<'_, AppState>, path_key: String) -> AppResult<()> {
+    let dir = cached_project(&state, &path_key)?.working_dir;
+    tokio::task::spawn_blocking(move || external::open_agent(&dir))
+        .await
+        .map_err(spawn_err)?
+}
+
+/// FR-P-70 の最後の導線 (稼働中かつ URL 検出済みのときだけ UI が呼ぶ)。
+/// プロジェクトの検索は不要 — フロントが既に持っている URL をそのまま渡す。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn projects_open_browser(app: AppHandle, url: String) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || external::open_browser(&app, &url))
+        .await
+        .map_err(spawn_err)?
 }

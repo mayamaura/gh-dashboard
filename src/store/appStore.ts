@@ -11,6 +11,7 @@ import { useSyncExternalStore } from 'react'
 import type {
   AnimationPref,
   DbSnapshot,
+  DevState,
   IndexProgress,
   ProjectsSnapshot,
   QuotaGauge,
@@ -105,6 +106,17 @@ export const appStore = {
     state = initial
     emit()
   },
+}
+
+/**
+ * 1 プロジェクトの `dev` 状態だけを差し替える (IR-04 の戻り値 / IR-41 のイベント共通)。
+ * 対象がキャッシュに無ければ何もしない (スキャン前や未知のプロジェクト)。
+ */
+export function patchProjectDev(pathKey: string, dev: DevState): void {
+  const current = state.projects
+  if (!current) return
+  const projects = current.projects.map((p) => (p.path_key === pathKey ? { ...p, dev } : p))
+  appStore.set({ projects: { ...current, projects } })
 }
 
 /** ストア全体を購読する。 */

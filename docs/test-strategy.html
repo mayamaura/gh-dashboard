@@ -12,7 +12,7 @@
   <main class="main">
 <h1>テスト戦略</h1>
 <p class="lede">NFR-50〜54 の実装形。何を純粋関数として固め、何は実機でしか確認できないかを分ける。「テストが通る」で完了としない。</p>
-<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-08</span></div>
+<div class="doc-meta"><span>ドラフト</span><span>版 0.1</span><span>更新 2026-09-12</span></div>
 <h2 id="1.-層">1. 層</h2>
 <div class="table-wrap"><table>
 <thead><tr><th>層</th><th>対象</th><th>道具</th><th>実行</th></tr></thead>
@@ -332,6 +332,7 @@ npm init -y &amp;&amp; npm install @github/copilot-sdk</code></pre>
 <tr><td>2026-09-11</td><td>手動調整の保存は行全体の置き換えなので、表示用の値をフォーム初期値にすると他の上書きが黙って消える</td><td><code>override_values</code> からフォームを初期化し、保存後に同じ値が戻ることを確かめる (実機で確認。純粋関数ではないのでユニットテストは無し)</td></tr>
 <tr><td>2026-09-11</td><td>行内メニューを右端の ⋮ から右に開くとウィンドウ外に出る</td><td>画面端で反転する位置補正 (<code>RowMenu.tsx</code>、実機で確認)</td></tr>
 <tr><td>2026-09-11</td><td><code>.</code> 始まりのトップレベルフォルダを無条件に除外すると、<code>.dotfiles</code> のような本物のプロジェクトが警告無しに消える</td><td>除外した件数と名前が警告に積まれるテスト (<code>scan.rs::dot_dirs_are_excluded_but_reported</code>)</td></tr>
+<tr><td>2026-09-12</td><td><code>DevRegistry::mark_exited</code> が「ユーザーが停止ボタンで先に Stopped にした後、少し遅れて届くバックグラウンドの終了検出が Exited で上書きする」ケースで動作を間違える。ガード: 現在も同じ pid で Running のときだけ状態を上書き</td><td><code>dev_server.rs</code> の `mark_exited_does_not_overwrite_a_state_the_user_already_stopped` / `mark_exited_ignores_a_stale_pid_from_a_replaced_run`</td></tr>
 </tbody></table></div>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>

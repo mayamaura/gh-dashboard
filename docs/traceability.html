@@ -12,7 +12,7 @@
   <main class="main">
 <h1>要求トレーサビリティ</h1>
 <p class="lede">要求 ID → 実装モジュール → テスト の対応表。タスクを完了したらここを埋める。空欄は「まだ実装されていない」という意味であって、「対応不要」ではない。</p>
-<div class="doc-meta"><span>進行中</span><span>版 0.1</span><span>更新 2026-09-08</span></div>
+<div class="doc-meta"><span>進行中</span><span>版 0.1</span><span>更新 2026-09-12</span></div>
 <h2 id="使い方">使い方</h2>
 <ul>
 <li>実装したら「実装」列にファイルを、「テスト」列にテスト名を書く</li>
@@ -40,11 +40,11 @@
 <tr><td><span class="chip id">FR-P-56</span></td><td>タイムスタンプの読み取り (mtime と中身の区別)</td><td><code>copilot/sessions.rs</code> (<code>last_used_at</code> は中身のタイムスタンプ)</td><td>—</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-P-57</span></td><td>稼働中判定</td><td><code>copilot/activity.rs</code> (<code>is_session_active</code>, <code>ACTIVE_MTIME_WINDOW_MS = 120000</code>)</td><td><code>activity.rs</code> 内のユニットテスト 7 本</td><td>済</td></tr>
 <tr><td>NFR-41 (FR-P-53 関連)</td><td>旧パスの履歴表示</td><td><code>src/lib/format.ts</code> の <code>matchedByLabel</code> (段階 1 で先行実装)</td><td><code>format.test.ts</code></td><td>済</td></tr>
-<tr><td>FR-P-60〜68</td><td>dev サーバー</td><td><code>projects/dev_server.rs</code>, <code>platform/win_job.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-60〜68</td><td>dev サーバー</td><td><code>projects/dev_server.rs</code>, <code>platform/win_job.rs</code>, <code>state.rs</code>, <code>commands.rs</code>, <code>util/url_detect.rs</code></td><td><code>dev_server.rs</code> (DevState 5状態: `unknown_project_is_stopped_not_an_error` / `stopping_an_already_stopped_server_is_ok` / `dev_state_serializes_with_state_tag` / ログ: `log_ring_keeps_only_the_last_500_lines` / `take_pending_drains_and_leaves_the_ring_buffer_intact` / URL: `set_running_url_only_applies_once_while_running` / `set_running_url_is_noop_when_not_running`) ; <code>win_job.rs</code> (`job_can_be_created_and_dropped`) ; <code>url_detect.rs</code> (`extracts_vite_local_url` 等)</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-P-63</span></td><td>URL 自動検出 (純粋)</td><td><code>util/url_detect.rs</code></td><td><code>url_detect::tests</code></td><td>済</td></tr>
 <tr><td>FR-P-50〜58 (OQ-03 検証)</td><td>Copilot セッション紐付けの実装基盤</td><td></td><td><code>tools/probe/vscode-sessions.mjs</code></td><td></td></tr>
 <tr><td>FR-P-70〜72 (OQ-04 検証)</td><td>IDE 稼働判定</td><td></td><td><code>tools/probe/live-detect.mjs</code></td><td></td></tr>
-<tr><td>FR-P-70〜74</td><td>外部ツール連携</td><td><code>projects/external.rs</code></td><td></td><td></td></tr>
+<tr><td>FR-P-70〜74</td><td>外部ツール連携</td><td><code>projects/external.rs</code> + <code>commands.rs</code> (呼び出し: `projects_open_vscode` / `projects_open_folder` / `projects_open_terminal` / `projects_open_agent` / `projects_open_browser`)</td><td>実機確認 (投げっぱなし起動、終了コードを見ない)</td><td>済</td></tr>
 <tr><td>FR-P-80 / 84</td><td>詳細パネル</td><td><code>components/ProjectDetail.tsx</code>, <code>pages/ProjectsPage.tsx</code></td><td>実機</td><td>済</td></tr>
 <tr><td>FR-P-81 / 82</td><td>絞り込み・並べ替え (純粋)</td><td><code>lib/projectList.ts</code></td><td><code>projectList.test.ts</code></td><td>済</td></tr>
 <tr><td><span class="chip id">FR-P-83</span></td><td>行の表示</td><td><code>components/ProjectRow.tsx</code></td><td>実機</td><td>済</td></tr>

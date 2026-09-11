@@ -10,6 +10,7 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { appStore, useAppStore } from './store/appStore'
 import { useWindowVisibilityBridge } from './hooks/useWindowVisible'
 import { useProjectsSnapshotBridge } from './hooks/useProjectsSnapshotBridge'
+import { useDevStatusBridge } from './hooks/useDevStatusBridge'
 import { relativeTime } from './lib/format'
 import { scanProjects, stopAllDevServers } from './lib/projectsActions'
 
@@ -23,6 +24,8 @@ export function App() {
   useWindowVisibilityBridge()
   // スキャン・設定変更のたびにバックエンドが発火する (IR-40)。ここで 1 回だけ購読する
   useProjectsSnapshotBridge()
+  // dev サーバーの状態変化 (URL 検出・終了) を追いかける (IR-41)。ここで 1 回だけ購読する
+  useDevStatusBridge()
 
   const {
     tab,

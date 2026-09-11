@@ -6,8 +6,11 @@
 //   ページ表示時の両方が同じ関数を呼ぶことで、経路を 1 か所に集約する。
 
 import {
+  projectsDevStart,
+  projectsDevStop,
   projectsDevStopAll,
   projectsOpenAgent,
+  projectsOpenBrowser,
   projectsOpenFolder,
   projectsOpenTerminal,
   projectsOpenVscode,
@@ -16,7 +19,7 @@ import {
   projectsScanFolderRemove,
 } from '../ipc/commands'
 import { describeError } from './format'
-import { appStore } from '../store/appStore'
+import { appStore, patchProjectDev } from '../store/appStore'
 
 /** IR-01: スキャンを実行し、結果を `appStore.projects` に反映する。 */
 export async function scanProjects(): Promise<void> {
@@ -36,6 +39,31 @@ export async function stopAllDevServers(): Promise<void> {
   try {
     const snapshot = await projectsDevStopAll()
     appStore.set({ projects: snapshot })
+  } catch (e) {
+    appStore.set({ projectsError: describeError(e) })
+  }
+}
+
+/**
+ * IR-04: dev サーバーの起動 / 停止。
+ *
+ * 戻り値の `DevState` をその場で反映する — `projects-dev-status` イベント
+ * (IR-41) は非同期の状態変化 (URL 検出・終了) を追いかけるためのものであり、
+ * ボタンを押した直後の反映をそれ待ちにはしない (IR-32)。
+ */
+export async function startDevServer(pathKey: string): Promise<void> {
+  try {
+    const dev = await projectsDevStart(pathKey)
+    patchProjectDev(pathKey, dev)
+  } catch (e) {
+    appStore.set({ projectsError: describeError(e) })
+  }
+}
+
+export async function stopDevServer(pathKey: string): Promise<void> {
+  try {
+    const dev = await projectsDevStop(pathKey)
+    patchProjectDev(pathKey, dev)
   } catch (e) {
     appStore.set({ projectsError: describeError(e) })
   }
@@ -63,8 +91,7 @@ export async function removeScanFolder(path: string): Promise<void> {
 /**
  * 外部ツール起動 (FR-P-70)。投げっぱなしで、完了を待たない (FR-P-71)。
  *
- * 段階 3 までは `unavailable` が返る。失敗は具体的な対処とともに
- * `projectsError` に出す (FR-P-73)。
+ * 失敗は具体的な対処とともに `projectsError` に出す (FR-P-73)。
  */
 async function openWith(fn: (path_key: string) => Promise<void>, pathKey: string): Promise<void> {
   try {
@@ -79,12 +106,12 @@ export const openFolder = (pathKey: string) => openWith(projectsOpenFolder, path
 export const openTerminal = (pathKey: string) => openWith(projectsOpenTerminal, pathKey)
 export const openAgent = (pathKey: string) => openWith(projectsOpenAgent, pathKey)
 
-/** ブラウザで開く。段階 3 まで対応コマンドが無いため、常に「未実装」を出す。 */
-export function openBrowser(url: string): void {
-  // FR-P-70: 稼働中かつ URL 検出済みのときだけ呼ばれる想定。専用 IPC コマンドは
-  // まだ無いため (段階 3)、`window.open` は使わず未実装として明示する。
-  // 外部への navigation はブラウザ既定のシステムブラウザ起動と同義になり、
-  // バックエンド経由の spawn 成否判定 (FR-P-72) を経ないため保留する。
-  void url
-  appStore.set({ projectsError: '未実装です (T-3.x) — ブラウザで開く機能は段階 3 で実装します' })
+/** FR-P-70: 稼働中かつ URL 検出済みのときだけ呼ばれる想定。 */
+export async function openBrowser(url: string): Promise<void> {
+  if (url === '') return
+  try {
+    await projectsOpenBrowser(url)
+  } catch (e) {
+    appStore.set({ projectsError: describeError(e) })
+  }
 }

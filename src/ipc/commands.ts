@@ -66,6 +66,9 @@ export const projectsOpenTerminal = (path_key: string) =>
 export const projectsOpenAgent = (path_key: string) =>
   invoke<void>('projects_open_agent', { path_key })
 
+/** FR-P-70: 稼働中かつ URL 検出済みのときだけ呼ぶ */
+export const projectsOpenBrowser = (url: string) => invoke<void>('projects_open_browser', { url })
+
 // ---------------------------------------------------------------- Copilot
 
 /**

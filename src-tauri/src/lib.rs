@@ -59,6 +59,7 @@ pub fn run() {
             projects::commands::projects_open_folder,
             projects::commands::projects_open_terminal,
             projects::commands::projects_open_agent,
+            projects::commands::projects_open_browser,
             // --- Copilot (IR-10..19) ---
             copilot::commands::live_status_get,
             copilot::commands::snapshot_get,

@@ -317,6 +317,20 @@ button.danger { border-color: var(--danger); color: var(--danger); }
 
 .button-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 
+.dev-log {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .override-form { display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
 .override-form label {
   display: flex;

@@ -10,6 +10,7 @@ pub mod commands;
 pub mod copilot_link;
 pub mod detect;
 pub mod dev_server;
+pub mod external;
 pub mod git;
 pub mod scan;
 pub mod store;
