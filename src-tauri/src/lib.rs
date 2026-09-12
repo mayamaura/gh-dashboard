@@ -12,15 +12,56 @@
 pub mod copilot;
 pub mod db;
 pub mod error;
+pub mod logging;
 pub mod platform;
 pub mod projects;
 pub mod state;
 pub mod util;
+pub mod watchdog;
 
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
+
+/// ログ初期化 (T-X.1 / NFR-22)。**書き込み先が解決できなくてもアプリは起動する。**
+///
+/// `EnvFilter` でレベルを制御できるようにし、コンソール + ファイル (5MB×5世代) の
+/// 2 レイヤーに出す。`try_init` の失敗 (二重初期化など) は無視する — ログの
+/// 初期化に失敗してもアプリ本体を止めない。
+fn init_logging() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let console_layer = tracing_subscriber::fmt::layer();
+
+    let log_dir = dirs::data_local_dir().map(|d| d.join("gh-dashboard").join("logs"));
+    match log_dir {
+        Some(dir) => {
+            let writer = logging::RotatingFileWriter::new(dir);
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_writer(writer)
+                .with_ansi(false);
+            let _ = tracing_subscriber::registry()
+                .with(filter)
+                .with(console_layer)
+                .with(file_layer)
+                .try_init();
+        }
+        None => {
+            let _ = tracing_subscriber::registry()
+                .with(filter)
+                .with(console_layer)
+                .try_init();
+        }
+    }
+}
 
 /// アプリの起動。`main.rs` から呼ぶ。
 pub fn run() {
+    init_logging();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -28,20 +69,91 @@ pub fn run() {
             let state = state::AppState::init(&handle)?;
             app.manage(state);
 
+            // UI スレッドの応答性を監視してログに残す (NFR-21)。
+            watchdog::spawn(handle.clone());
+
+            // T-X.3 / DR-07: quota_samples の間引きは起動時に1回。
+            // メインスレッド (setup) を DB アクセスでブロックしないよう
+            // spawn_blocking に逃がす (NFR-20 / INV-10)。
+            if let Some(state) = handle.try_state::<state::AppState>() {
+                let db = state.db.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0);
+                    let conn = match db.lock() {
+                        Ok(c) => c,
+                        Err(e) => e.into_inner(),
+                    };
+                    if let Err(e) = crate::db::prune_quota_samples(&conn, now_ms) {
+                        tracing::warn!(error = %e, "quota_samples の間引きに失敗しました");
+                    }
+                });
+            }
+
             // ネイティブウィンドウの最小化を UI に伝える (IR-46 / FR-C-43)。
             // WebView の visibilitychange は最小化で発火しないため、この経路が要る。
+            //
+            // **ウィンドウを閉じる操作はトレイ常駐へ横流しする** (FR-P-62 の前提)。
+            // 実際に終了させるのはトレイの「終了」メニューだけ
             if let Some(window) = app.get_webview_window("main") {
                 let emitter = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Resized(_) = event {
+                let hide_target = window.clone();
+                window.on_window_event(move |event| match event {
+                    tauri::WindowEvent::Resized(_) => {
                         let minimized = emitter.is_minimized().unwrap_or(false);
                         let _ = emitter.emit(
                             "window-visibility",
                             serde_json::json!({ "minimized": minimized }),
                         );
                     }
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        // 閉じるのではなく隠す。dev サーバーの停止は
+                        // RunEvent::Exit (state.shutdown()) だけが担う (FR-P-62)
+                        api.prevent_close();
+                        let _ = hide_target.hide();
+                    }
+                    _ => {}
                 });
             }
+
+            // トレイ常駐 (T-X.5 / FR-P-62 の前提環境)
+            let show_item = MenuItemBuilder::with_id("show", "表示").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "終了").build(app)?;
+            let tray_menu = MenuBuilder::new(app).items(&[&show_item, &quit_item]).build()?;
+
+            let mut tray_builder = TrayIconBuilder::new().menu(&tray_menu);
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+            tray_builder
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "quit" => app.exit(0),
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })

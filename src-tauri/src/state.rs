@@ -51,6 +51,9 @@ impl AppState {
             .map(Arc::new)
             .map_err(|e| anyhow::anyhow!("Job Object を作成できません: {e}"))?;
 
+        // T-X.3 / DR-07 の間引きは呼び出し側 (lib.rs::run の setup) が
+        // spawn_blocking で行う。**ここ (init) はメインスレッドから同期的に
+        // 呼ばれるため、DB への追加クエリをここに置かない** (NFR-20 / INV-10)。
         Ok(Self {
             db: Arc::new(Mutex::new(conn)),
             projects_cache: Arc::new(Mutex::new(None)),
@@ -74,6 +77,7 @@ impl AppState {
     pub fn end_indexing(&self) {
         self.indexing.store(false, Ordering::Release);
     }
+
 
     /// アプリ終了時の後始末 (FR-P-62)。
     ///

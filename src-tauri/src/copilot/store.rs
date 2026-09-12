@@ -408,6 +408,44 @@ fn like_pattern(text: &str) -> String {
     format!("%{escaped}%")
 }
 
+/// `quota_samples` の 1 行 (FR-C-94 / DR-07)。
+///
+/// **実値 (`Actual`) の枠だけを記録する。** `Estimated` / `Unavailable` は
+/// 「今どれだけ使ったか」の実測ではない — 時系列トレンド (FR-C-94 の目的) に
+/// 推定や欠測を混ぜると誤読を招くため、書き込み時点で除外する
+/// (要求文書に明記は無いが、テーブルの用途から判断した仮定)。
+pub struct QuotaSampleRow<'a> {
+    pub received_at: i64,
+    pub observed_at: i64,
+    pub source: &'a str,
+    pub quota_kind: &'a str,
+    pub used: Option<f64>,
+    pub entitlement: Option<f64>,
+    pub used_pct: Option<f64>,
+    pub reset_at: Option<i64>,
+}
+
+/// `quota_samples` に 1 行追加する。**間引き (`db::prune_quota_samples`) と対になる書き込み経路**
+/// (DR-07: 間引きだけが動く未使用テーブルを残さない)。
+pub fn insert_quota_sample(conn: &Connection, row: &QuotaSampleRow<'_>) -> AppResult<()> {
+    conn.execute(
+        "INSERT INTO quota_samples \
+           (received_at, observed_at, source, quota_kind, used, entitlement, used_pct, reset_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![
+            row.received_at,
+            row.observed_at,
+            row.source,
+            row.quota_kind,
+            row.used,
+            row.entitlement,
+            row.used_pct,
+            row.reset_at,
+        ],
+    )?;
+    Ok(())
+}
+
 /// IR-19 の設定キー (FR-C-162)。**このキー名を変えると既存の保存値が読めなくなる。**
 const ANIMATION_PREF_KEY: &str = "animation_pref";
 
@@ -951,6 +989,36 @@ mod tests {
         let hits = search_sessions(&conn, &q).unwrap();
         assert_eq!(hits.len(), 1, "%/_ をワイルドカードとして展開してはいけない");
         assert_eq!(hits[0].session_id, "s1");
+    }
+
+    /// T-X.3: 実値サンプルが書き込め、`db::prune_quota_samples` で読み戻せる形になっている
+    #[test]
+    fn insert_quota_sample_round_trips() {
+        let conn = open_in_memory().unwrap();
+        insert_quota_sample(
+            &conn,
+            &QuotaSampleRow {
+                received_at: NOW,
+                observed_at: NOW - 1000,
+                source: "sdk",
+                quota_kind: "premium_interactions",
+                used: Some(3.0),
+                entitlement: Some(1500.0),
+                used_pct: Some(0.2),
+                reset_at: Some(NOW + 86_400_000),
+            },
+        )
+        .unwrap();
+
+        let (kind, used_pct): (String, f64) = conn
+            .query_row(
+                "SELECT quota_kind, used_pct FROM quota_samples",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(kind, "premium_interactions");
+        assert!((used_pct - 0.2).abs() < 1e-9);
     }
 
     /// T-7.14: 未設定は既定値 (`None` を呼び出し側で `Auto` に落とす)

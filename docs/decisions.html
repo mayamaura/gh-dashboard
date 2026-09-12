@@ -740,6 +740,22 @@
 <li><strong>実機確認</strong> (<code>cargo test --lib probe_real_session_detail -- --ignored</code>): 46 ファイル / 1,041 レコードを 88ms で索引し、3 セッションで<strong>モデル別クレジットの合計がセッション総量と 1e-6 未満で一致</strong> (14.675150 / 0.791325 / 5.416185)。2 モデルに分かれるセッションでも一致した</li>
 <li><strong>時間帯別グラフは実質「出力トークンの推移」になる。</strong> CLI 側がレコード単位の入力トークンを載せるようになれば、集計式 (<code>input + output</code>) を変えずにそのまま効く</li>
 </ul>
+<h2 id="adr-0030-ui-応答性-watchdog-は-heartbeat-ではなく-ping-方式">ADR-0030 — UI 応答性 watchdog は heartbeat ではなく ping 方式 (<code>run_on_main_thread</code>)</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12 (T-X.2 / NFR-21)</p>
+<p><strong>文脈</strong>: NFR-21 (推奨) は「UI スレッドが一定時間 (目安 3 秒) 応答しなければログに記録する」とだけ書いている。<strong>検知手段は書かれていない。</strong> 素直に思いつくのは <code>RunEvent::MainEventsCleared</code> の heartbeat だが、採用前に Tauri 2.11 / tao 0.35 の実装を読んで検証した。</p>
+<p><strong>検証</strong>: <code>tauri-runtime-wry</code> 2.11.4 <code>src/lib.rs</code> はイベントループを <strong><code>ControlFlow::Wait</code></strong> で回す (3198 行 / 4169 行)。入力も OS イベントも無いアイドル時、ループは <code>GetMessage</code> で寝たまま <code>MainEventsCleared</code> を発火しない。<strong>常駐ダッシュボードでは「数分発火しない」のが正常</strong>であり、最終発火時刻ではアイドルとハングを区別できない。heartbeat 方式は誤検知器になる。</p>
+<p>一方 <code>AppHandle::run_on_main_thread</code> は、別スレッドから呼ぶと <code>EventLoopProxy::send_event</code> でループを<strong>叩き起こして</strong> <code>Message::Task</code> をメインスレッドで実行する (同 1604 / 3335 行)。<strong>寝ているだけなら即答が返り、返らなければ本当に詰まっている</strong> — アイドルとハングが区別できる。</p>
+<p><strong>判断</strong>: <code>src-tauri/src/watchdog.rs</code> に監視スレッドを 1 本置き、3 秒ごとに ping を <code>run_on_main_thread</code> で投げ、<code>mpsc::recv_timeout(3s)</code> で待つ。タイムアウトしたら <code>tracing::warn!</code>、応答が戻ったら経過時間つきで再開を記録する。送信が <code>Err</code> = イベントループ終了なのでスレッドを畳む。</p>
+<p><strong>何を監視していないか</strong>: 段階 4〜7 の重い処理は <code>spawn_blocking</code> で別スレッドプールに逃がしてあるため、<strong>これは遅い処理の検出器ではない</strong>。ここが鳴るのは「UI スレッドで DB / IO / ロック / ネットワークを触った」= <strong>INV-10 違反の疑い</strong>のときだけ。</p>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>RunEvent::MainEventsCleared</code> の最終発火時刻を見る heartbeat</strong> — <code>ControlFlow::Wait</code> のため<strong>正常なアイドルを全部ハングとして記録する</strong>。「実装は動くがログが嘘になる」種類の失敗で、テストでは捕まらない</li>
+<li><strong>ウォッチ間隔を短く (500ms 等) して精度を上げる</strong> — ping のたびにイベントループを起こすので、<strong>アイドル時の消費電力と引き換え</strong>になる。3 秒はしきい値と同じで足り、NFR-21 の「目安 3 秒」を超えない</li>
+<li><strong>ハングを検知したらダイアログ / トレイ通知を出す</strong> — 要求は「ログに記録する」のみ。<strong>ハング中に UI へ出そうとする通知は届かない</strong></li>
+<li><strong>検知時にスタックをダンプする</strong> — 他スレッドのスタック取得は Windows API (<code>SuspendThread</code> + <code>StackWalk64</code>) が要り、<strong><code>unsafe</code> が <code>win_job.rs</code> の外に出る</strong> (INV-8)。リリースビルドは <code>debug = 1</code> を残してあるので (NFR-25)、必要ならダンプ解析でやる</li>
+</ul>
+<p><strong>実機確認</strong>: 監視スレッド内から一時的に <code>run_on_main_thread</code> でメインスレッドを 8 秒ブロックして起動。<code>unresponsive_ms=3014</code> で警告、<code>unresponsive_ms=6015</code> で再開を記録した。<strong>同じ起動中の残り時間 (アイドル含む) では 1 件も誤検知していない</strong>。検証コードは削除済み。</p>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
       <span>gh-dashboard</span>

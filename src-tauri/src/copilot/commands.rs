@@ -770,6 +770,9 @@ pub async fn quota_get(
 
     let cache = state.quota.clone();
     let db = state.db.clone();
+    // 推定経路とサンプル書き込みは別々の spawn_blocking に載る。`db` は推定の
+    // 分岐でしか move されないので、サンプル書き込み用にもう 1 本複製しておく
+    let db_for_samples = state.db.clone();
     let now = now_ms();
 
     // 下限間隔 (FR-C-135 / 142)。直前の値をそのまま返す — 空にしない (NFR-07)
@@ -806,6 +809,52 @@ pub async fn quota_get(
     let gauges = qf::build_gauges(sdk, estimate, &mut c, now);
     c.gauges = gauges.clone();
     c.last_fetch_at = Some(now);
+    drop(c);
+
+    // FR-C-94 / DR-07: 時系列サンプルは実値 (`Actual`) の枠だけ記録する
+    // (理由は store::QuotaSampleRow のコメントを参照)。書き込みは spawn_blocking へ (INV-10)。
+    // 間引きは起動時に AppState::init 側でまとめて行う (定期実行ループを新設しない)。
+    type OwnedSample = (i64, i64, &'static str, String, Option<f64>, Option<f64>, Option<f64>, Option<i64>);
+    let samples: Vec<OwnedSample> = gauges
+        .iter()
+        .filter_map(|g| match &g.origin {
+            crate::copilot::quota::QuotaSource::Actual { via, observed_at } => Some((
+                now,
+                *observed_at,
+                actual_via_str(*via),
+                g.kind.clone(),
+                g.used,
+                g.entitlement,
+                g.used_pct,
+                g.reset_at,
+            )),
+            _ => None,
+        })
+        .collect();
+    if !samples.is_empty() {
+        tokio::task::spawn_blocking(move || {
+            let Ok(conn) = db_for_samples.lock() else {
+                // 汚染していても利用枠の表示自体は止めない (NFR-24)
+                return;
+            };
+            for (received_at, observed_at, source, quota_kind, used, entitlement, used_pct, reset_at) in &samples {
+                let row = store::QuotaSampleRow {
+                    received_at: *received_at,
+                    observed_at: *observed_at,
+                    source,
+                    quota_kind,
+                    used: *used,
+                    entitlement: *entitlement,
+                    used_pct: *used_pct,
+                    reset_at: *reset_at,
+                };
+                if let Err(e) = store::insert_quota_sample(&conn, &row) {
+                    tracing::warn!(error = %e, kind = %quota_kind, "quota_samples への書き込みに失敗");
+                }
+            }
+        });
+    }
+
     Ok(gauges)
 }
 
@@ -822,6 +871,14 @@ pub async fn quota_source_status_get(state: State<'_, AppState>) -> AppResult<se
         "estimate": c.estimate_route.to_json(),
         "checked_at": c.last_fetch_at,
     }))
+}
+
+/// `quota_samples.source` に書く文字列 (T-X.3)。
+fn actual_via_str(via: crate::copilot::quota::ActualVia) -> &'static str {
+    match via {
+        crate::copilot::quota::ActualVia::Sdk => "sdk",
+        crate::copilot::quota::ActualVia::Rest => "rest",
+    }
 }
 
 /// 利用枠キャッシュのロック。**汚染しても表示を止めない** (NFR-24)。

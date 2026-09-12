@@ -227,12 +227,12 @@
 <div class="table-wrap"><table>
 <thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td>T-X.1</td><td>ログのファイル出力 + ローテーション (5MB × 5 世代)</td><td><span class="chip id">NFR-22</span></td><td>未着手</td></tr>
-<tr><td>T-X.2</td><td>UI スレッド応答性の watchdog (3 秒)</td><td><span class="chip id">NFR-21</span></td><td>未着手</td></tr>
-<tr><td>T-X.3</td><td><code>quota_samples</code> の間引き (30 日) — <strong>書き込みとセットで</strong></td><td>DR-07 / FR-C-94</td><td>未着手</td></tr>
-<tr><td>T-X.4</td><td>リリースビルドのデバッグシンボル出力とアーカイブ</td><td><span class="chip id">NFR-25</span></td><td>未着手</td></tr>
-<tr><td>T-X.5</td><td>トレイ常駐とウィンドウ表示・非表示</td><td>要求 2.3 / FR-P-62</td><td>未着手</td></tr>
-<tr><td>T-X.6</td><td>起動時のマイグレーション前バックアップ</td><td><span class="chip id">DR-04</span></td><td>未着手</td></tr>
+<tr><td>T-X.1</td><td>ログのファイル出力 + ローテーション (5MB × 5 世代)</td><td><span class="chip id">NFR-22</span></td><td>完了</td></tr>
+<tr><td>T-X.2</td><td>UI スレッド応答性の watchdog (3 秒)</td><td><span class="chip id">NFR-21</span></td><td>完了</td></tr>
+<tr><td>T-X.3</td><td><code>quota_samples</code> の間引き (30 日) — <strong>書き込みとセットで</strong></td><td>DR-07 / FR-C-94</td><td>完了</td></tr>
+<tr><td>T-X.4</td><td>リリースビルドのデバッグシンボル出力とアーカイブ</td><td><span class="chip id">NFR-25</span></td><td>完了（既存実装で充足済み）</td></tr>
+<tr><td>T-X.5</td><td>トレイ常駐とウィンドウ表示・非表示</td><td>要求 2.3 / FR-P-62</td><td>完了</td></tr>
+<tr><td>T-X.6</td><td>起動時のマイグレーション前バックアップ</td><td><span class="chip id">DR-04</span></td><td>完了（既存実装で充足済み）</td></tr>
 </tbody></table></div>
 <hr />
 <h2 id="状態の集計">状態の集計</h2>
@@ -247,7 +247,7 @@
 <tr><td>5. ライブ監視</td><td>14 / 14</td></tr>
 <tr><td>6. 利用枠</td><td>11 / 13</td></tr>
 <tr><td>7. 振り返り UI</td><td>14 / 14</td></tr>
-<tr><td>横断</td><td>0 / 6</td></tr>
+<tr><td>横断</td><td>6 / 6</td></tr>
 </tbody></table></div>
 <p>「完了」になっているのは、足場として<strong>純粋関数とテストだけ</strong>先に置いたもの。IO を伴う部分はすべて未着手。</p>
     <div class="footer-nav">
