@@ -44,7 +44,7 @@ pub enum StateSignal {
 ///
 /// **末尾の物理的な最終行が本文レコードとは限らない** (FR-C-49)。末尾から遡って
 /// 最初に見つかる本文レコード (ユーザー / アシスタント) を採ったものを渡すこと。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TailRecord {
     /// アシスタントがツール呼び出しを書いたまま止まっている
     ToolUse,
@@ -52,7 +52,9 @@ pub enum TailRecord {
     TurnEnded,
     /// ユーザー発話で終わっている (= 応答生成中の可能性)
     UserMessage,
-    /// 解釈できない / 本文レコードが見つからない
+    /// 解釈できない / 本文レコードが見つからない。
+    /// **既定値。** 何も分からないときに勝手な状態へ倒れないようにする (NFR-43)
+    #[default]
     Unrecognized,
 }
 

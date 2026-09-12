@@ -4,10 +4,14 @@ import type { QuotaGauge, QuotaSource } from '../../types/dto'
 import {
   activityLabel,
   compactNumber,
+  contextUsagePct,
   creditsFromNanoAiu,
   describeError,
   duration,
+  entrypointLabel,
   gaugeText,
+  IDLE_THRESHOLD_MS,
+  isSessionIdle,
   isStale,
   matchedByLabel,
   relativeTime,
@@ -210,6 +214,41 @@ describe('describeError', () => {
 
   it('未知の形のオブジェクトでも落ちずに文字列化する', () => {
     expect(describeError({ foo: 'bar' })).toBe('{"foo":"bar"}')
+  })
+})
+
+describe('entrypointLabel', () => {
+  it('種別ごとの短いラベルを返す', () => {
+    expect(entrypointLabel('cli_interactive')).toBe('CLI')
+    expect(entrypointLabel('vscode')).toBe('VS Code')
+    expect(entrypointLabel('unknown')).toBe('不明')
+  })
+})
+
+describe('contextUsagePct', () => {
+  it('使用量と上限から率を出す', () => {
+    expect(contextUsagePct(50_000, 200_000)).toBe(25)
+  })
+
+  // NFR-40 / 43: どちらかが無ければ数字を作らない
+  it('どちらかが null なら null', () => {
+    expect(contextUsagePct(null, 200_000)).toBeNull()
+    expect(contextUsagePct(50_000, null)).toBeNull()
+  })
+
+  it('上限 0 は 0 除算にしない', () => {
+    expect(contextUsagePct(0, 0)).toBeNull()
+  })
+})
+
+describe('isSessionIdle (FR-C-55)', () => {
+  it('30 分を超えたらアイドル', () => {
+    expect(isSessionIdle(NOW - IDLE_THRESHOLD_MS - 1, NOW)).toBe(true)
+    expect(isSessionIdle(NOW - IDLE_THRESHOLD_MS + 1, NOW)).toBe(false)
+  })
+
+  it('最終活動が無ければ稼働中扱い', () => {
+    expect(isSessionIdle(null, NOW)).toBe(false)
   })
 })
 

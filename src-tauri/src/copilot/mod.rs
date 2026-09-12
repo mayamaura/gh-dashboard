@@ -15,6 +15,7 @@ pub mod activity;
 pub mod commands;
 pub mod delta;
 pub mod indexer;
+pub mod live;
 pub mod parser;
 pub mod quota;
 pub mod sessions;
@@ -74,6 +75,12 @@ pub struct LiveStatus {
     pub running_session_count: usize,
     /// 各セッションの `running_subagent_ids` の合計。別に数えない (FR-C-51)
     pub running_subagent_count: usize,
+    /// **全セッション** (稼働 / 非稼働を問わず) の `events.jsonl` mtime の最大値。
+    ///
+    /// 自動インデックスの発火判定はこの値だけで行う。**固定間隔で更新される値を
+    /// 混ぜない** — 混ぜるとアイドル時も回り続ける (FR-C-58 / FR-C-59)。
+    /// 1 件も読めなければ `None`。**0 で埋めない** (NFR-43)
+    pub newest_log_mtime_ms: Option<i64>,
     pub polled_at: i64,
 }
 
@@ -81,7 +88,12 @@ impl LiveStatus {
     /// 集合から件数を導出して組み立てる (FR-C-51)。
     ///
     /// 「バッジは稼働中なのに系統図は空」という矛盾が出ようがない形にする。
-    pub fn new(sessions: Vec<LiveSession>, ide_workspaces: Vec<IdeWorkspace>, now: i64) -> Self {
+    pub fn new(
+        sessions: Vec<LiveSession>,
+        ide_workspaces: Vec<IdeWorkspace>,
+        newest_log_mtime_ms: Option<i64>,
+        now: i64,
+    ) -> Self {
         let running_session_count = sessions.len();
         let running_subagent_count = sessions
             .iter()
@@ -92,6 +104,7 @@ impl LiveStatus {
             ide_workspaces,
             running_session_count,
             running_subagent_count,
+            newest_log_mtime_ms,
             polled_at: now,
         }
     }
@@ -250,7 +263,7 @@ mod tests {
     /// FR-C-51: 件数と集合が食い違いようがない形にする
     #[test]
     fn subagent_count_is_derived_from_the_id_sets() {
-        let status = LiveStatus::new(vec![session(&["a", "b"]), session(&["c"])], vec![], 0);
+        let status = LiveStatus::new(vec![session(&["a", "b"]), session(&["c"])], vec![], None, 0);
         assert_eq!(status.running_session_count, 2);
         assert_eq!(status.running_subagent_count, 3);
     }

@@ -3,7 +3,7 @@
 // ★ **取れない値を「0」や「—」だけで埋めない。**取得不可は取得不可として
 // 表現する (NFR-40 / 43 / 44)。この方針をここの関数群で守る。
 
-import type { AppError, QuotaGauge, QuotaSource } from '../types/dto'
+import type { AppError, Entrypoint, QuotaGauge, QuotaSource } from '../types/dto'
 
 /** 相対時刻。`null` は「一度も無い」であって「0 秒前」ではない。 */
 export function relativeTime(ms: number | null, now: number): string {
@@ -127,6 +127,40 @@ export function activityLabel(
     case 'unknown':
       return '不明'
   }
+}
+
+/** エントリポイントの短いラベル (FR-C-53)。 */
+export function entrypointLabel(entrypoint: Entrypoint): string {
+  switch (entrypoint) {
+    case 'cli_interactive':
+      return 'CLI'
+    case 'cli_background':
+      return 'CLI (バックグラウンド)'
+    case 'vscode':
+      return 'VS Code'
+    case 'coding_agent':
+      return 'Coding Agent'
+    case 'unknown':
+      return '不明'
+  }
+}
+
+/**
+ * コンテキストウィンドウ使用率。**どちらかが無ければ null** (取得不可)。
+ * 0 で埋めない (NFR-40 / 43)。
+ */
+export function contextUsagePct(used: number | null, limit: number | null): number | null {
+  if (used === null || limit === null || limit <= 0) return null
+  return (used / limit) * 100
+}
+
+/** 30 分アイドルのしきい値。バックエンドの `activity::IDLE_THRESHOLD_MS` と同じ値 (FR-C-55)。 */
+export const IDLE_THRESHOLD_MS = 30 * 60 * 1000
+
+/** アイドル判定。**状態を持たず、毎回この時刻差だけで決める。** 最終活動が無ければ稼働中扱い。 */
+export function isSessionIdle(lastActivityAt: number | null, now: number): boolean {
+  if (lastActivityAt === null) return false
+  return now - lastActivityAt > IDLE_THRESHOLD_MS
 }
 
 export const ACTIVITY_TOOLTIP: Record<string, string> = {

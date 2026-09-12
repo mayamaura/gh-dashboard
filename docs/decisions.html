@@ -549,6 +549,101 @@
 <div class="warning"><span class="note-title">注意</span>
 <p><strong>T-4.9 / T-4.10 は実装していない。</strong> <code>subagent_runs.status</code> に書き込む値は <code>'running'</code> だけで、<code>'completed'</code> / <code>'declined'</code> へ遷移させる経路を持たない。<code>subagent.completed</code> が来ても <code>ended_at</code> を埋めない — 終了時刻を確定させることが FR-C-24〜26 のゲートそのものだから。根拠は ADR-0016 の注記と OQ-11 (2026-09-12 の実データでも<strong>拒否された委任・非同期委任とも 0 件</strong>)。</p>
 </div>
+<hr />
+
+<h2 id="adr-0024-稼働中サブエージェントは-subagent.started-ではなく-agentid-で拾う">ADR-0024 — 稼働中サブエージェントは <code>subagent.started</code> ではなく <code>agentId</code> で拾う</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12 (段階 5 / T-5.2・T-5.4 の実装時、実データの実測を受けて)</p>
+<p><strong>文脈</strong>: FR-C-50 / 51 は「稼働中サブエージェントの<strong>集合</strong>を作り、件数はその長さとする」と書く。素直な実装は「末尾ウィンドウ内に <code>subagent.started</code> があり、同じ <code>toolCallId</code> の <code>subagent.completed</code> が無いもの」である。<strong>これを実装して実データに掛けたら 0 件だった。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>実測 (<code>2bb4517d…</code> / 293,339 バイト / 79 レコード)</th><th>末尾からの位置</th><th>64KB 窓に入るか</th></tr></thead>
+<tbody>
+<tr><td><code>subagent.started</code></td><td><strong>252,883 バイト</strong></td><td><strong>入らない</strong></td></tr>
+<tr><td><code>subagent.completed</code></td><td>9,671 バイト</td><td>入る</td></tr>
+<tr><td>子が書いた最後のレコード (<code>agentId</code> つき)</td><td>12,741 バイト</td><td>入る</td></tr>
+</tbody></table></div>
+<p><strong>これは例外ではなく構造的な偏りである。</strong> サブエージェントが長く走るほど、子が書くレコード (実測 38 件 / 240KB) が <code>subagent.started</code> を窓の外へ押し出す。つまり <strong>「長く走っていて表示したいもの」ほど確実に取り逃す。</strong> 窓を 512KB に広げても先送りにしかならない (FR-C-08 / NFR-03 があるので全読みはできない)。</p>
+<p><strong>判断</strong>: 候補集合を次の和にする。除外は窓内の <code>subagent.completed</code> の <code>toolCallId</code>。</p>
+<ol>
+<li><strong>窓内に現れた <code>agentId</code></strong> (トップレベルのフィールド)</li>
+<li>窓内の <code>subagent.started</code> の <code>data.toolCallId</code></li>
+</ol>
+<p><strong>根拠</strong>: <code>agentId</code> は<strong>サブエージェントに属するレコードだけ</strong>に付き (OQ-01: 出現率 23.4%)、その値は<strong>子の <code>toolCallId</code> と一致する</strong>。実データのサブエージェント 2 件とも 1:1 で一致した (<code>toolu_0179WxXYi4A1j6CuC1XX5RKA</code> / <code>call_DfZiFUaIGbm4q7AHWL1ejeVi</code>)。<strong>走っているサブエージェントは今まさに書いているのだから、その <code>agentId</code> は必ず末尾付近にある</strong> — 窓の位置に依存しない。FR-C-22 (親側と子側の両方に存在する識別子を主キーにする) / ADR-0016 とも同じキーのままである。</p>
+<p><strong>評価順に依存がある</strong>: <code>subagent.completed</code> <strong>自身も <code>agentId</code> を持つ</strong>。逆走査で完了 ID を先に集めてから <code>agentId</code> を評価しないと、完了したサブエージェントを自分の完了レコードで稼働中に復活させる。実装は <code>match</code> の<strong>後</strong>で <code>agentId</code> を評価する (テスト <code>completed_subagent_is_not_revived_by_its_own_agent_id</code>)。</p>
+<p><strong>実データでの確認</strong> (隔離 <code>COPILOT_HOME</code> にコピーして検証。実データは読むだけ / INV-1):</p>
+<ul>
+<li><code>subagent.completed</code> あり → 集合は<strong>空</strong> (誤検出なし)</li>
+<li><code>subagent.completed</code> を削って「走行中」を再現 → <strong><code>["toolu_0179…"]</code> / 活動状態 <code>SubagentRunning</code></strong>。<code>subagent.started</code> だけの規則では 0 件だったケース</li>
+</ul>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>subagent.started</code> だけを候補にする</strong> — 上記のとおり実データで取り逃す。<strong>しかも「0 件」は正常な表示と見分けがつかないので、壊れていることに気付けない</strong></li>
+<li><strong>常に 512KB 窓で読む</strong> — FR-C-47 に反するうえ、上の実測でも <code>started</code> は 252KB 先にある。1 回長く走ればすぐ超える。<strong>窓幅を増やす方向の解は原理的に効かない</strong></li>
+<li><strong>サブエージェントのログファイルの mtime を見る</strong> (FR-C-50 の本文) — 実データではサブエージェントは<strong>親と同じ <code>events.jsonl</code> に書く</strong>。専用ファイルが無いので判定材料にならない (OQ-07)</li>
+<li><strong>DB (<code>subagent_runs.status</code>) を読む</strong> — FR-C-50 が明示的に却下している (更新ボタンを押すまで古い)。加えて T-4.9 / T-4.10 未実装で <code>status</code> は <code>'running'</code> のまま (ADR-0023)</li>
+</ul>
+<p><strong>残る近似</strong> (FR-C-52 と同種の既知の限界として受け入れる): サブエージェントが窓ぶんの期間まったく書かずに黙っている場合は取り逃す。ただしその間は親の <code>events.jsonl</code> も伸びないので、<strong>mtime 窓 (120 秒) でセッションごと非稼働に落ちる方が先に効く</strong>。</p>
+<hr />
+
+<h2 id="adr-0025-ライブ監視の末尾分類は-4-規則だけにする">ADR-0025 — ライブ監視の末尾分類は 4 規則だけにし、許可待ち専用の規則を作らない</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12 (段階 5 / T-5.2)</p>
+<p><strong>文脈</strong>: FR-C-45 ② の入力 (<code>activity::TailRecord</code>) を実レコードから作る関数が必要になった。既存の <code>parser::scan_tail</code> は<strong>物理的な最終行</strong>の <code>timestamp</code> を取るだけで、本文レコードを遡って探さない (FR-C-49 を満たさない)。実データ 46 セッションの<strong>物理的な最終行は 46/46 すべて <code>session.shutdown</code></strong> だった。</p>
+<p><strong>判断</strong>: <code>parser::classify_tail</code> (純粋関数) を新設し、末尾ウィンドウの確定行を<strong>新しい行から古い行へ 1 回だけ</strong>辿る。規則は 4 つ。</p>
+<ol>
+<li><code>tool.execution_start</code> があり、同じ <code>toolCallId</code> の <code>tool.execution_complete</code> が<strong>より新しい位置に無い</strong> → <code>ToolUse</code></li>
+<li><code>assistant.turn_end</code> → <code>TurnEnded</code></li>
+<li><code>user.message</code> → <code>UserMessage</code></li>
+<li>どれにも当たらない / パースできない → <code>Unrecognized</code> (= 不明。<strong>空欄にも既定値にも倒さない</strong> / NFR-43)</li>
+</ol>
+<p><strong><code>assistant.message</code> に規則を持たせない理由</strong>: ターン途中で止まっている場合、逆走査は同じターンの先頭にある <code>user.message</code> まで遡って規則 3 に当たり「生成中」になる。<strong>実データのレコード順 (<code>user.message</code> → <code>assistant.turn_start</code> → <code>assistant.message</code>) がそれを保証している</strong>ので、5 つ目の規則も <code>TailRecord</code> の 5 値目も要らない。</p>
+<p><strong>許可プロンプト待ちに専用規則を作らない理由</strong> (FR-C-46): 実データのレコード順は <code>tool.execution_start</code> → <code>permission.requested</code> → <code>permission.completed</code> で、<strong>許可待ちの間は「complete の無い start」が最後に残る</strong> = 規則 1 に落ちる。加えて <strong><code>permission.requested</code> は <code>toolCallId</code> を持たない</strong> (実測 82 件すべて <code>permissionRequest</code> / <code>promptRequest</code> / <code>requestId</code> のみ) ので、そもそも突き合わせキーが作れない。FR-C-46 の「両者は区別できない」がデータの形としても正しいことが確認できた。</p>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>scan_tail</code> を拡張して兼用する</strong> — <code>scan_tail</code> は段階 2 (FR-P-56) の「最終活動時刻と shutdown 判定」用で、止まる位置が違う。1 つの関数に 2 つの停止条件を持たせると、どちらの呼び出し側も相手の都合で壊れる</li>
+<li><strong><code>permission.requested</code> / <code>permission.completed</code> を突き合わせる</strong> — キーが無い。<code>requestId</code> は <code>toolCallId</code> と別物</li>
+<li><strong>子 (サブエージェント) のレコードを分類から除外する</strong> — 除外してもしなくても結果が同じだった (どちらの経路でも <code>ToolUse</code> になる)。<strong>結果が変わらない分岐は書かない</strong></li>
+</ul>
+<hr />
+
+<h2 id="adr-0026-ide-lock-の-pid-生存確認は-win_job.rs-に置く">ADR-0026 — <code>ide/*.lock</code> の PID 生存確認は <code>win_job.rs</code> に置き、<code>headers</code> を持つ構造体を定義しない</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12 (段階 5 / T-5.13)</p>
+<p><strong>文脈</strong>: FR-C-70〜72。ADR-0014 が <code>ide/*.lock</code> を「IDE ワークスペース一覧専用」と位置づけた。FR-C-71 は PID が死んでいても行を残して「切断済み」にせよと言うので、<strong>PID の生存確認が要る</strong>。</p>
+<p><strong>判断</strong>:</p>
+<ul>
+<li><code>is_process_alive(pid)</code> を <strong><code>platform/win_job.rs</code> に置く</strong> (INV-8: <code>unsafe</code> / FFI を書いてよい唯一のファイル)。<code>OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)</code> + <code>GetExitCodeProcess</code> の 2 回のシステムコールのみ。<strong>プロセスを起動しない</strong>ので INV-4 / FR-C-42 に触れない</li>
+<li>lock の読み取り先構造体に <strong><code>headers</code> フィールドを定義しない。</strong> serde は未知フィールドを既定で捨てるので、<strong>宣言しないことがそのまま「読まない」</strong>になる</li>
+</ul>
+<p><strong>実データの lock の形</strong> (2 件、値は伏せる): <code>{socketPath, scheme, headers:{Authorization}, pid, ideName, workspaceFolders[], isTrusted}</code>。<strong><code>headers.Authorization</code> が実在する</strong> — INV-2 / FR-C-72 は仮定ではない。</p>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>#[serde(skip)]</code> で <code>headers</code> を落とす</strong> — 「読んでから捨てる」形になり、<strong>値が一度メモリに載る</strong>。フィールドを書かなければ載らない</li>
+<li><strong><code>sysinfo</code> クレートを足す</strong> — 2 回のシステムコールのために依存を 1 つ増やす理由がない (NFR-10)。<code>windows-sys</code> は <code>Win32_System_Threading</code> ごと既に入っている</li>
+<li><strong><code>tasklist</code> / <code>Get-Process</code> を呼ぶ</strong> — <strong>2 秒ポーリング経路での外部プロセス起動は INV-4 違反</strong></li>
+<li><strong><code>WaitForSingleObject</code> で判定する</strong> — 終了コード 259 の曖昧さは消えるが <code>SYNCHRONIZE</code> 権限が要る。IDE の接続表示にその精度は不要</li>
+</ul>
+<p><strong>既知の限界</strong>: 終了コードがちょうど 259 (<code>STILL_ACTIVE</code>) のプロセスは生存に見える。Windows 以外では常に <code>false</code> (判定できないものを「生きている」と偽らない / NFR-43)。</p>
+<hr />
+
+<h2 id="adr-0027-ライブ経路は-db-を一切開かない">ADR-0027 — ライブ経路は DB を一切開かず、キャッシュはプロセス内メモリにだけ置く</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12 (段階 5 / T-5.1〜5.3)</p>
+<p><strong>文脈</strong>: 段階 4 で差分インデックス (<code>app.db</code>) ができた。ライブ監視 (2 秒ポーリング) がそれを読むと、セッション一覧・タイトル・サブエージェントを DB から引けて実装は短くなる。</p>
+<p><strong>判断</strong>: <strong>読まない。書かない。</strong> <code>live_status_get</code> から辿れる先に <code>app.db</code> も Copilot 側の SQLite も出てこない。FR-C-48 の <code>(パス, サイズ, mtime)</code> キャッシュは <code>AppState::live_cache</code> (プロセス内 <code>HashMap</code>) にだけ置く。</p>
+<p><strong>理由</strong>:</p>
+<ul>
+<li><strong>索引が一度も走っていなくても稼働中セッションが出る。</strong> FR-C-57 (未インデックスは正常系) が「ライブ表示が空になる」に化けない</li>
+<li>DB を混ぜると「ライブなのに更新ボタンを押すまで古い」が起こる — FR-C-50 が名指しで却下している失敗</li>
+<li>導出データを永続化しない (INV-5 / DR-02)。キャッシュは落ちても正しさを損なわない (次回読み直すだけ)</li>
+<li>INV-4 との相性 (ADR-0013 と同じ理由): 他プロセスが書き込み中の SQLite を 2 秒ごとに開くのは<strong>待たされうる I/O</strong> である</li>
+</ul>
+<p><strong>実測</strong> (debug ビルド / 46 セッション / 実 <code>~/.copilot</code>): 初回 <strong>6.9ms</strong>、2 回目 <strong>3.0ms</strong>。稼働中セッションが 0 件なので末尾読みは 0 回 (mtime 窓で先に落ちる) — <strong>安い順に切ることが効いている</strong>。IDE lock 2 件の PID 確認込み。</p>
+<p><strong>帰結</strong>:</p>
+<ul>
+<li>FR-C-54 の「インデックス済みタイトル → 状態ファイル由来の名前」のフォールバックのうち、<strong>バックエンドが返すのは後者だけ</strong>。前者との合成は UI 側 (<code>snapshot_get</code> の結果と突き合わせる) が行う</li>
+<li><code>LiveSession.context_used</code> / <code>context_limit</code> は <strong><code>None</code> のまま</strong>。実データで稼働中セッションのコンテキスト使用量は取れない (OQ-01 に追記)</li>
+</ul>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
       <span>gh-dashboard</span>

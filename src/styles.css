@@ -98,6 +98,10 @@ body {
 }
 .panel h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
 
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel-head h2 { margin: 0; }
+.idle-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
 .spacer { flex: 1 1 auto; }
@@ -213,17 +217,25 @@ body {
 
 .session-card, .project-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   padding: 8px 4px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
 .session-card:last-child, .project-row:last-child { border-bottom: 0; }
+.project-row { flex-direction: row; align-items: center; gap: 10px; }
+
+.session-card-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .session-folder, .project-name { font-weight: 600; }
 .session-title, .session-activity { color: var(--muted); }
 .session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+
+.badge-button { border: none; cursor: pointer; }
+.badge.muted-badge { background: var(--sunken); color: var(--muted); }
+.session-lineage { list-style: none; margin: 2px 0 0; padding-left: 18px; font-size: 12px; }
 
 /* ---------- ツールバー ---------- */
 

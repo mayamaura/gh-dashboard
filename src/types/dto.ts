@@ -173,6 +173,8 @@ export interface LiveStatus {
   running_session_count: number
   running_subagent_count: number
   polled_at: number
+  /** 最新ログの mtime。自動インデックス起動の判定にのみ使う (FR-C-58) */
+  newest_log_mtime_ms: number | null
 }
 
 // ---------------------------------------------------------------- インデックス

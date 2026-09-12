@@ -192,6 +192,29 @@ updated_at: 2026-09-07T17:14:22.666Z</code></pre>
 <h3 id="t-4.11-の結論-利用枠到達レコードは実データでも未観測">T-4.11 の結論 — 利用枠到達レコードは実データでも未観測</h3>
 <p><strong>FR-C-28 のレコード種別は、実データ 1,041 レコードを走査しても確認できなかった (OQ-01 のまま)。</strong> <code>quota</code> / <code>rate limit</code> / <code>credit</code> / <code>exceeded</code> / <code>usage limit</code> / 「上限に達」等で <code>type</code> 値と本文系フィールド (<code>data.content</code> / <code>data.result.content</code> / <code>data.result.detailedContent</code> / <code>data.reasoningText</code>) を走査して <strong>0 件</strong>。キーワードに一致した 19 の <code>data</code> パスはすべて UUID の部分一致 (<code>…429…</code> 等) による誤検出だった。</p>
 <p>したがって <strong><code>quota_events</code> への書き込み経路 (<code>store::insert_quota_event</code> と <code>indexer</code> の呼び出し口) は用意したが、抽出関数 <code>parser::parse_quota_event</code> は常に <code>None</code> を返す空実装</strong>にしてある。<strong>推測した種別名をコードに埋め込んでいない</strong> — 決め打ちした名前は実物と一致しなければ永久に 0 件のままで、しかも「実装済み」に見えてしまう。実物を観測したら <code>parse_quota_event</code> に条件を 1 つ足せば通る。</p>
+
+<h3 id="段階-5-の追測-2026-09-12-ライブ監視で使うフィールド">段階 5 の追測 (2026-09-12、ライブ監視で使うフィールド)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>知りたかったこと</th><th>実測</th><th>帰結</th></tr></thead>
+<tbody>
+<tr><td><code>tool.execution_start</code> / <code>complete</code> の突き合わせキー</td><td><strong><code>data.toolCallId</code> が 78 / 75 件すべてにあり、重複 0</strong>。start 78 のうち 75 が complete と対応、<strong>3 が未完了のまま</strong></td><td>「complete の無い start = ツール実行中」が成立する (ADR-0025)</td></tr>
+<tr><td><code>permission.requested</code> の <code>data</code></td><td><code>{permissionRequest, promptRequest, requestId}</code> の 3 キーのみ (82 件)。<strong><code>toolCallId</code> が無い</strong></td><td>許可待ち専用の規則を書けない。FR-C-46 と整合 (ADR-0025)</td></tr>
+<tr><td>許可待ち時のレコード順</td><td><code>tool.execution_start</code> → <code>permission.requested</code> → <code>permission.completed</code></td><td>許可待ちは「complete の無い start」として現れる</td></tr>
+<tr><td><code>subagent.started</code> の位置</td><td>末尾から <strong>252,883 バイト</strong> (<code>2bb4517d…</code> / 293KB)。<code>completed</code> は 9,671 バイト</td><td>64KB 窓でも 512KB 窓でも <code>started</code> は拾えない → <code>agentId</code> で拾う (ADR-0024)</td></tr>
+<tr><td><code>ide/*.lock</code> の形</td><td><code>{socketPath, scheme, headers:{Authorization}, pid, ideName, workspaceFolders[], isTrusted}</code> (2 件)</td><td><strong><code>headers.Authorization</code> が実在する。</strong> INV-2 / FR-C-72 は仮定ではない (ADR-0026)</td></tr>
+</tbody></table></div>
+
+<div class="warning"><span class="note-title">未解決: 稼働中セッションのコンテキストウィンドウ使用率 (FR-C-53)</span>
+<p><strong><code>LiveSession.context_used</code> / <code>context_limit</code> を埋める材料が実データに無い。</strong> 走査した 1,041 レコードのうち、コンテキスト量らしきキーは <code>session.shutdown.data</code> の <code>currentTokens</code> / <code>systemTokens</code> / <code>conversationTokens</code> / <code>toolDefinitionsTokens</code> (各 50 件) <strong>だけ</strong>で、<strong>すべて「終了時」のレコードにしか載らない</strong>。稼働中に更新される <code>session.usage_checkpoint.data</code> は <code>{totalNanoAiu, totalPremiumRequests, modelCacheState, promptCacheBreakState}</code> でコンテキスト量を含まない。分母 (<code>context_limit</code>) にいたってはどのレコードにも無い (実データの <code>session.start.data</code> には <code>sessionLimits</code> すら無く、隔離環境で観測された <code>sessionLimits.maxAiCredits</code> も<strong>クレジットであってトークンではない</strong>)。</p>
+<p>→ <strong>両フィールドを <code>None</code> のままにした。</strong> 0 や推定で埋めない (NFR-40 / NFR-43)。<code>session_nano_aiu</code> (FR-C-53 のクレジット表示) は <code>usage_checkpoint.data.totalNanoAiu</code> から<strong>稼働中でも取れる</strong>ので実装済み。</p>
+<p><strong>次に測ること</strong>: Copilot CLI を実際に走らせながら <code>events.jsonl</code> を追記監視し、<code>currentTokens</code> 相当が <code>usage_checkpoint</code> に載る版があるか / CLI フッターのコンテキスト表示がどこから来ているかを確認する。</p>
+</div>
+
+<div class="warning"><span class="note-title">未解決: ADR-0014 の宿題 (稼働中セッションの実機確認)</span>
+<p><strong>「稼働中に見える / 終了後に消える」を実機で確かめられていない。</strong> 段階 5 の実装時点で、実 <code>~/.copilot</code> の 46 セッションは<strong>最新の <code>events.jsonl</code> でも mtime が 21 日前</strong>で、全 46 件が物理最終行 <code>session.shutdown</code>。<strong>稼働中のセッションが 1 件も無い状態でしか検証できていない</strong> (結果は「0 件」で、これは正しい)。</p>
+<p>代わりに、実データの <code>events.jsonl</code> を<strong>隔離 <code>COPILOT_HOME</code> にコピーして</strong>末尾の <code>session.shutdown</code> / <code>usage_checkpoint</code> を削り、「進行中」を再現して確認した — 活動状態 / モデル / フォルダ / タイトル / 最終活動時刻 / サブエージェント集合がすべて妥当に埋まった。<strong>実データには一切書き込んでいない</strong> (INV-1)。</p>
+<p><strong>次に測ること</strong>: Copilot CLI を動かしたまま <code>cargo test --lib probe_real_home_readonly -- --ignored --nocapture</code> を回す (読み取り専用)。確認するのは (a) 稼働中に一覧へ出るか (b) 終了後 120 秒以内に消えるか (c) FR-C-50 の 120 秒しきい値が妥当か。</p>
+</div>
 <hr />
 <h2 id="oq-02-1-レコード-1-行か-設計の分水嶺">OQ-02 — 1 レコード = 1 行か (設計の分水嶺)</h2>
 <p><strong>状態</strong>: <strong>確定</strong> — 成立する</p>

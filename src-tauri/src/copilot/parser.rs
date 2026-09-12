@@ -250,6 +250,11 @@ pub struct RecordFacts {
     pub preview: Option<String>,
     pub session: Option<SessionFacts>,
     pub subagent: Option<SubagentFacts>,
+    /// `tool.execution_start` / `tool.execution_complete` / `subagent.*` の
+    /// `data.toolCallId`。**start と complete の突き合わせキー** (T-5.2 / FR-C-50)。
+    /// 実データ 78 start / 75 complete で欠落 0 件、重複 0 件
+    pub tool_call_id: Option<String>,
+    pub tool_name: Option<String>,
 }
 
 fn str_of(v: Option<&serde_json::Value>) -> Option<String> {
@@ -313,6 +318,11 @@ pub fn parse_record(line: &str) -> Option<RecordFacts> {
             .and_then(|v| v.as_str())
             .and_then(|s| preview(s, PREVIEW_MAX_CHARS));
     }
+
+    // ツール呼び出しの突き合わせキー。種別を問わず `data.toolCallId` を拾っておく
+    // (`tool.*` と `subagent.*` の両方に同じ形で載る)
+    facts.tool_call_id = str_of(get("toolCallId"));
+    facts.tool_name = str_of(get("toolName"));
 
     match record_type.as_deref() {
         Some("session.start") => {
@@ -381,6 +391,181 @@ pub fn parse_record(line: &str) -> Option<RecordFacts> {
 
     facts.record_type = record_type;
     Some(facts)
+}
+
+// ---------------------------------------------------------------- T-5.2 / T-5.4
+
+/// ライブ監視が末尾ウィンドウ **1 回の逆走査**で拾う事実 (FR-C-45② / 47 / 49 / 50)。
+///
+/// 2 秒ごとに呼ばれるので、同じ行を複数回走査しない。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LiveTailFacts {
+    /// FR-C-45 ② の入力。**物理的な最終行ではなく、遡って最初に該当したもの** (FR-C-49)
+    pub tail: crate::copilot::activity::TailRecord,
+    /// **集合が正。件数はこの長さとして導出する** (FR-C-51)。
+    /// 窓内に現れたが `subagent.completed` が窓内に無い `toolCallId`。
+    /// 古い順 (ファイル出現順)
+    pub running_subagent_ids: Vec<String>,
+    /// 末尾から遡って最初にパースできたレコードが `session.shutdown` か (ADR-0014)
+    pub ended_by_shutdown: bool,
+    /// **本文レコード** (`user.message` / `assistant.message`) を窓内で見つけたか。
+    /// `false` なら呼び出し側が 512KB で 1 回だけ読み直す (FR-C-47)
+    pub found_body: bool,
+    /// 直近の本文レコードの `timestamp`。**mtime ではない** (FR-P-56)
+    pub last_body_at: Option<i64>,
+    /// 窓内で最も新しい `data.model`
+    pub model: Option<String>,
+    /// 窓内で最も新しい `data.totalNanoAiu` (累計値なので加算しない)
+    pub session_nano_aiu: Option<i64>,
+    /// パース失敗行。無言で落とさず数える (FR-C-12 / NFR-43)
+    pub skipped_lines: usize,
+}
+
+/// 末尾ウィンドウの確定行を**新しい行から古い行へ**辿って分類する (純粋)。
+///
+/// 行は読み込み順 (古い→新しい) で渡すこと。`scan_tail` と違い、
+/// **物理的な最終行では止まらない** (FR-C-49)。
+///
+/// 判定規則 (実データ 46 セッション / 1,041 レコードで確認):
+/// 1. `tool.execution_start` があり、同じ `toolCallId` の `tool.execution_complete`
+///    が窓内の**より新しい位置に無い** → [`TailRecord::ToolUse`]
+/// 2. `assistant.turn_end` → [`TailRecord::TurnEnded`]
+/// 3. `user.message` → [`TailRecord::UserMessage`]
+/// 4. どれにも当たらない → [`TailRecord::Unrecognized`]
+///
+/// `assistant.message` は規則を持たない。ターン途中で止まっている場合は
+/// 同じターンの先頭にある `user.message` まで遡って規則 3 に当たり、
+/// 「生成中」になる — 実データのレコード順がそれを保証する。
+///
+/// 許可プロンプト待ちも規則 1 に落ちる。実データのレコード順が
+/// `tool.execution_start` → `permission.requested` → `permission.completed` で、
+/// 許可待ちの間は complete の無い start が最後に残るため。
+/// **`permission.requested` は `toolCallId` を持たない**ので、そもそも
+/// 独立した規則を書けない (FR-C-46 の「区別できない」と整合する)。
+///
+/// # 稼働中サブエージェント (FR-C-50 / 51)
+///
+/// 候補は「**窓内に現れた `agentId`**」と「窓内の `subagent.started` の
+/// `toolCallId`」の和。窓内に同じ ID の `subagent.completed` があれば除く。
+///
+/// `subagent.started` **だけ**を候補にすると実データで拾えない。実測
+/// (`2bb4517d…`、293,339 バイト) では `subagent.started` が**末尾から
+/// 252,883 バイト**の位置にあり、64KB 窓にも 512KB 窓の意味のある位置にも
+/// 入らない — サブエージェントが長く走るほど、その子レコードが `started` を
+/// 窓の外へ押し出すからである。つまり「長く走っている = 表示したい」ものほど
+/// 取り逃す。
+///
+/// `agentId` は**サブエージェントに属するレコードだけ**に付き、その値は
+/// 子の `toolCallId` と**一致する** (実データ 2 件で 1:1、OQ-01 / OQ-07)。
+/// 走っているサブエージェントは今まさに書いているので、その `agentId` は
+/// 必ず末尾付近にある。
+///
+/// **残る近似** (FR-C-52 と同種の既知の限界): サブエージェントが窓ぶんの
+/// 期間まったく書かずに黙っている場合は取り逃す。ただしその間は親の
+/// `events.jsonl` も伸びないため、mtime 窓 (120 秒) でセッションごと
+/// 非稼働に落ちる方が先に効く。
+pub fn classify_tail(lines: &[&[u8]]) -> LiveTailFacts {
+    use std::collections::HashSet;
+
+    let mut facts = LiveTailFacts::default();
+    // 逆走査なので、complete は対応する start より**先に**見つかる
+    let mut completed_tools: HashSet<String> = HashSet::new();
+    let mut completed_subagents: HashSet<String> = HashSet::new();
+    let mut seen_subagents: HashSet<String> = HashSet::new();
+    let mut running: Vec<String> = Vec::new();
+    let mut first_record = true;
+    let mut tail_decided = false;
+
+    for line in lines.iter().rev() {
+        let text = match std::str::from_utf8(line) {
+            Ok(t) if !t.trim().is_empty() => t,
+            _ => continue,
+        };
+        let Some(record) = parse_record(text) else {
+            facts.skipped_lines += 1;
+            continue;
+        };
+
+        if first_record {
+            first_record = false;
+            facts.ended_by_shutdown = record.record_type.as_deref() == Some("session.shutdown");
+        }
+        if facts.model.is_none() {
+            facts.model.clone_from(&record.model);
+        }
+        if facts.session_nano_aiu.is_none() {
+            facts.session_nano_aiu = record.session.as_ref().and_then(|s| s.total_nano_aiu);
+        }
+
+        // 稼働中サブエージェントの候補。**match より後で判定する** —
+        // `subagent.completed` 自身も `agentId` を持つので、先に評価すると
+        // 「完了したものを稼働中に入れてしまう」
+        let agent_id = record.agent_id.clone();
+
+        let record_type = record.record_type.clone().unwrap_or_default();
+        match record_type.as_str() {
+            "tool.execution_complete" => {
+                if let Some(id) = record.tool_call_id {
+                    completed_tools.insert(id);
+                }
+            }
+            "tool.execution_start" => {
+                // 完了が無い = まだ走っている (または中断された)
+                let still_open = record
+                    .tool_call_id
+                    .as_ref()
+                    .is_some_and(|id| !completed_tools.contains(id));
+                if still_open && !tail_decided {
+                    facts.tail = crate::copilot::activity::TailRecord::ToolUse;
+                    tail_decided = true;
+                }
+            }
+            "assistant.turn_end" => {
+                if !tail_decided {
+                    facts.tail = crate::copilot::activity::TailRecord::TurnEnded;
+                    tail_decided = true;
+                }
+            }
+            "subagent.completed" => {
+                if let Some(id) = record.tool_call_id {
+                    completed_subagents.insert(id);
+                }
+            }
+            "subagent.started" => {
+                // 主キーが取れないレコードからは行を作らない (FR-C-22)。
+                // 実データの `subagent.selected` は `toolCallId` を持たない
+                if let Some(id) = record.tool_call_id {
+                    if !completed_subagents.contains(&id) && seen_subagents.insert(id.clone()) {
+                        running.push(id);
+                    }
+                }
+            }
+            "user.message" | "assistant.message" => {
+                if !facts.found_body {
+                    facts.found_body = true;
+                    facts.last_body_at = record.timestamp_ms;
+                }
+                if !tail_decided && record_type == "user.message" {
+                    facts.tail = crate::copilot::activity::TailRecord::UserMessage;
+                    tail_decided = true;
+                }
+            }
+            _ => {}
+        }
+
+        // サブエージェントが**今まさに書いている**レコード。`agentId` は子の
+        // `toolCallId` と同じ値なので、`subagent.started` が窓の外でも拾える
+        if let Some(id) = agent_id {
+            if !completed_subagents.contains(&id) && seen_subagents.insert(id.clone()) {
+                running.push(id);
+            }
+        }
+    }
+
+    // 逆走査で集めたので、出現順 (古い→新しい) に戻す
+    running.reverse();
+    facts.running_subagent_ids = running;
+    facts
 }
 
 /// 利用枠到達イベントの抽出 (FR-C-28 / T-4.11)。**現状は常に `None`**。
@@ -583,7 +768,10 @@ entrypoint: cli_interactive
     fn broken_json_returns_none_so_caller_can_count_it() {
         assert!(parse_record("not json at all").is_none());
         assert!(parse_record("").is_none());
-        assert!(parse_record("{\"type\":\"a\"").is_none(), "途中で切れた JSON");
+        assert!(
+            parse_record("{\"type\":\"a\"").is_none(),
+            "途中で切れた JSON"
+        );
     }
 
     /// FR-C-13 / NFR-23: 中身が空でも panic せず、全項目が None / 0 になるだけ
@@ -748,6 +936,199 @@ entrypoint: cli_interactive
     fn subagent_record_without_tool_call_id_creates_nothing() {
         let line = r#"{"type":"subagent.started","data":{"agentName":"helper"}}"#;
         assert_eq!(parse_record(line).unwrap().subagent, None);
+    }
+
+    // ---- classify_tail (T-5.2 / T-5.4) -----------------------------------
+    //
+    // fixture の並びは実データ (46 セッション / 1,041 レコード) の出現順をそのまま
+    // 縮めたもの。とくに `tool.execution_start → permission.requested →
+    // permission.completed` の順序は実測に基づく (NFR-51)。
+
+    use crate::copilot::activity::TailRecord;
+
+    fn classify(jsonl: &[&str]) -> LiveTailFacts {
+        let owned: Vec<Vec<u8>> = jsonl.iter().map(|s| s.as_bytes().to_vec()).collect();
+        let refs: Vec<&[u8]> = owned.iter().map(|v| v.as_slice()).collect();
+        classify_tail(&refs)
+    }
+
+    /// FR-C-49: 物理的な最終行 (shutdown / usage_checkpoint) で止まらない
+    #[test]
+    fn physical_last_line_is_not_the_tail_record() {
+        let f = classify(&[
+            r#"{"type":"user.message","timestamp":"2026-09-07T17:00:00.000Z","data":{"content":"hi"}}"#,
+            r#"{"type":"assistant.turn_end","data":{"turnId":"0"}}"#,
+            r#"{"type":"session.usage_checkpoint","data":{"totalNanoAiu":7}}"#,
+            r#"{"type":"session.shutdown","data":{"totalNanoAiu":9}}"#,
+        ]);
+        assert_eq!(f.tail, TailRecord::TurnEnded);
+        assert!(f.ended_by_shutdown);
+        // 累計値は最も新しいものを 1 つだけ採る (加算しない)
+        assert_eq!(f.session_nano_aiu, Some(9));
+    }
+
+    #[test]
+    fn open_tool_call_is_tool_use() {
+        let f = classify(&[
+            r#"{"type":"user.message","data":{"content":"hi"}}"#,
+            r#"{"type":"assistant.message","data":{"content":"やります","model":"gpt-5"}}"#,
+            r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"bash"}}"#,
+        ]);
+        assert_eq!(f.tail, TailRecord::ToolUse);
+        assert_eq!(f.model.as_deref(), Some("gpt-5"));
+    }
+
+    /// complete が来ていれば「ツール実行中」にしない。さらに遡る
+    #[test]
+    fn completed_tool_call_falls_through_to_the_older_record() {
+        let f = classify(&[
+            r#"{"type":"user.message","data":{"content":"hi"}}"#,
+            r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"bash"}}"#,
+            r#"{"type":"tool.execution_complete","data":{"toolCallId":"c1"}}"#,
+        ]);
+        // start は閉じているので規則 1 に当たらず、user.message まで遡る
+        assert_eq!(f.tail, TailRecord::UserMessage);
+    }
+
+    /// 実測の順序: start → permission.requested → permission.completed。
+    /// 許可待ちは complete の無い start として現れる (FR-C-46)
+    #[test]
+    fn pending_permission_prompt_looks_like_tool_use() {
+        let f = classify(&[
+            r#"{"type":"user.message","data":{"content":"hi"}}"#,
+            r#"{"type":"assistant.message","data":{"content":"実行します"}}"#,
+            r#"{"type":"tool.execution_start","data":{"toolCallId":"c9","toolName":"bash"}}"#,
+            r#"{"type":"permission.requested","data":{"requestId":"r1"}}"#,
+        ]);
+        assert_eq!(f.tail, TailRecord::ToolUse);
+    }
+
+    /// ターン途中の `assistant.message` は規則を持たないが、同じターンの
+    /// `user.message` まで遡って「生成中」に落ちる
+    #[test]
+    fn assistant_message_midturn_falls_back_to_user_message() {
+        let f = classify(&[
+            r#"{"type":"user.message","timestamp":"2026-09-07T17:00:00.000Z","data":{"content":"hi"}}"#,
+            r#"{"type":"assistant.turn_start","data":{"turnId":"1"}}"#,
+            r#"{"type":"assistant.message","timestamp":"2026-09-07T17:00:05.000Z","data":{"content":"考え中"}}"#,
+        ]);
+        assert_eq!(f.tail, TailRecord::UserMessage);
+        // 本文レコードは新しい側から採る
+        assert!(f.found_body);
+        assert_eq!(f.last_body_at, Some(1_788_800_405_000));
+    }
+
+    #[test]
+    fn window_without_any_body_record_asks_for_a_wider_read() {
+        let f = classify(&[
+            r#"{"type":"session.usage_checkpoint","data":{"totalNanoAiu":1}}"#,
+            r#"{"type":"session.shutdown","data":{"totalNanoAiu":2}}"#,
+        ]);
+        assert!(!f.found_body, "512KB で読み直す合図 (FR-C-47)");
+        assert_eq!(f.tail, TailRecord::Unrecognized, "埋めない (NFR-43)");
+    }
+
+    // ---- 稼働中サブエージェント集合 (FR-C-50 / 51) ----
+
+    #[test]
+    fn started_without_completed_is_running() {
+        let f = classify(&[
+            r#"{"type":"tool.execution_start","data":{"toolCallId":"toolu_1","toolName":"task","arguments":{"name":"a"}}}"#,
+            r#"{"type":"subagent.started","data":{"toolCallId":"toolu_1","agentName":"a"}}"#,
+        ]);
+        assert_eq!(f.running_subagent_ids, vec!["toolu_1".to_string()]);
+    }
+
+    #[test]
+    fn completed_subagent_is_not_running() {
+        let f = classify(&[
+            r#"{"type":"subagent.started","data":{"toolCallId":"toolu_1","agentName":"a"}}"#,
+            r#"{"type":"subagent.completed","data":{"toolCallId":"toolu_1","totalToolCalls":3}}"#,
+        ]);
+        assert!(f.running_subagent_ids.is_empty());
+    }
+
+    #[test]
+    fn several_running_subagents_keep_file_order_and_are_deduped() {
+        let f = classify(&[
+            r#"{"type":"subagent.started","data":{"toolCallId":"a1","agentName":"a"}}"#,
+            r#"{"type":"subagent.started","data":{"toolCallId":"b2","agentName":"b"}}"#,
+            r#"{"type":"subagent.started","data":{"toolCallId":"a1","agentName":"a"}}"#,
+            r#"{"type":"subagent.completed","data":{"toolCallId":"b2"}}"#,
+        ]);
+        assert_eq!(f.running_subagent_ids, vec!["a1".to_string()]);
+    }
+
+    /// 実測の要点: `subagent.started` は窓の外に出る (末尾から 252,883 バイト)。
+    /// 子が書いているレコードの `agentId` で拾えること
+    #[test]
+    fn running_subagent_is_found_from_agent_id_when_started_is_out_of_window() {
+        // 窓に入っているのは子のレコードだけ。subagent.started は入っていない
+        let f = classify(&[
+            r#"{"type":"assistant.message","agentId":"toolu_1","data":{"content":"調査中"}}"#,
+            r#"{"type":"tool.execution_start","agentId":"toolu_1","data":{"toolCallId":"t9","toolName":"bash"}}"#,
+            r#"{"type":"tool.execution_complete","agentId":"toolu_1","data":{"toolCallId":"t9"}}"#,
+        ]);
+        assert_eq!(f.running_subagent_ids, vec!["toolu_1".to_string()]);
+    }
+
+    /// `subagent.completed` 自身も `agentId` を持つ。完了したものを稼働中に入れない
+    #[test]
+    fn completed_subagent_is_not_revived_by_its_own_agent_id() {
+        let f = classify(&[
+            r#"{"type":"subagent.started","agentId":"toolu_1","data":{"toolCallId":"toolu_1"}}"#,
+            r#"{"type":"assistant.message","agentId":"toolu_1","data":{"content":"done"}}"#,
+            r#"{"type":"subagent.completed","agentId":"toolu_1","data":{"toolCallId":"toolu_1"}}"#,
+        ]);
+        assert!(
+            f.running_subagent_ids.is_empty(),
+            "completed より古い子レコードで復活させない"
+        );
+    }
+
+    /// FR-C-22: 主キーが取れないレコードから集合に入れない。
+    /// 実データの `subagent.selected` は `toolCallId` を持たない (46 件)
+    #[test]
+    fn subagent_without_tool_call_id_is_not_counted() {
+        let f = classify(&[
+            r#"{"type":"subagent.selected","data":{"agentName":"a","agentDisplayName":"A"}}"#,
+            r#"{"type":"subagent.started","data":{"agentName":"a"}}"#,
+        ]);
+        assert!(f.running_subagent_ids.is_empty());
+    }
+
+    #[test]
+    fn broken_lines_are_counted_and_do_not_stop_the_scan() {
+        let f = classify(&[
+            r#"{"type":"user.message","data":{"content":"hi"}}"#,
+            r#"garbage{{{"#,
+            r#"{"type":"assistant.turn_end","data":{"turnId":"0"}}"#,
+            r#"also not json"#,
+        ]);
+        assert_eq!(f.skipped_lines, 2);
+        // 壊れた行の手前まで遡れている
+        assert_eq!(f.tail, TailRecord::TurnEnded);
+    }
+
+    #[test]
+    fn empty_window_is_safe() {
+        assert_eq!(classify_tail(&[]), LiveTailFacts::default());
+        assert_eq!(classify_tail(&[]).tail, TailRecord::Unrecognized);
+    }
+
+    /// T-4.2 の `parse_record` に足したキーが実データの形で取れること
+    #[test]
+    fn tool_call_id_and_name_are_extracted() {
+        let f = parse_record(
+            r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"powershell"}}"#,
+        )
+        .unwrap();
+        assert_eq!(f.tool_call_id.as_deref(), Some("c1"));
+        assert_eq!(f.tool_name.as_deref(), Some("powershell"));
+        let c = parse_record(r#"{"type":"tool.execution_complete","data":{"toolCallId":"c1"}}"#)
+            .unwrap();
+        assert_eq!(c.tool_call_id.as_deref(), Some("c1"));
+        assert_eq!(c.tool_name, None);
     }
 
     /// T-4.11: 実データでも利用枠到達レコードは観測できていない (OQ-01 のまま)

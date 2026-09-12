@@ -22,8 +22,43 @@ mod imp {
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA,
+        PROCESS_TERMINATE,
     };
+
+    /// `GetExitCodeProcess` が「まだ動いている」ときに返す値 (`STILL_ACTIVE`)。
+    const STILL_RUNNING: u32 = 259;
+
+    /// PID が生きているか (FR-C-71 / FR-C-42)。
+    ///
+    /// **2 秒ポーリング経路から呼ばれる。** プロセスを起動しない / ネットワークを
+    /// 使わない (INV-4)。`OpenProcess` + `GetExitCodeProcess` の 2 回のシステム
+    /// コールだけ。
+    ///
+    /// - 開けない = そのプロセスは存在しない → `false`
+    /// - 開けたが終了コードが確定している → `false` (ハンドルが残る「ゾンビ」を
+    ///   生存扱いしない)
+    ///
+    /// 既知の限界: 終了コードがちょうど 259 のプロセスは生存に見える。
+    /// ponytail: 判別するには `SYNCHRONIZE` 権限での `WaitForSingleObject` が要る。
+    /// IDE の接続表示 (FR-C-71) にその精度は不要なのでここまでにする。
+    pub fn is_process_alive(pid: u32) -> bool {
+        if pid == 0 {
+            return false;
+        }
+        // SAFETY: 参照権限だけを要求して開き、必ず閉じる。失敗は null で返る。
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if process.is_null() {
+            return false;
+        }
+        let mut code: u32 = 0;
+        // SAFETY: 直前に開いた有効なハンドルと、スタック上の u32 を渡す。
+        let ok = unsafe { GetExitCodeProcess(process, &mut code) };
+        // SAFETY: 上で開いたハンドル。以降使わない。
+        unsafe { CloseHandle(process) };
+
+        ok != 0 && code == STILL_RUNNING
+    }
 
     /// プロセスツリーの道連れ終了を担う Job。アプリで 1 つだけ作る。
     pub struct JobHandle {
@@ -116,9 +151,14 @@ mod imp {
             Ok(())
         }
     }
+
+    /// Windows 以外では判定できない。**生きていると偽らない** (NFR-43)。
+    pub fn is_process_alive(_pid: u32) -> bool {
+        false
+    }
 }
 
-pub use imp::JobHandle;
+pub use imp::{is_process_alive, JobHandle};
 
 #[cfg(test)]
 mod tests {
@@ -129,5 +169,15 @@ mod tests {
         // 作って落とすだけ。配下にプロセスが無いので何も終了しない。
         let job = JobHandle::create().expect("Job Object を作れること");
         drop(job);
+    }
+
+    /// FR-C-71: 生きている PID と、まず存在しない PID を取り違えない
+    #[cfg(windows)]
+    #[test]
+    fn own_process_is_alive_and_bogus_pid_is_not() {
+        assert!(is_process_alive(std::process::id()));
+        assert!(!is_process_alive(0), "PID 0 は開けても意味がない");
+        // 予約領域の外の PID。割り当てられている可能性は無視できるほど低い
+        assert!(!is_process_alive(0xFFFF_FFF0));
     }
 }

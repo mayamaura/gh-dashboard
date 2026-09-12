@@ -22,6 +22,15 @@ pub const TAIL_READ_BYTES: u64 = 64 * 1024;
 /// `COPILOT_HOME` 環境変数 → 無ければ `~/.copilot`。
 /// `COPILOT_HOME` は Copilot CLI 公式の上書き手段 (付録A.1)。テストや実機確認で
 /// 実データを一切触らずに検証できる。
+/// テスト専用の直列化ゲート。
+///
+/// `COPILOT_HOME` は**プロセス全体**の環境変数なので、これを差し替えるテストは
+/// モジュールをまたいで直列化しなければならない。**ロックが 2 つあると意味が
+/// ない** (実際に `sessions` と `live` で別々に持って競合した)。
+/// ponytail: グローバルロック。テストが遅くなったらフォルダ引数を取る形に変える。
+#[cfg(test)]
+pub(crate) static COPILOT_HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn copilot_home() -> Option<PathBuf> {
     if let Some(v) = std::env::var_os("COPILOT_HOME") {
         return Some(PathBuf::from(v));
@@ -159,12 +168,9 @@ pub fn collect_candidates(now_ms: i64) -> CollectResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    // `COPILOT_HOME` はプロセス全体の環境変数。テストは並列実行されるので
-    // このモジュール内のテストだけを直列化する。
-    // ponytail: グローバルロック。他モジュールが COPILOT_HOME を触るようになったら見直す。
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    // COPILOT_HOME を触るテストは crate 全体で 1 本のロックに乗せる
+    use super::COPILOT_HOME_ENV_LOCK as ENV_LOCK;
 
     struct EnvGuard {
         _lock: std::sync::MutexGuard<'static, ()>,

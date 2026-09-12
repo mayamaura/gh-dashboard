@@ -11,6 +11,7 @@ import { appStore, useAppStore } from './store/appStore'
 import { useWindowVisibilityBridge } from './hooks/useWindowVisible'
 import { useProjectsSnapshotBridge } from './hooks/useProjectsSnapshotBridge'
 import { useDevStatusBridge } from './hooks/useDevStatusBridge'
+import { useIndexBridge } from './hooks/useIndexBridge'
 import { relativeTime } from './lib/format'
 import { scanProjects, stopAllDevServers } from './lib/projectsActions'
 
@@ -26,6 +27,8 @@ export function App() {
   useProjectsSnapshotBridge()
   // dev サーバーの状態変化 (URL 検出・終了) を追いかける (IR-41)。ここで 1 回だけ購読する
   useDevStatusBridge()
+  // 差分インデックスの進捗・完了 (IR-43 / 44)。ここで 1 回だけ購読する
+  useIndexBridge()
 
   const {
     tab,

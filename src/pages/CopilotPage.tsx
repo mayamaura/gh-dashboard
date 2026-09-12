@@ -1,23 +1,44 @@
 // Copilot タブ。
 //
-// 実装状況: ポーリングの配線と「取れないものの見せ方」だけが入った足場。
-// 中身は段階 5〜7 で実装する (docs/implementation-plan.html)。
+// 実装状況: 段階 5 (ライブ監視) までの表示が入っている。
+// 検索・系統図・ガント・本文ビューアは段階 7 (T-7.4〜7.11) で実装する。
 
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { QuotaGaugeRow } from '../components/QuotaGaugeRow'
 import { useIsViewing } from '../hooks/useWindowVisible'
-import { useLivePoll } from '../hooks/useLivePoll'
-import { quotaGet, snapshotGet, usageTodayGet } from '../ipc/commands'
+import { shouldAutoIndex, useLivePoll } from '../hooks/useLivePoll'
+import { indexRefresh, quotaGet, snapshotGet, usageTodayGet } from '../ipc/commands'
 import { appStore, useAppStore } from '../store/appStore'
-import { activityLabel, ACTIVITY_TOOLTIP, relativeTime } from '../lib/format'
+import {
+  activityLabel,
+  ACTIVITY_TOOLTIP,
+  contextUsagePct,
+  creditsFromNanoAiu,
+  duration,
+  entrypointLabel,
+  isSessionIdle,
+  relativeTime,
+} from '../lib/format'
+import { deriveCardExpanded } from '../lib/sessionCard'
+import type { LiveSession } from '../types/dto'
 
 export function CopilotPage() {
   // タブを見ていて、かつ最小化されていないときだけ true (FR-C-41 / 43)
   const viewing = useIsViewing('copilot')
   const { live, failed } = useLivePoll(viewing)
-  const { snapshot, quota, usageToday } = useAppStore()
+  const { snapshot, quota, usageToday, lastIndexedAt, indexing, indexingManual } = useAppStore()
   const now = Date.now()
+
+  // T-5.9: アイドルセッションを隠すトグル。タブ切替で消えても実害の無い UI 好み設定
+  const [showIdle, setShowIdle] = useState(false)
+  // T-5.10: 手動で開閉したセッションの上書き。無ければ自動判定に従う
+  const [expandOverrides, setExpandOverrides] = useState<Map<string, boolean>>(new Map())
+  // T-5.11: 未インデックスのセッションについて、indexRefresh を起動済みかどうか。
+  // アプリ再起動で忘れてよい程度の状態なのでローカル ref で足りる
+  const attemptedIndexRef = useRef<Set<string>>(new Set())
+  // T-5.12: 自動インデックスの下限間隔判定用。消えてよい一時値なのでローカル ref
+  const lastAutoIndexAttemptRef = useRef<number | null>(null)
 
   // タブを開いたときの一括取得。
   // ★ ここで取るものを 2 秒ポーリングに混ぜない (FR-C-103 / INV-4)
@@ -46,6 +67,52 @@ export function CopilotPage() {
       cancelled = true
     }
   }, [viewing])
+
+  // T-5.12: 未取り込みの追記があれば自動でインデックスを起動する (FR-C-58〜60)。
+  // ★ 手動更新ではないので `indexingManual` には触らない
+  useEffect(() => {
+    if (!viewing || live === null) return
+    if (
+      shouldAutoIndex(
+        live.newest_log_mtime_ms,
+        lastIndexedAt,
+        lastAutoIndexAttemptRef.current,
+        Date.now()
+      )
+    ) {
+      lastAutoIndexAttemptRef.current = Date.now()
+      void indexRefresh()
+    }
+  }, [viewing, live, lastIndexedAt])
+
+  // T-5.11: ライブには出ているがまだインデックスされていないセッションを、
+  // セッションごとに 1 回だけ indexRefresh の対象にする
+  useEffect(() => {
+    if (live === null || snapshot === null) return
+    const indexedIds = new Set(snapshot.recent_sessions.map((s) => s.session_id))
+    for (const s of live.sessions) {
+      if (indexedIds.has(s.session_id)) continue
+      if (attemptedIndexRef.current.has(s.session_id)) continue
+      attemptedIndexRef.current.add(s.session_id)
+      void indexRefresh()
+    }
+  }, [live, snapshot])
+
+  const indexedIds = new Set((snapshot?.recent_sessions ?? []).map((s) => s.session_id))
+
+  const setOverride = (sessionId: string, open: boolean) => {
+    setExpandOverrides((prev) => {
+      const next = new Map(prev)
+      next.set(sessionId, open)
+      return next
+    })
+  }
+
+  const visibleSessions =
+    live === null
+      ? []
+      : live.sessions.filter((s) => showIdle || !isSessionIdle(s.last_activity_at, now))
+  const hiddenIdleCount = (live?.sessions.length ?? 0) - visibleSessions.length
 
   return (
     <div className="page">
@@ -105,31 +172,55 @@ export function CopilotPage() {
         )}
       </section>
 
-      {/* 稼働中セッション (FR-C-53) */}
+      {/* 稼働中セッション (FR-C-53〜60) */}
       <section className="panel">
-        <h2>稼働中セッション</h2>
+        <div className="panel-head">
+          <h2>稼働中セッション</h2>
+          <label className="idle-toggle">
+            <input type="checkbox" checked={showIdle} onChange={(e) => setShowIdle(e.target.checked)} />
+            アイドルなセッションも表示 ({hiddenIdleCount} 件隠れています)
+          </label>
+        </div>
         {live === null ? (
           <p className="muted">読み込み中…</p>
-        ) : live.sessions.length === 0 ? (
+        ) : visibleSessions.length === 0 ? (
           // 0 件は正常系。エラーとして見せない
-          <p className="muted">稼働中のセッションはありません。</p>
+          <p className="muted">
+            {live.sessions.length === 0 ? '稼働中のセッションはありません。' : 'アイドルなセッションのみです。'}
+          </p>
         ) : (
           <ul className="session-list">
-            {live.sessions.map((s) => (
-              <li key={s.session_id} className="session-card">
-                <span className={`dot ${s.activity}`} aria-hidden />
-                <span className="session-folder">{s.folder_name ?? '不明なフォルダ'}</span>
-                <span className="session-title">{s.title ?? '(タイトルなし)'}</span>
-                <span
-                  className="session-activity"
-                  title={ACTIVITY_TOOLTIP[s.activity] ?? undefined}
-                >
-                  {activityLabel(s.activity)}
+            {visibleSessions.map((s) => (
+              <SessionCard
+                key={s.session_id}
+                session={s}
+                now={now}
+                failed={failed}
+                indexed={indexedIds.has(s.session_id)}
+                override={expandOverrides.get(s.session_id)}
+                onToggle={(open) => setOverride(s.session_id, open)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* IDE ワークスペース (FR-C-70〜72) */}
+      <section className="panel">
+        <h2>IDE ワークスペース</h2>
+        {live === null ? (
+          <p className="muted">読み込み中…</p>
+        ) : live.ide_workspaces.length === 0 ? (
+          <p className="muted">接続されている IDE はありません。</p>
+        ) : (
+          <ul className="session-list">
+            {live.ide_workspaces.map((w, i) => (
+              <li key={i} className="session-card">
+                <span className={w.connected ? 'badge' : 'badge muted-badge'}>
+                  {w.connected ? '接続中' : '切断'}
                 </span>
-                <span className="muted">{relativeTime(s.last_activity_at, now)}</span>
-                {s.running_subagent_ids.length > 0 && (
-                  <span className="badge">サブエージェント {s.running_subagent_ids.length}</span>
-                )}
+                <span className="session-folder">{w.ide_name ?? '不明な IDE'}</span>
+                <span className="session-title">{w.folders.join(', ') || '(フォルダなし)'}</span>
               </li>
             ))}
           </ul>
@@ -138,7 +229,18 @@ export function CopilotPage() {
 
       {/* セッション履歴 (FR-C-110〜121) */}
       <section className="panel">
-        <h2>セッション履歴</h2>
+        <div className="panel-head">
+          <h2>セッション履歴</h2>
+          <button
+            disabled={indexing}
+            onClick={() => {
+              appStore.set({ indexingManual: true })
+              void indexRefresh()
+            }}
+          >
+            {indexing && indexingManual ? 'インデックス中…' : '今すぐ更新'}
+          </button>
+        </div>
         {snapshot === null ? (
           <p className="muted">読み込み中…</p>
         ) : (
@@ -151,6 +253,71 @@ export function CopilotPage() {
         <p className="fineprint">検索・系統図・ガント・本文ビューアは段階 7 (T-7.4〜7.11) で実装。</p>
       </section>
     </div>
+  )
+}
+
+function SessionCard({
+  session: s,
+  now,
+  failed,
+  indexed,
+  override,
+  onToggle,
+}: {
+  session: LiveSession
+  now: number
+  failed: boolean
+  indexed: boolean
+  override: boolean | undefined
+  onToggle: (open: boolean) => void
+}) {
+  const subagentCount = s.running_subagent_ids.length
+  const expanded = deriveCardExpanded(subagentCount, failed, override)
+  const pct = contextUsagePct(s.context_used, s.context_limit)
+  const credits = creditsFromNanoAiu(s.session_nano_aiu)
+
+  return (
+    <li className="session-card">
+      <div className="session-card-main">
+        <span className={`dot ${s.activity}`} aria-hidden />
+        <span className="session-folder">{s.folder_name ?? '不明なフォルダ'}</span>
+        <span className="chip">{entrypointLabel(s.entrypoint)}</span>
+        <span className="session-title">{s.title ?? '(タイトルなし)'}</span>
+        <span
+          className="session-activity"
+          title={ACTIVITY_TOOLTIP[s.activity] ?? undefined}
+        >
+          {activityLabel(s.activity)}
+        </span>
+        <span className="muted">{s.model ?? '不明なモデル'}</span>
+        <span className="muted">稼働 {duration(s.started_at, now)}</span>
+        <span className="muted">最終活動 {relativeTime(s.last_activity_at, now)}</span>
+        {/* NFR-40 / 43: コンテキスト使用率・消費クレジットは取得不可を数字で埋めない */}
+        <span className="muted">コンテキスト {pct === null ? '取得できませんでした' : `${pct.toFixed(0)}%`}</span>
+        <span className="muted">{credits === null ? 'クレジット: 取得できませんでした' : `${credits.toFixed(3)} クレジット`}</span>
+        {subagentCount > 0 && (
+          <button className="badge badge-button" onClick={() => onToggle(!expanded)}>
+            サブエージェント {subagentCount} {expanded ? '▲' : '▼'}
+          </button>
+        )}
+      </div>
+      {!indexed && (
+        // FR-C-57: エラーではなく穏やかな文言。indexRefresh の起動は effect 側で 1 回だけ行う
+        <p className="note-inline">まだ記録がありません。</p>
+      )}
+      {expanded && subagentCount > 0 && (
+        // T-5.10: 暫定実装。`running_subagent_ids` のフラット一覧のみ。
+        // 完全な入れ子構造は段階 7 で `session_detail_get` / `tree::build` が
+        // 実装され次第、差し替える
+        <ul className="session-lineage">
+          {s.running_subagent_ids.map((id) => (
+            <li key={id} className="muted">
+              {id}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   )
 }
 

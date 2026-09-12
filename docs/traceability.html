@@ -68,13 +68,13 @@
 <tr><td><span class="chip id">FR-C-20</span></td><td>セッション集計</td><td><code>copilot/store.rs (upsert_session / refresh_session_counts)</code></td><td><code>store::tests</code></td><td>済</td></tr>
 <tr><td>FR-C-21〜23, 29</td><td>サブエージェント行のマージ</td><td><code>copilot/indexer.rs (merge_subagent)</code></td><td><code>indexer::tests</code></td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-28</span></td><td>利用枠到達イベント抽出</td><td><code>copilot/store.rs (insert_quota_event) / copilot/parser.rs (parse_quota_event 空実装)</code></td><td><code>store::tests</code></td><td>部分</td></tr>
-<tr><td>FR-C-40〜43</td><td>ライブ監視の起動と停止</td><td><code>copilot/live.rs</code>, <code>hooks/useLivePoll.ts</code></td><td></td><td><span class="chip id">ADR-0014</span></td></tr>
+<tr><td>FR-C-40〜43</td><td>ライブ監視の起動と停止</td><td><code>copilot/live.rs</code>, <code>hooks/useLivePoll.ts</code>, <code>hooks/useWindowVisible.ts</code></td><td><code>live::tests</code></td><td>済</td></tr>
 <tr><td>FR-C-44〜46</td><td>活動状態の合成 (純粋)</td><td><code>copilot/activity.rs</code></td><td><code>activity::tests</code></td><td>済</td></tr>
-<tr><td>FR-C-47〜49</td><td>末尾シーク読みとキャッシュ</td><td><code>copilot/live.rs</code>, <code>util/tail.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-50〜52</td><td>稼働中サブエージェント集合</td><td><code>copilot/live.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-53〜57</td><td>セッションカード</td><td><code>components/SessionCard.tsx</code></td><td></td><td></td></tr>
-<tr><td>FR-C-58〜60</td><td>自動インデックスの発火</td><td><code>pages/CopilotPage.tsx</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-C-61</span></td><td>稼働サマリー</td><td><code>components/LiveSummary.tsx</code></td><td></td><td></td></tr>
+<tr><td>FR-C-47〜49</td><td>末尾シーク読みとキャッシュ</td><td><code>copilot/live.rs</code>, <code>util/tail.rs</code></td><td><code>live::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-50〜52</td><td>稼働中サブエージェント集合</td><td><code>copilot/live.rs</code>, <code>copilot/activity.rs</code></td><td><code>live::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-53〜57</td><td>セッションカード</td><td><code>components/SessionCard.tsx</code>, <code>src/lib/sessionCard.ts</code>, <code>src/lib/format.ts</code>, <code>src/pages/CopilotPage.tsx</code></td><td><code>sessionCard.test.ts</code>, 実機</td><td>部分</td></tr>
+<tr><td>FR-C-58〜60</td><td>自動インデックスの発火</td><td><code>pages/CopilotPage.tsx</code>, <code>hooks/useLivePoll.ts</code></td><td>実機確認</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-61</span></td><td>稼働サマリー</td><td><code>components/LiveSummary.tsx</code></td><td>実機確認</td><td>済</td></tr>
 <tr><td>FR-C-70〜72</td><td>IDE ワークスペース</td><td><code>copilot/live.rs</code></td><td><code>tools/probe/live-detect.mjs</code></td><td><span class="chip id">ADR-0014</span></td></tr>
 <tr><td>FR-C-80〜95</td><td>利用枠ゲージ (純粋部分)</td><td><code>copilot/quota.rs</code></td><td><code>quota::tests</code></td><td>部分</td></tr>
 <tr><td><span class="chip id">FR-C-85</span></td><td>リセット日判定に <code>quota_reset_date_utc</code> を使う</td><td></td><td></td><td>ADR-0015 / ADR-0017</td></tr>

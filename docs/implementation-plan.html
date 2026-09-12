@@ -147,20 +147,20 @@
 <div class="table-wrap"><table>
 <thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">T-5.1</span></td><td>session-state/*/ の列挙 + workspace.yaml 読み + events.jsonl の mtime / 末尾判定</td><td>FR-C-40 / ADR-0014</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.2</span></td><td>末尾シーク読み (64KB → 512KB 1 回だけ) と本文レコードの遡り探索</td><td>FR-C-47 / 49</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.3</span></td><td><code>(パス, サイズ, mtime)</code> キャッシュと剪定</td><td><span class="chip id">FR-C-48</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.4</span></td><td>稼働中サブエージェント<strong>集合</strong>の算出 (件数は length で導出)</td><td>FR-C-50 / 51</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.1</span></td><td>session-state/*/ の列挙 + workspace.yaml 読み + events.jsonl の mtime / 末尾判定</td><td>FR-C-40 / ADR-0014</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.2</span></td><td>末尾シーク読み (64KB → 512KB 1 回だけ) と本文レコードの遡り探索</td><td>FR-C-47 / 49</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.3</span></td><td><code>(パス, サイズ, mtime)</code> キャッシュと剪定</td><td><span class="chip id">FR-C-48</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.4</span></td><td>稼働中サブエージェント<strong>集合</strong>の算出 (件数は length で導出)</td><td>FR-C-50 / 51</td><td>完了</td></tr>
 <tr><td><span class="chip id">T-5.5</span></td><td><code>copilot::activity</code> — 活動状態の合成 (純粋) + テスト</td><td>FR-C-44〜46</td><td>完了</td></tr>
-<tr><td><span class="chip id">T-5.6</span></td><td><code>useLivePoll</code> — 2 秒タイマー。アンマウントで停止</td><td>FR-C-41 / 42</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.7</span></td><td><code>window-visibility</code> イベント + <code>visibilitychange</code> の合成</td><td><strong>FR-C-43</strong> / IR-46</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.8</span></td><td>セッションカード (FR-C-53 の項目一式)</td><td>FR-C-53 / 54</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.9</span></td><td>30 分アイドルの既定非表示 (状態を持たない実装)</td><td><span class="chip id">FR-C-55</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.10</span></td><td>インライン系統図と自動展開の抑止条件</td><td><span class="chip id">FR-C-56</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.11</span></td><td>未インデックスセッションの穏やかな表示 + 1 回だけ再インデックス</td><td><span class="chip id">FR-C-57</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.12</span></td><td>自動インデックスの発火判定 (mtime のみ / 下限 10 秒)</td><td>FR-C-58 / 59 / 60</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.13</span></td><td>IDE ワークスペース一覧 (切断済みも残す) (lock は FR-C-70〜72 専用。稼働判定には使わない)</td><td>FR-C-70〜72</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-5.14</span></td><td>稼働サマリー (3 数字)</td><td><span class="chip id">FR-C-61</span></td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-5.6</span></td><td><code>useLivePoll</code> — 2 秒タイマー。アンマウントで停止</td><td>FR-C-41 / 42</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.7</span></td><td><code>window-visibility</code> イベント + <code>visibilitychange</code> の合成</td><td><strong>FR-C-43</strong> / IR-46</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.8</span></td><td>セッションカード (FR-C-53 の項目一式)</td><td>FR-C-53 / 54</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.9</span></td><td>30 分アイドルの既定非表示 (状態を持たない実装)</td><td><span class="chip id">FR-C-55</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.10</span></td><td>インライン系統図と自動展開の抑止条件 (暫定: フラット一覧表示、完全な入れ子系統図は段階 7)</td><td><span class="chip id">FR-C-56</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.11</span></td><td>未インデックスセッションの穏やかな表示 + 1 回だけ再インデックス</td><td><span class="chip id">FR-C-57</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.12</span></td><td>自動インデックスの発火判定 (mtime のみ / 下限 10 秒)</td><td>FR-C-58 / 59 / 60</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.13</span></td><td>IDE ワークスペース一覧 (切断済みも残す) (lock は FR-C-70〜72 専用。稼働判定には使わない)</td><td>FR-C-70〜72</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-5.14</span></td><td>稼働サマリー (3 数字)</td><td><span class="chip id">FR-C-61</span></td><td>完了</td></tr>
 </tbody></table></div>
 <p><strong>気をつける点</strong></p>
 <ul>
@@ -244,7 +244,7 @@
 <tr><td>2. git + 利用状況</td><td>7 / 7</td></tr>
 <tr><td>3. dev サーバー</td><td>7 / 7</td></tr>
 <tr><td>4. 差分インデックス</td><td>11 / 13</td></tr>
-<tr><td>5. ライブ監視</td><td>1 / 14</td></tr>
+<tr><td>5. ライブ監視</td><td>14 / 14</td></tr>
 <tr><td>6. 利用枠</td><td>2 / 13</td></tr>
 <tr><td>7. 振り返り UI</td><td>1 / 14</td></tr>
 <tr><td>横断</td><td>0 / 6</td></tr>

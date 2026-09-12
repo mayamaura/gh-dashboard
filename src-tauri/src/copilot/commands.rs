@@ -58,15 +58,24 @@ fn now_ms() -> i64 {
 /// IR-10: ライブ状況。**2 秒ポーリング前提。ネットワークアクセスなし** (INV-4)。
 ///
 /// 取得できるものが無い状態は正常系。空の一覧を返してよい。
+///
+/// 中身は `copilot::live::collect`。**DB を開かない** — 段階 4 の差分インデックスに
+/// 依存しないので、索引が一度も走っていなくても稼働中セッションは出る (ADR-0014)。
+/// ファイル IO を伴うので `spawn_blocking` に載せる (INV-10 / NFR-20)。
 #[tauri::command(rename_all = "snake_case")]
-pub async fn live_status_get(_state: State<'_, AppState>) -> AppResult<LiveStatus> {
-    // TODO(T-5.1..5.4):
-    //   - 状態ファイルを列挙し、PID 生存確認で死んだものを除外 (FR-C-40)
-    //   - (パス, サイズ, mtime) が同じならディスクを読み直さない (FR-C-48)
-    //   - 末尾 64KB のシーク読み、足りなければ 512KB で 1 回だけ (FR-C-47)
-    //   - 稼働中サブエージェントは "集合" を先に作る (FR-C-51)
-    //   - activity::synthesize で活動状態を合成 (FR-C-45)
-    Ok(LiveStatus::new(vec![], vec![], now_ms()))
+pub async fn live_status_get(state: State<'_, AppState>) -> AppResult<LiveStatus> {
+    let cache = state.live_cache.clone();
+    let now = now_ms();
+    tokio::task::spawn_blocking(move || {
+        let mut cache = match cache.lock() {
+            Ok(c) => c,
+            // 汚染してもライブ表示は止めない。キャッシュを捨てて読み直す (NFR-24)
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        crate::copilot::live::collect(now, &mut cache)
+    })
+    .await
+    .map_err(spawn_err)
 }
 
 // ---------------------------------------------------------------- IR-11..12
@@ -139,10 +148,7 @@ pub async fn index_refresh(app: AppHandle, state: State<'_, AppState>) -> AppRes
         );
 
         // IR-44: 完了スナップショット。読めなくても実行自体は成功しているので落とさない
-        let snapshot = db
-            .lock()
-            .ok()
-            .and_then(|conn| store::snapshot(&conn).ok());
+        let snapshot = db.lock().ok().and_then(|conn| store::snapshot(&conn).ok());
         if let Some(snapshot) = snapshot {
             let _ = app.emit(EVENT_SNAPSHOT, &snapshot);
         }
@@ -318,11 +324,18 @@ mod turn_body_tests {
     use std::sync::{Arc, Mutex};
 
     /// `turn_index` に 1 行 INSERT し、対応する一時ファイルを用意する。
-    fn setup(body: &[u8], byte_length: u64) -> (Arc<Mutex<rusqlite::Connection>>, i64, std::path::PathBuf) {
+    fn setup(
+        body: &[u8],
+        byte_length: u64,
+    ) -> (Arc<Mutex<rusqlite::Connection>>, i64, std::path::PathBuf) {
         let conn = crate::db::open_in_memory().expect("in-memory db");
 
         let mut path = std::env::temp_dir();
-        path.push(format!("turn_body_test_{}_{}.bin", std::process::id(), rand_suffix()));
+        path.push(format!(
+            "turn_body_test_{}_{}.bin",
+            std::process::id(),
+            rand_suffix()
+        ));
         std::fs::File::create(&path)
             .and_then(|mut f| f.write_all(body))
             .expect("write temp file");
@@ -330,7 +343,11 @@ mod turn_body_tests {
         let byte_offset: i64 = 0;
         conn.execute(
             "INSERT INTO turn_index (file_path, byte_offset, byte_length) VALUES (?1, ?2, ?3)",
-            rusqlite::params![path.to_string_lossy().to_string(), byte_offset, byte_length as i64],
+            rusqlite::params![
+                path.to_string_lossy().to_string(),
+                byte_offset,
+                byte_length as i64
+            ],
         )
         .expect("insert turn_index row");
         let turn_id = conn.last_insert_rowid();
@@ -378,7 +395,11 @@ mod turn_body_tests {
         // ファイルは空だが、索引はオフセット 100 を指している (縮小/入れ替わり想定)
         let conn = crate::db::open_in_memory().expect("in-memory db");
         let mut path = std::env::temp_dir();
-        path.push(format!("turn_body_test_empty_{}_{}.bin", std::process::id(), rand_suffix()));
+        path.push(format!(
+            "turn_body_test_empty_{}_{}.bin",
+            std::process::id(),
+            rand_suffix()
+        ));
         std::fs::File::create(&path).expect("create empty temp file");
 
         conn.execute(
@@ -408,7 +429,9 @@ mod turn_body_tests {
         let conn = crate::db::open_in_memory().expect("in-memory db");
         let db = Arc::new(Mutex::new(conn));
 
-        let err = turn_body_get_impl(db, 999).await.expect_err("存在しない id はエラー");
+        let err = turn_body_get_impl(db, 999)
+            .await
+            .expect_err("存在しない id はエラー");
         assert!(matches!(err, AppError::NotFound { .. }));
     }
 }
