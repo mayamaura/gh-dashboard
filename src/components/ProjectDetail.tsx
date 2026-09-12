@@ -146,6 +146,18 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
     <div className="panel detail-panel">
       <h2>{p.display_name}</h2>
 
+      <div className="button-row">
+        <button onClick={() => void openVscode(p.path_key)}>VS Code で開く</button>
+        <button onClick={() => void openFolder(p.path_key)}>エクスプローラーで開く</button>
+        <button onClick={() => void openTerminal(p.path_key)}>ターミナルで開く</button>
+        <button onClick={() => void openAgent(p.path_key)}>Copilot CLI を起動</button>
+        {p.dev.state === 'running' && p.dev.url && (
+          <button onClick={() => void openBrowser(p.dev.state === 'running' ? p.dev.url ?? '' : '')}>
+            ブラウザで開く
+          </button>
+        )}
+      </div>
+
       <dl className="detail-grid">
         <dt>パス</dt>
         <dd>{p.root_path}</dd>
@@ -161,18 +173,6 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
 
       {/* FR-P-22: 起動不可の理由は目立つ形で出す */}
       {launch.reason && <p className="note-inline">起動不可: {launch.reason}</p>}
-
-      <div className="button-row">
-        <button onClick={() => void openVscode(p.path_key)}>VS Code で開く</button>
-        <button onClick={() => void openFolder(p.path_key)}>エクスプローラーで開く</button>
-        <button onClick={() => void openTerminal(p.path_key)}>ターミナルで開く</button>
-        <button onClick={() => void openAgent(p.path_key)}>Copilot CLI を起動</button>
-        {p.dev.state === 'running' && p.dev.url && (
-          <button onClick={() => void openBrowser(p.dev.state === 'running' ? p.dev.url ?? '' : '')}>
-            ブラウザで開く
-          </button>
-        )}
-      </div>
 
       <section className="detail-section">
         <h3>dev サーバー</h3>
