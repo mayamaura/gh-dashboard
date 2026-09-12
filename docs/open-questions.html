@@ -35,9 +35,9 @@
 <tr><td><span class="chip id">OQ-03</span></td><td>VS Code の <code>chatSessions</code> とハッシュ</td><td><strong>一部判明</strong></td><td>ハッシュ再計算は 20 中 6 しか当たらない</td></tr>
 <tr><td><span class="chip id">OQ-04</span></td><td>稼働中セッションの検出</td><td><strong>一部判明</strong></td><td><code>ide/*.lock</code> は CLI の生死と対応しない (決定的な否定)</td></tr>
 <tr><td><span class="chip id">OQ-05</span></td><td><code>session-store.db</code> を安全に読めるか</td><td><strong>一部判明</strong></td><td>書き込み中でも 12/12 読めた。ただし writer 不在時は未測定</td></tr>
-<tr><td><span class="chip id">OQ-06</span></td><td>経路 A (Copilot SDK) が返す利用枠</td><td><strong>一部判明</strong></td><td><code>getCurrentAuth</code> なら 3 枠 + 付与額 + 月次リセット日が取れる。<code>getQuota</code> は劣化射影</td></tr>
+<tr><td><span class="chip id">OQ-06</span></td><td>経路 A (Copilot SDK) が返す利用枠</td><td><strong>一部判明</strong></td><td><code>getCurrentAuth</code> なら 3 枠 + 付与額 + 月次リセット日が取れる。<code>getQuota</code> は劣化射影。<strong>2026-09-12 にプラン変更で 3 枠の値が裏返り、<code>unlimited: true</code> を実観測</strong></td></tr>
 <tr><td><span class="chip id">OQ-07</span></td><td>サブエージェント / 委任</td><td><strong>確定</strong></td><td>存在する。親子とも <code>toolCallId</code> を持つ。<strong>縮退不要</strong></td></tr>
-<tr><td><span class="chip id">OQ-08</span></td><td>SDK / REST の認証</td><td><strong>一部判明</strong></td><td>SDK は解決。REST は <code>gh</code> のトークンで通るが <code>user</code> スコープが無い</td></tr>
+<tr><td><span class="chip id">OQ-08</span></td><td>SDK / REST の認証と<strong>Rust からの呼び出し</strong></td><td><strong>一部判明</strong></td><td><strong>Rust → Node 子プロセス → CLI 同梱 SDK で実機成功 (ADR-0028)。認証情報は扱わない。</strong> REST は <code>gh</code> のトークンで通るが <code>user</code> スコープが無い</td></tr>
 <tr><td><span class="chip id">OQ-09</span></td><td>古いセッションの自動削除</td><td><strong>未調査</strong></td><td>据え置き。観測期間が 1 時間では何も言えない</td></tr>
 <tr><td><span class="chip id">OQ-10</span></td><td>実データ量</td><td><strong>一部判明</strong></td><td>3 セッションで 1.0 MB。数百 MB 規模は未再現</td></tr>
 <tr><td><span class="chip id">OQ-11</span></td><td>拒否 / 非同期委任の表現</td><td><strong>調査中</strong></td><td>実データ 46 セッションでも拒否 0 件 / 非同期 0 件。<strong>T-4.9 / T-4.10 は引き続き保留</strong></td></tr>
@@ -592,13 +592,30 @@ quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
 <ul>
 <li><strong>アカウントは 1 つ、プランも 1 つ</strong> (<code>individual</code> / <code>free_limited_copilot</code>)。<strong>組織 / Enterprise 管理下・有料プランで同じキー / 同じ <code>entitlement</code> の意味になるかは分からない</strong></li>
 <li><strong><code>overage</code> / <code>overage_count</code> / <code>overage_permitted</code> は 3 枠とも <code>0</code> / <code>false</code>。</strong> FR-C-90 (超過の別建て) が実際にどう返るかを <strong>1 件も観測していない</strong>。<code>overage_permitted: false</code> なので、このアカウントでは原理的に超過が起きない</li>
-<li><strong><code>unlimited</code> は 3 枠とも <code>false</code>、<code>entitlement</code> に <code>-1</code> は 1 度も現れていない。</strong> FR-C-131 が名指しする「<code>-1</code> = 無制限」は<strong>未観測</strong>。実在したのは <code>0</code> + <code>has_quota: false</code> の方</li>
+<li>~~<strong><code>unlimited</code> は 3 枠とも <code>false</code></strong>~~ → <strong>2026-09-12 (T-6.3) に <code>unlimited: true</code> を実観測した</strong>。下記を参照。<code>entitlement</code> に <code>-1</code> は依然として 1 度も現れていない — FR-C-131 が名指しする「<code>-1</code> = 無制限」は<strong>いまだ未観測</strong></li>
 <li><strong><code>credits_used</code> の定義が分からない</strong> (chat で <code>1</code>。他の 2 つの消費量 1.6 / 2 と一致しない)。切り捨てなのか別のカウンタなのか不明。<strong><code>getCurrentAuth</code> には無い</strong>フィールドなので使わない</li>
 <li>~~<code>getCurrentAuth</code> の戻り値の型宣言を確認していない~~ → <strong>2026-09-08 に <code>dist/generated/rpc.d.ts</code> で確認済み。</strong><code>quota_snapshots</code> / <code>quota_reset_date</code> / <code>quota_reset_date_utc</code> はいずれも<strong>宣言あり</strong>。<code>CopilotUserResponseQuotaSnapshotsChat</code> の 12 フィールド (<code>entitlement</code> / <code>quota_remaining</code> / <code>percent_remaining</code> / <code>has_quota</code> / <code>timestamp_utc</code> / <code>unlimited</code> / <code>overage_count</code> / <code>overage_permitted</code> / <code>quota_id</code> / <code>remaining</code> / <code>quota_reset_at</code> / <code>token_based_billing</code>) も<strong>全部宣言あり</strong>。<code>copilotUser?</code> は <code>AuthInfo</code> の 8 バリアント<strong>すべて</strong>に宣言されている。<strong><code>credits_used</code> だけが型に無く</strong>、<code>getCurrentAuth</code> が返さない理由の説明がつく (詳細と帰結は ADR-0017)。<strong>ただし全フィールドが optional (<code>?</code>) なので、防御的パースは依然として必須</strong></li>
 <li><code>models.list</code> が <code>"auto"</code> 1 件しか返さない理由 (引数の与え方 / セッション未接続 / プラン依存) を切り分けていない。<strong><code>billing</code> が原理的に取れないのか、呼び方が違うだけなのかが分かっていない</strong></li>
 <li><strong>リセット (<code>2026-10-01</code>) をまたいだ挙動を見ていない。</strong> FR-C-85 の除外判定は実測で確かめられていない</li>
-<li>Rust から SDK を叩く経路は試していない (OQ-08)。<strong>測定はすべて Node の TypeScript バインディング</strong></li>
+<li>~~Rust から SDK を叩く経路は試していない (OQ-08)~~ → <strong>2026-09-12 (T-6.3) に解決 (ADR-0028)</strong></li>
 </ul>
+<h3 id="oq-06-t-6.3-2026-09-12-同じアカウントで枠の中身が裏返った">[T-6.3 / 2026-09-12] 同じアカウントで枠の中身が裏返った</h3>
+<p>T-6.3 の実装確認で <code>getCurrentAuth</code> を再度叩いたところ、<strong>4 日前 (T-0.8) と値がまったく違っていた</strong>。プランが <code>free_limited_copilot</code> から <code>individual</code> / <code>monthly_subscriber_quota</code> に変わっている。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>枠</th><th>T-0.8 (2026-09-08)</th><th>T-6.3 (2026-09-12)</th></tr></thead>
+<tbody>
+<tr><td><code>chat</code></td><td><code>entitlement: 200</code> / <code>quota_remaining: 198.4</code> / <code>has_quota: true</code> / <code>unlimited: false</code></td><td><strong><code>entitlement: 0</code> / <code>quota_remaining: 0</code> / <code>has_quota: true</code> / <code>unlimited: true</code></strong></td></tr>
+<tr><td><code>completions</code></td><td><code>entitlement: 2000</code></td><td><strong><code>entitlement: 0</code> / <code>unlimited: true</code></strong></td></tr>
+<tr><td><code>premium_interactions</code></td><td><code>entitlement: 0</code> / <code>has_quota: <strong>false</strong></code> / <code>percent_remaining: 0</code></td><td><strong><code>entitlement: 1500</code> / <code>has_quota: true</code> / <code>unlimited: false</code> / <code>percent_remaining: 100</code></strong></td></tr>
+<tr><td><code>quota_reset_date_utc</code></td><td><code>2026-10-01T00:00:00.000Z</code></td><td>同左 (変わらず)</td></tr>
+</tbody></table></div>
+<p><strong>この 1 回の再測定で分かったこと</strong>:</p>
+<ul>
+<li><strong><code>unlimited: true</code> が実在する。</strong> ADR-0015 が「無制限の判定は <code>unlimited === true</code>」と書いたときは未観測だった。<strong>判断は正しかったが、根拠が実測に変わった</strong></li>
+<li><strong><code>entitlement: 0</code> は「適用外」を意味しない。</strong> <code>has_quota: true</code> + <code>unlimited: true</code> と同居する。したがって判定順は <strong><code>has_quota</code> → <code>unlimited</code> → <code>entitlement &lt;= 0</code> (0 除算ガード)</strong> でなければならない。<strong>0 除算ガードを先に置くと、無制限の枠が「付与 0」として表示される</strong></li>
+<li><strong>同じ枠名の意味がプランで反転する。</strong> T-0.8 の観測だけを根拠に「<code>premium_interactions</code> は適用外の枠」といった特別扱いをコードに書いていたら、4 日で壊れていた。<strong>ADR-0010 / ADR-0015 の「枠の名前・付与額をコードに埋め込まない」がそのまま効いた</strong></li>
+</ul>
+<p><strong>この数字から言えないこと</strong>: <strong>プラン変更の前後で測ったつもりは無く、いつ何が変わったのかを追跡していない</strong> (2 点の観測があるだけ)。<code>entitlement: 1500</code> の単位も相変わらず不明 (ADR-0010)。<strong>超過 (<code>overage_*</code>) は依然として 1 件も観測していない</strong> — FR-C-90 の実データ検証は未達。</p>
 <hr />
 <h2 id="oq-07-サブエージェント-委任タスクの概念があるか">OQ-07 — サブエージェント / 委任タスクの概念があるか</h2>
 <p><strong>状態</strong>: <strong>確定</strong> — 存在する。<strong>縮退不要</strong></p>
@@ -674,7 +691,29 @@ quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
 <li>一方 <strong>公開課金 API は 10/10 が 404</strong>。うち 5 件は <code>gh</code> が <code>This API operation needs the "user" scope</code> を出しており、<strong>404 の真因はスコープ不足</strong> (OQ-12)</li>
 <li><strong><code>gh auth refresh -s user</code> は実行していない。</strong> ユーザーの資格情報 (スコープ) を変更する操作であり、調査のために勝手に広げない。<strong>スコープを足した再測定は未実施</strong></li>
 <li>fine-grained PAT / OAuth device flow は試していない</li>
-<li>Rust から SDK を叩く経路 (FR-C-137 が言う言語バインディング) は試していない。<strong>測定は Node の TypeScript バインディングで行った</strong>。Rust 側でどう呼ぶかは段階 6 の設計事項として残る</li>
+<li>~~Rust から SDK を叩く経路 (FR-C-137 が言う言語バインディング) は試していない~~ → <strong>2026-09-12 (T-6.3) に解決。ADR-0028 を参照</strong></li>
+</ul>
+<h3 id="oq-08-t-6.3-rust-から-2026-09-12">[T-6.3 / 2026-09-12] Rust から実機で叩けた</h3>
+<p><strong>Rust → <code>node</code> 子プロセス (スクリプトは標準入力) → Copilot CLI 同梱の <code>copilot-sdk/index.js</code> → <code>account.getCurrentAuth()</code> で、実アカウントの 3 枠を通しで取得できた。</strong> 所要 <strong>2.0 秒</strong> (import 10ms / <code>client.start()</code> 437ms / RPC 661ms)。追加依存はゼロ。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>探した場所</th><th>結果</th></tr></thead>
+<tbody>
+<tr><td>crates.io の Rust バインディング</td><td><strong>無い</strong></td></tr>
+<tr><td><code>npm root -g</code> (<code>…\Volta\tools\image\node\24.18.0\node_modules</code>)</td><td><strong><code>@github</code> 無し</strong> (<code>corepack</code> / <code>npm</code> のみ)</td></tr>
+<tr><td><code>%APPDATA%\npm\node_modules</code></td><td><strong>ディレクトリ自体が無い</strong></td></tr>
+<tr><td><code>where copilot</code></td><td><code>…\WinGet\Packages\GitHub.Copilot_…\copilot.exe</code> — <strong>159MB の単一 SEA。JS モジュールとしては読めない</strong></td></tr>
+<tr><td><code>copilot --help</code> の <code>Commands:</code></td><td><strong>枠を出すサブコマンドは無い</strong> (<code>completion</code> / <code>help</code> / <code>init</code> / <code>login</code> / <code>mcp</code> / <code>plugin</code> / <code>plugins</code> / <code>skill</code> / <code>update</code> / <code>version</code>)</td></tr>
+<tr><td><code>%LOCALAPPDATA%\copilot\pkg\win32-x64\&lt;version&gt;\copilot-sdk\index.js</code></td><td><strong>あり</strong> (<code>1.0.79</code> と <code>1.0.79-9</code> の 2 版。<code>copilot.exe</code> が展開したもの)</td></tr>
+<tr><td><code>%LOCALAPPDATA%\Programs\GitHub Copilot\copilot-sdk\index.js</code></td><td><strong>あり</strong></td></tr>
+</tbody></table></div>
+<p><strong>OQ-08 の従来の記述を 1 点訂正する。</strong> 「<strong>SDK は自前ランタイムを同梱するので Copilot CLI の別途インストールを要求しなかった</strong>」は <strong>npm 導入版にしか当てはまらない</strong>。CLI 同梱版で <code>new CopilotClient()</code> を引数なしで呼ぶと <code>Could not resolve a @github/copilot platform package (tried @github/copilot-win32-x64)</code> で失敗する。<strong><code>RuntimeConnection.forStdio({ path: copilot.exe })</code> を明示的に渡すこと。</strong></p>
+<h3 id="この数字から言えないこと-8b">この数字から言えないこと (T-6.3 で追加)</h3>
+<ul>
+<li><strong>Node.js が無い環境を試していない。</strong> 経路 A は Node を必要とする。測定機には Volta 経由の Node 24.18.0 が入っていた。<strong>Node 不在なら「取得不可 + Node をインストール」を返す実装にしてある</strong>が、その経路自体は実機で踏んでいない</li>
+<li><strong>Windows 以外は 1 度も見ていない。</strong> 探索パスは <code>%LOCALAPPDATA%</code> 前提。macOS / Linux の配置は不明</li>
+<li><strong>CLI が未インストールの機械で「見つかりません」に落ちることを確認していない</strong> (測定機には入っている)。単体テストでは探索が panic しないことだけを確認した</li>
+<li><strong>Node の最低バージョンを切り分けていない。</strong> 24.18.0 でしか動かしていない。<code>--input-type=module</code> + 標準入力の組み合わせがどこまで遡れるかは未測定</li>
+<li><strong><code>node --input-type=module -e &lt;script&gt;</code> が無言で 0 終了する理由は分かっていない</strong> (Node 24.18.0)。標準入力とファイル経由は正常。<strong>原因不明のまま引数経由を避けた</strong></li>
 </ul>
 <hr />
 <h2 id="oq-09-古いセッションが自動削除されるか">OQ-09 — 古いセッションが自動削除されるか</h2>

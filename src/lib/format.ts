@@ -52,8 +52,11 @@ export function creditsFromNanoAiu(nanoAiu: number | null): number | null {
 /**
  * ゲージの本文。
  *
- * **率だけでなく額も併記する** (FR-C-89) — 従量課金では「あと何ドル分か」が
- * 意思決定の単位になる。取れていない値は数字を作らない。
+ * **率だけでなく消費量も併記する** (FR-C-89)。ただし単価 (1 AI Credit が何ドルか)
+ * は実行時にも取得不可であることが実測で確定しているため、**`$` への換算は一切
+ * 表示しない** (ADR-0010)。`used` / `entitlement` は AI Credits 単位の数値であり
+ * ドルではないので、単位を明示するラベルを付ける (FR-C-100 の用語に合わせる)。
+ * 取れていない値は数字を作らない。
  */
 export function gaugeText(g: QuotaGauge): string {
   if (g.origin.source === 'unavailable') return '取得できませんでした'
@@ -63,9 +66,18 @@ export function gaugeText(g: QuotaGauge): string {
   }
   const pct = g.used_pct === null ? '' : ` (${g.used_pct.toFixed(0)}%)`
   if (g.kind === 'monthly_credits') {
-    return `$${g.used.toFixed(2)} / $${g.entitlement.toFixed(2)}${pct}`
+    return `${g.used.toFixed(2)} / ${g.entitlement.toFixed(2)} AI Credits${pct}`
   }
   return `${g.used.toLocaleString()} / ${g.entitlement.toLocaleString()}${pct}`
+}
+
+/**
+ * 「適用外」(FR-C-131 / ADR-0015)。**「無制限」とは別状態。**
+ * 無制限 = 上限が無い。適用外 = そもそも対象プランにこの枠が無い。
+ * 率も危険色も出さない。
+ */
+export function quotaNotApplicableText(): string {
+  return '対象プランでは利用できません'
 }
 
 /** 出所ラベル。**推定を実測であるかのように見せない** (NFR-40)。 */

@@ -76,7 +76,7 @@
 <tr><td>FR-C-58〜60</td><td>自動インデックスの発火</td><td><code>pages/CopilotPage.tsx</code>, <code>hooks/useLivePoll.ts</code></td><td>実機確認</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-61</span></td><td>稼働サマリー</td><td><code>components/LiveSummary.tsx</code></td><td>実機確認</td><td>済</td></tr>
 <tr><td>FR-C-70〜72</td><td>IDE ワークスペース</td><td><code>copilot/live.rs</code></td><td><code>tools/probe/live-detect.mjs</code></td><td><span class="chip id">ADR-0014</span></td></tr>
-<tr><td>FR-C-80〜95</td><td>利用枠ゲージ (純粋部分)</td><td><code>copilot/quota.rs</code></td><td><code>quota::tests</code></td><td>部分</td></tr>
+<tr><td>FR-C-80〜95</td><td>利用枠ゲージ</td><td><code>copilot/quota.rs</code>, <code>quota_fetch.rs</code>, <code>components/QuotaGaugeRow.tsx</code>, <code>hooks/useQuotaPoll.ts</code></td><td><code>quota::tests</code>, 実機確認</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-85</span></td><td>リセット日判定に <code>quota_reset_date_utc</code> を使う</td><td></td><td></td><td>ADR-0015 / ADR-0017</td></tr>
 <tr><td><span class="chip id">FR-C-86</span></td><td>鮮度判定と警告色</td><td></td><td></td><td><span class="chip id">ADR-0015</span></td></tr>
 <tr><td><span class="chip id">FR-C-89</span></td><td>超過表示</td><td></td><td></td><td><span class="chip id">ADR-0010</span></td></tr>
@@ -84,8 +84,8 @@
 <tr><td>FR-C-110〜111</td><td>セッション検索</td><td><code>copilot/commands.rs</code></td><td></td><td></td></tr>
 <tr><td>FR-C-112〜118</td><td>系統図・ガント (木構築は純粋)</td><td><code>copilot/tree.rs</code></td><td><code>tree::tests</code></td><td>部分</td></tr>
 <tr><td>FR-C-119〜121</td><td>本文ビューア</td><td><code>components/TurnViewer.tsx</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-C-130</span></td><td>経路 A: クォータ枠の取得</td><td></td><td><code>tools/probe/quota-sdk.mjs</code></td><td>ADR-0015 / ADR-0017</td></tr>
-<tr><td><span class="chip id">FR-C-131</span></td><td>適用外の枠は <code>has_quota === false</code> で判定</td><td></td><td></td><td><span class="chip id">ADR-0015</span></td></tr>
+<tr><td><span class="chip id">FR-C-130</span></td><td>経路 A: クォータ枠の取得</td><td><code>quota_fetch.rs</code>, <code>quota.rs</code></td><td><code>tools/probe/quota-sdk.mjs</code>, 実機確認</td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-131</span></td><td>適用外の枠は <code>has_quota === false</code> で判定</td><td><code>quota.rs</code>, <code>QuotaGaugeRow.tsx</code></td><td><code>quota::tests</code>, 実機確認</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-134</span></td><td>モデル別単価</td><td></td><td></td><td>ADR-0010 / ADR-0015</td></tr>
 <tr><td><span class="chip id">FR-C-138</span></td><td>組織の月次消費履歴</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
 <tr><td><span class="chip id">FR-C-139</span></td><td>個人の月次消費履歴</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>

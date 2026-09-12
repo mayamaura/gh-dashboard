@@ -18,6 +18,7 @@ pub mod indexer;
 pub mod live;
 pub mod parser;
 pub mod quota;
+pub mod quota_fetch;
 pub mod sessions;
 pub mod store;
 pub mod tree;

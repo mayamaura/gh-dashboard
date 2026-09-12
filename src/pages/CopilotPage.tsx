@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { QuotaGaugeRow } from '../components/QuotaGaugeRow'
 import { useIsViewing } from '../hooks/useWindowVisible'
 import { shouldAutoIndex, useLivePoll } from '../hooks/useLivePoll'
+import { useQuotaPoll } from '../hooks/useQuotaPoll'
 import { indexRefresh, quotaGet, snapshotGet, usageTodayGet } from '../ipc/commands'
 import { appStore, useAppStore } from '../store/appStore'
 import {
@@ -27,6 +28,8 @@ export function CopilotPage() {
   // タブを見ていて、かつ最小化されていないときだけ true (FR-C-41 / 43)
   const viewing = useIsViewing('copilot')
   const { live, failed } = useLivePoll(viewing)
+  // T-6.10: 長周期タイマー (目安 5 分)。2 秒ポーリングには絶対に混ぜない (INV-4)
+  const { refresh: refreshQuota } = useQuotaPoll(viewing)
   const { snapshot, quota, usageToday, lastIndexedAt, indexing, indexingManual } = useAppStore()
   const now = Date.now()
 
@@ -134,7 +137,11 @@ export function CopilotPage() {
 
       {/* 利用枠 (FR-C-80〜95) */}
       <section className="panel">
-        <h2>利用枠</h2>
+        <div className="panel-head">
+          <h2>利用枠</h2>
+          {/* T-6.10: 手動更新。長周期タイマー (5 分) とは別に即時取得できる */}
+          <button onClick={() => void refreshQuota()}>今すぐ更新</button>
+        </div>
         {quota === null || quota.length === 0 ? (
           <p className="muted">まだ取得していません。</p>
         ) : (
@@ -144,9 +151,10 @@ export function CopilotPage() {
             ))}
           </div>
         )}
-        {/* NFR-45: 金額は概算であることを必ず添える */}
+        {/* NFR-45: 金額は概算であることを必ず添える (該当するのは $ 換算を出す場合のみ。
+            現状 monthly_credits は $ を表示しないため、単位について誤解させない注記にする) */}
         <p className="fineprint">
-          金額は概算です。請求額の正は GitHub の課金画面です。
+          消費量は AI Credits 単位です (金額換算は表示していません)。
         </p>
       </section>
 

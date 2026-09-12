@@ -269,35 +269,79 @@ pub async fn usage_today_get(_state: State<'_, AppState>) -> AppResult<UsageToda
 
 // ---------------------------------------------------------------- IR-17..18
 
-/// IR-17: 利用枠。**経路 A→B→C の降格込み**。
+/// IR-17: 利用枠。**経路 A→(B は未実装)→C の降格込み** (ADR-0018)。
 ///
 /// ネットワークを伴うため下限間隔 (5 分) がある。**2 秒ポーリングに載せない** (FR-C-135)。
+/// 取れなくても機能全体を止めない (FR-C-136)。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn quota_get(
-    _state: State<'_, AppState>,
-    _force: bool,
+    state: State<'_, AppState>,
+    force: bool,
 ) -> AppResult<Vec<crate::copilot::quota::QuotaGauge>> {
-    // TODO(T-6.3..6.7): SDK → REST → 推定 の順に試し、quota::degrade で組み立てる。
-    //   取れなくても機能全体を止めない (FR-C-136)。枠ごとに独立して評価する (FR-C-84)
-    Ok(vec![crate::copilot::quota::degrade(
-        "monthly_credits",
-        "月次 AI Credits",
-        None,
-        None,
-        None,
-        now_ms(),
-    )])
+    use crate::copilot::quota_fetch as qf;
+
+    let cache = state.quota.clone();
+    let db = state.db.clone();
+    let now = now_ms();
+
+    // 下限間隔 (FR-C-135 / 142)。直前の値をそのまま返す — 空にしない (NFR-07)
+    {
+        let c = lock_or_recover(&cache);
+        if !force && !c.gauges.is_empty() {
+            if let Some(last) = c.last_fetch_at {
+                if now.saturating_sub(last) < qf::MIN_FETCH_INTERVAL_MS {
+                    return Ok(c.gauges.clone());
+                }
+            }
+        }
+    }
+
+    // 経路 A。**ここだけがネットワークに出る** (INV-3)。ロックは持たない
+    let sdk = qf::fetch_sdk().await;
+
+    // 経路 C。**経路 A が成功したら走らせない** — 実値がある枠に推定は混ざらない
+    // (FR-C-144) ので、全表走査するだけ無駄になる。DB 走査は blocking に載せる (INV-10)
+    let estimate = if sdk.is_ok() {
+        None
+    } else {
+        let estimate_cache = cache.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db.lock().ok()?;
+            let mut c = lock_or_recover(&estimate_cache);
+            qf::estimate(&conn, &mut c, now)
+        })
+        .await
+        .map_err(spawn_err)?
+    };
+
+    let mut c = lock_or_recover(&cache);
+    let gauges = qf::build_gauges(sdk, estimate, &mut c, now);
+    c.gauges = gauges.clone();
+    c.last_fetch_at = Some(now);
+    Ok(gauges)
 }
 
 /// IR-18: 各取得経路の可用性。「何をすれば取れるようになるか」の材料 (FR-C-83)。
+///
+/// **この関数は新しく取得しに行かない。** 直近の `quota_get` の結果を読むだけ
+/// (INV-4 の趣旨: 表示のための関数からネットワークを起こさない)。
 #[tauri::command(rename_all = "snake_case")]
-pub async fn quota_source_status_get(_state: State<'_, AppState>) -> AppResult<serde_json::Value> {
-    // TODO(T-6.11): 認証状態 / SDK 有無 / 直近の取得結果と失敗理由
+pub async fn quota_source_status_get(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    let c = lock_or_recover(&state.quota);
     Ok(serde_json::json!({
-        "sdk": { "available": false, "reason": "未調査 (OQ-06)" },
-        "rest": { "available": false, "reason": "未実装 (T-6.5)" },
-        "estimate": { "available": false, "reason": "インデックス未実装 (段階 4)" }
+        "sdk": c.sdk.to_json(),
+        "rest": crate::copilot::quota_fetch::rest_status().to_json(),
+        "estimate": c.estimate_route.to_json(),
+        "checked_at": c.last_fetch_at,
     }))
+}
+
+/// 利用枠キャッシュのロック。**汚染しても表示を止めない** (NFR-24)。
+/// 中身は導出データなので、壊れていても次の取得で上書きされる
+fn lock_or_recover(
+    cache: &std::sync::Mutex<crate::copilot::quota_fetch::QuotaCache>,
+) -> std::sync::MutexGuard<'_, crate::copilot::quota_fetch::QuotaCache> {
+    cache.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 // ---------------------------------------------------------------- IR-19

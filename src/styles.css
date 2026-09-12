@@ -154,6 +154,8 @@ body {
 /* 超過分は別セグメント。100% でクランプしない (FR-C-90) */
 .gauge-over { background: repeating-linear-gradient(45deg, var(--danger), var(--danger) 4px, transparent 4px, transparent 8px); }
 .gauge-unlimited { background: linear-gradient(90deg, var(--sunken), var(--accent), var(--sunken)); opacity: .5; }
+/* 取得不可: トラックの下地だけを見せる。0% 使用と誤読させない (NFR-40) */
+.gauge-unknown { background: transparent; }
 
 .gauge-foot { display: flex; gap: 10px; align-items: baseline; margin-top: 5px; }
 .gauge-text { font-family: var(--mono); font-size: 12px; }
@@ -175,6 +177,8 @@ body {
 .chip.source-actual { color: var(--ok); }
 .chip.source-estimated { color: var(--warn); }
 .chip.source-unavailable { color: var(--faint); }
+/* T-6.12: 適用外 (FR-C-131 / ADR-0015) — 無制限とは別状態。危険色にしない */
+.chip.chip-na { color: var(--faint); }
 
 .badge {
   font-size: 11px;

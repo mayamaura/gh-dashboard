@@ -264,12 +264,24 @@ export interface QuotaGauge {
   unlimited: boolean
   reset_at: number | null
   origin: QuotaSource
+  /** false ならこのプランにそもそも存在しない枠 (FR-C-131 / ADR-0015)。既定 true */
+  has_quota: boolean
 }
 
 export type AnimationPref = 'auto' | 'on' | 'off'
 
+/** 経路ごとの可用性。`how_to_fix` は FR-C-83 の「何をすれば取れるようになるか」 */
+export interface QuotaRouteStatus {
+  available: boolean
+  reason: string
+  how_to_fix: string | null
+}
+
 export interface QuotaSourceStatus {
-  sdk: { available: boolean; reason: string }
-  rest: { available: boolean; reason: string }
-  estimate: { available: boolean; reason: string }
+  sdk: QuotaRouteStatus
+  /** 経路 B は v1 では未実装。常に `available: false` (ADR-0018) */
+  rest: QuotaRouteStatus
+  estimate: QuotaRouteStatus
+  /** 直近に `quota_get` が走った時刻。**鮮度には使わない** — 鮮度は observed_at (FR-C-86) */
+  checked_at: number | null
 }

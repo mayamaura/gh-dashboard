@@ -273,7 +273,7 @@
 <li><strong>消費量を出すなら <code>entitlement − quota_remaining</code> (小数) を使う。</strong> ゲージの率と同じ元データから出るのはこれだけ。<strong><code>remaining</code> / <code>usedRequests</code> / <code>credits_used</code> と混ぜない</strong></li>
 <li><strong><code>usedRequests</code> を表示にも計算にも使わない。</strong> <strong>[訂正]</strong> 「単位不明」ではなく <code>entitlement − remaining</code> (整数丸め) である。真の消費 1.55 が 2 に丸め上がる</li>
 <li><strong>適用外の判定は <code>has_quota === false</code> を第一基準にする。</strong> <code>premium_interactions</code> は <code>percent_remaining: 0</code> を返すが、これは「残り 0%」ではなく「この枠は適用されない」。<strong>そのままゲージに載せると FR-C-88 の <code>90% 以上 = 危険</code> に該当して真っ赤になる。</strong> <code>entitlement &lt;= 0</code> は 0 除算ガードとして併用する</li>
-<li><strong>無制限の判定は <code>unlimited === true</code>。</strong> FR-C-131 が名指しする <code>entitlement = -1</code> は<strong>1 度も観測していない</strong>。実在したのは <code>0</code> + <code>has_quota: false</code> の方</li>
+<li><strong>無制限の判定は <code>unlimited === true</code>。</strong> FR-C-131 が名指しする <code>entitlement = -1</code> は<strong>1 度も観測していない</strong>。 <strong>[2026-09-12 / T-6.3 で実測が付いた]</strong> プラン変更後の同一アカウントで <code>chat</code> / <code>completions</code> が <strong><code>entitlement: 0</code> + <code>has_quota: true</code> + <code>unlimited: true</code></strong> を返した。 したがって<strong>判定順は <code>has_quota</code> → <code>unlimited</code> → <code>entitlement &lt;= 0</code> (0 除算ガード) でなければならない</strong> — 0 除算ガードを先に置くと、<strong>無制限の枠が「付与 0」として出る</strong> (OQ-06)</li>
 <li><strong><code>resetDate</code> をリセット日として表示しない。</strong> <strong>[理由を訂正]</strong> 「毎回変わるから」ではなく、<strong>中身がスナップショットの観測時刻 (<code>timestamp_utc</code>) だから</strong>。SDK と REST を数秒差で別プロセスから叩いてミリ秒まで一致することを確認した (<code>2026-09-08T11:58:34.381Z</code> = <code>2026-09-08T04:58:34.381-07:00</code>)。同一プロセスで 3 回続けて呼んでも動かない</li>
 <li><strong><code>quota_reset_at</code> を使わない。</strong> 3 枠とも <code>0</code></li>
 <li><strong>FR-C-85 (リセット後の観測を除外) は <code>quota_reset_date_utc</code> で判定する。</strong> 観測時刻がリセット日時より前の期間のものなら、その観測を捨てる</li>
@@ -391,7 +391,7 @@
 <ul>
 <li>T-6.3 の対象 API を <code>account.getQuota</code> から <code>account.getCurrentAuth</code> に差し替える。<strong>要求本文 (FR-C-130) は書き換えず、差異を OQ-06 に記録した</strong></li>
 <li><strong>2 秒ポーリングに載せない</strong> (FR-C-135 / INV-4)。SDK 呼び出しはネットワークと外部ランタイムを伴う</li>
-<li>Rust からこの API をどう呼ぶか (FR-C-137 の言語バインディング) は<strong>未解決のまま</strong>。測定は Node の TypeScript バインディングで行った (OQ-08)。<strong>呼べないと分かったら、その時点で枠は <code>unavailable</code> になる</strong> — 推定値で埋めない</li>
+<li>~~Rust からこの API をどう呼ぶか (FR-C-137 の言語バインディング) は<strong>未解決のまま</strong>~~ → <strong>2026-09-12 (T-6.3) に解決した。ADR-0028。</strong> Rust → Node 子プロセス → CLI 同梱 SDK で実機取得できた。<strong>呼べない環境 (Node 不在 / CLI 未導入) では枠は <code>unavailable</code> になる</strong> — 推定値で埋めない、は据え置き</li>
 </ul>
 <hr />
 <h2 id="adr-0018-経路-b-github-rest-課金-api-は-履歴-専用に降格し-v1-では実装しない">ADR-0018 — 経路 B (GitHub REST 課金 API) は「履歴」専用に降格し、v1 では実装しない</h2>
@@ -643,6 +643,51 @@
 <ul>
 <li>FR-C-54 の「インデックス済みタイトル → 状態ファイル由来の名前」のフォールバックのうち、<strong>バックエンドが返すのは後者だけ</strong>。前者との合成は UI 側 (<code>snapshot_get</code> の結果と突き合わせる) が行う</li>
 <li><code>LiveSession.context_used</code> / <code>context_limit</code> は <strong><code>None</code> のまま</strong>。実データで稼働中セッションのコンテキスト使用量は取れない (OQ-01 に追記)</li>
+</ul>
+<hr />
+<h2 id="adr-0028-経路-a-は-インストール済み-copilot-cli-同梱の-sdk-を-node-子プロセスで叩く">ADR-0028 — 経路 A は「インストール済み Copilot CLI 同梱の SDK」を Node 子プロセスで叩く</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12</p>
+<p><strong>文脈</strong>: ADR-0017 は「<strong>Rust からこの API をどう呼ぶかは未解決</strong>」を明示的に残していた (FR-C-137 の言語バインディング / OQ-08)。T-6.3 の着手にあたり、<strong>実機 (ユーザーの Windows マシン) で読み取り専用に調査した</strong>。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>調べたこと</th><th>実測 (2026-09-12)</th></tr></thead>
+<tbody>
+<tr><td>Rust 版 SDK があるか</td><td><strong>crates.io に該当なし。</strong> FR-C-137 が言う「Rust バインディング」は少なくとも入手できない</td></tr>
+<tr><td><code>where copilot</code></td><td><code>…\WinGet\Packages\GitHub.Copilot_…\copilot.exe</code> (<strong>159MB の単一 SEA</strong>)</td></tr>
+<tr><td><code>npm root -g</code> に <code>@github/copilot-sdk</code></td><td><strong>無い。</strong> グローバル npm には <code>corepack</code> / <code>npm</code> のみ</td></tr>
+<tr><td>CLI サブコマンドで枠が取れるか</td><td><strong>取れない。</strong> <code>copilot --help</code> の <code>Commands:</code> に <code>quota</code> / <code>usage</code> 相当は無い (<code>billing</code> はヘルプの文章トピック)</td></tr>
+<tr><td>SDK の JS 実体の在り処</td><td><strong>3 か所で発見。</strong> <code>%LOCALAPPDATA%\copilot\pkg\win32-x64\&lt;version&gt;\copilot-sdk\index.js</code> (CLI 本体が展開)、<code>%LOCALAPPDATA%\Programs\GitHub Copilot\copilot-sdk\index.js</code></td></tr>
+<tr><td>その SDK で <code>getCurrentAuth</code> を叩けるか</td><td><strong>叩けた。</strong> import 10ms / <code>client.start()</code> 437ms / <code>getCurrentAuth()</code> 661ms。Rust から通しで <strong>2.0 秒</strong></td></tr>
+</tbody></table></div>
+<p><strong>判断</strong>: <strong>Node.js の子プロセスに橋渡しスクリプトを流し込み、結果を JSON 1 行で受け取る。</strong> スクリプトは <code>quota_fetch.rs</code> に <code>const BRIDGE_SCRIPT</code> として埋め込み、<strong>標準入力から</strong> <code>node --input-type=module</code> に渡す。SDK の場所と CLI の場所は環境変数で子に渡す。</p>
+<p><strong>理由</strong>:</p>
+<ol>
+<li><strong>SDK は JavaScript しか無い。</strong> Rust バインディングは入手できず、CLI にも枠を出すサブコマンドが無い。<strong>残る選択肢は「JS を動かす」か「諦める」の 2 つだけ</strong></li>
+<li><strong>依存を 1 つも増やしていない。</strong> <code>package.json</code> にも <code>Cargo.toml</code> にも追加なし (NFR-10)。使うのは<strong>ユーザーが既にインストールした Copilot CLI に同梱されている</strong> SDK である</li>
+<li><strong>失敗が正しく「取得不可」に落ちる。</strong> SDK が無い / Node が無い / 応答が無い、のいずれも <code>RouteStatus</code> として理由と対処つきで返る (FR-C-83 / NFR-43)。<strong>推定値で埋めない</strong> (ADR-0017 の帰結)</li>
+</ol>
+<h3 id="adr-0028-実装で効いた実測">実装の形を決めた 3 つの実測</h3>
+<ul>
+<li><strong><code>new CopilotClient()</code> は引数なしでは失敗する。</strong> <code>Could not resolve a @github/copilot platform package (tried @github/copilot-win32-x64)</code>。<strong>OQ-08 の「SDK は自前ランタイムを同梱するので CLI の別途インストールを要求しない」は、npm 導入版にしか当てはまらない</strong> — CLI 同梱版には npm のプラットフォームパッケージが無い。<strong><code>RuntimeConnection.forStdio({ path: copilot.exe })</code> を明示的に渡す</strong>必要がある</li>
+<li><strong><code>node --input-type=module -e &lt;script&gt;</code> は何も出力せずに 0 で終了した</strong> (Node 24.18.0)。同じスクリプトをファイルや標準入力から流すと正常に動く。<strong>引数経由を採らない</strong> — Windows の引数エスケープという別の事故源も同時に消える</li>
+<li><strong>枠の中身が T-0.8 から変わっていた</strong> (プランが <code>free_limited_copilot</code> → <code>individual</code> / <code>monthly_subscriber_quota</code>)。<strong><code>chat</code> / <code>completions</code> が <code>entitlement: 0</code> + <code>has_quota: true</code> + <code>unlimited: true</code></strong>、<code>premium_interactions</code> が <code>entitlement: 1500</code> + <code>unlimited: false</code>。T-0.8 とちょうど裏返しである。→ 判定順を <strong><code>has_quota</code> → <code>unlimited</code> → <code>entitlement &lt;= 0</code></strong> に固定した。<strong>0 除算ガードを先に置くと、無制限の枠が「付与 0」として出る</strong></li>
+</ul>
+<h3 id="adr-0028-認証">認証 (T-6.6 / FR-C-141 / NFR-31)</h3>
+<p><strong>トークンを一切扱わない。</strong> <code>getCurrentAuth()</code> は引数なしで成功し、CLI 自身の資格情報で解決される。<code>gh auth token</code> も OS 資格情報ストアも読まない。<strong>持たなければ漏れない。</strong> 橋渡しスクリプトが読むのは <code>copilotUser.quota_snapshots</code> / <code>quota_reset_date_utc</code> / <code>copilot_plan</code> / <code>access_type_sku</code> だけで、例外メッセージはトークン様の文字列を伏せてから出す (INV-2 / ADR-0017)。</p>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>@github/copilot-sdk</code> を <code>package.json</code> の依存に足す</strong> — 依存を増やす対価に見合わない (NFR-10)。<strong>ユーザーの機械には既に同じものが入っている</strong>。加えて npm 版は自前ランタイム (<code>@github/copilot-*</code>、数百 MB) を引き込み、<strong>ユーザーが実際に使っている CLI とは別のバイナリで枠を問い合わせる</strong>ことになる</li>
+<li><strong><code>copilot.exe</code> の JSON-RPC を Rust から直接話す</strong> — Node を要らなくできるが、<strong>接続ハンドシェイク・トークン・プロトコルバージョン交渉のどれも公開されていない</strong>。リバースエンジニアリングした手順は、CLI の更新で黙って壊れる。<strong>SDK は「壊れ方が分かる」インターフェースとして使う価値がある</strong></li>
+<li><strong>REST <code>copilot_internal/user</code> を Rust から直接叩く</strong> — ADR-0017 の却下案。非公開 API。加えて HTTP クライアント依存が 1 つ増える</li>
+<li><strong>橋渡しスクリプトを一時ファイルに書き出して <code>node &lt;file&gt;</code> する</strong> — 動くが、書き込み先の寿命・後始末・他プロセスによる差し替えを抱える。<strong>標準入力なら何も残らない</strong></li>
+<li><strong><code>copilot.exe</code> を Node の代わりに使う</strong> — SEA の中に Node はあるが、任意スクリプトを実行させる公開手段が無い</li>
+</ul>
+<p><strong>帰結</strong>:</p>
+<ul>
+<li><strong>Node.js が無い環境では経路 A が使えない。</strong> これは「取得不可 + 対処 (Node のインストール)」として UI に出る。<strong>0 で埋めない</strong> (INV-7)。本アプリは dev サーバー起動 (段階 3) に既に Node を前提にしているので、実害は小さいと見ている — <strong>ただしこれは推測であり、測っていない</strong></li>
+<li>SDK の探索は <strong>mtime 降順</strong>で選ぶ。<code>"1.0.100" &lt; "1.0.79"</code> になる辞書順を避けるため。semver 比較が要るほど差が出たら差し替える</li>
+<li>この経路は <strong>2 秒ポーリングに絶対に載らない</strong> (FR-C-135 / INV-4)。呼び出し口は <code>quota_get</code> だけで、下限間隔 5 分・上限時間 25 秒を持つ</li>
+<li><strong>OQ-08 の「Rust からどう呼ぶか」は解決した。</strong> 代わりに「<strong>Node 不在環境・組織アカウント・別 OS でも同じ配置か</strong>」が残る (OQ-08 に追記)</li>
 </ul>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>

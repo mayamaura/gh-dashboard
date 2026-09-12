@@ -33,6 +33,12 @@ pub struct AppState {
     /// ライブ監視の末尾読みキャッシュ (FR-C-48)。**永続化しない** (INV-5 / DR-02)。
     /// 2 秒ポーリングのたびに全セッションの末尾を読まないためだけに存在する
     pub live_cache: Arc<Mutex<crate::copilot::live::LiveCache>>,
+
+    /// 利用枠の直近観測と経路の可用性。**永続化しない** (INV-5 / DR-02)。
+    ///
+    /// FR-C-86 の `observed_at` を「値が変わったときだけ」進めるには前回値が要る。
+    /// `quota_samples` テーブルは FR-C-94 の時系列専用で、これとは別物
+    pub quota: Arc<Mutex<crate::copilot::quota_fetch::QuotaCache>>,
 }
 
 impl AppState {
@@ -52,6 +58,7 @@ impl AppState {
             job,
             indexing: Arc::new(AtomicBool::new(false)),
             live_cache: Arc::new(Mutex::new(Default::default())),
+            quota: Arc::new(Mutex::new(Default::default())),
         })
     }
 

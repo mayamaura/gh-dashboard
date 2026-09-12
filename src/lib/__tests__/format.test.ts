@@ -14,6 +14,7 @@ import {
   isSessionIdle,
   isStale,
   matchedByLabel,
+  quotaNotApplicableText,
   relativeTime,
   severity,
   sourceLabel,
@@ -32,6 +33,7 @@ const gauge = (patch: Partial<QuotaGauge>): QuotaGauge => ({
   unlimited: false,
   reset_at: null,
   origin: { source: 'actual', via: 'sdk', observed_at: NOW },
+  has_quota: true,
   ...patch,
 })
 
@@ -84,10 +86,11 @@ describe('creditsFromNanoAiu', () => {
 })
 
 describe('gaugeText', () => {
-  // FR-C-89: 率だけでなく額も併記する
-  it('金額の枠は額と率を併記する', () => {
+  // FR-C-89 / ADR-0010: 消費量と率を併記するが、単価が取得不可のため $ には換算しない
+  it('AI Credits 枠は消費量と率を併記し、$ には換算しない', () => {
     const g = gauge({ used: 6.2, entitlement: 10, used_pct: 62 })
-    expect(gaugeText(g)).toBe('$6.20 / $10.00 (62%)')
+    expect(gaugeText(g)).toBe('6.20 / 10.00 AI Credits (62%)')
+    expect(gaugeText(g)).not.toContain('$')
   })
 
   // FR-C-131: -1 は率ではなく「無制限」
@@ -249,6 +252,14 @@ describe('isSessionIdle (FR-C-55)', () => {
 
   it('最終活動が無ければ稼働中扱い', () => {
     expect(isSessionIdle(null, NOW)).toBe(false)
+  })
+})
+
+describe('quotaNotApplicableText (FR-C-131 / ADR-0015)', () => {
+  it('率や無制限とは別の「適用外」文言を返す', () => {
+    const text = quotaNotApplicableText()
+    expect(text).not.toBe('無制限')
+    expect(text).not.toMatch(/%/)
   })
 })
 
