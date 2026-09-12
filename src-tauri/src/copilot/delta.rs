@@ -70,6 +70,20 @@ pub fn split_committed(buf: &[u8]) -> CommittedLines<'_> {
     CommittedLines { lines, consumed }
 }
 
+/// ストリーミング読みで 1 行が**確定したか**を判定する (FR-C-05)。
+///
+/// `BufRead::read_until(b'\n')` が返したバッファをそのまま渡す。差分インデックスは
+/// ファイル全体をメモリに載せられない (FR-C-08) ため `split_committed` を使えないが、
+/// 判定規則は同じでなければならない — だから規則はこの 1 箇所に置く。
+///
+/// - 改行で終わっている → 行本体 (改行と CR を除く) を返す
+/// - 改行で終わっていない → **追記途中の断片**。`None`。呼び出し側はそこで打ち切り、
+///   このバイト数をオフセットに含めてはいけない
+pub fn committed_line(buf: &[u8]) -> Option<&[u8]> {
+    let body = buf.strip_suffix(b"\n")?;
+    Some(body.strip_suffix(b"\r").unwrap_or(body))
+}
+
 /// 末尾ウィンドウ読みの先頭側の切れた行を落とす (FR-P-55)。
 ///
 /// `split_committed` の鏡像。ファイルの途中 (末尾から一定バイト) から読むと、
@@ -189,6 +203,52 @@ mod tests {
         let buf = b"aa\nbb\ncc";
         let r = split_committed(buf);
         assert_eq!(&buf[r.consumed..], b"cc");
+    }
+
+    // ---- committed_line (FR-C-05 / ストリーミング側) ----
+
+    #[test]
+    fn committed_line_strips_lf_and_crlf() {
+        assert_eq!(committed_line(b"{\"a\":1}\n"), Some(b"{\"a\":1}".as_slice()));
+        assert_eq!(
+            committed_line(b"{\"a\":1}\r\n"),
+            Some(b"{\"a\":1}".as_slice())
+        );
+    }
+
+    /// 書きかけの最終行を確定扱いすると、次回に本来の行を丸ごと飛ばす
+    #[test]
+    fn committed_line_rejects_trailing_fragment() {
+        assert_eq!(committed_line(b"{\"a\":1"), None);
+        assert_eq!(committed_line(b""), None);
+    }
+
+    #[test]
+    fn committed_line_allows_empty_line() {
+        assert_eq!(committed_line(b"\n"), Some(b"".as_slice()));
+    }
+
+    /// `split_committed` と同じ行に分解されること (規則が 2 つに分かれていない根拠)
+    #[test]
+    fn committed_line_agrees_with_split_committed() {
+        let buf = b"aa\nbb\r\ncc";
+        let batch = split_committed(buf);
+        let mut streamed: Vec<&[u8]> = Vec::new();
+        let mut rest: &[u8] = buf;
+        while !rest.is_empty() {
+            let end = rest
+                .iter()
+                .position(|&b| b == b'\n')
+                .map(|i| i + 1)
+                .unwrap_or(rest.len());
+            let (chunk, tail) = rest.split_at(end);
+            match committed_line(chunk) {
+                Some(line) => streamed.push(line),
+                None => break,
+            }
+            rest = tail;
+        }
+        assert_eq!(streamed, batch.lines);
     }
 
     // ---- drop_leading_partial (FR-P-55) ----

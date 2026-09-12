@@ -14,9 +14,11 @@
 pub mod activity;
 pub mod commands;
 pub mod delta;
+pub mod indexer;
 pub mod parser;
 pub mod quota;
 pub mod sessions;
+pub mod store;
 pub mod tree;
 
 use serde::{Deserialize, Serialize};

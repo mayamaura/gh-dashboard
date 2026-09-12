@@ -30,7 +30,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>OQ</th><th>題目</th><th>状態</th><th>一言</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">OQ-01</span></td><td><code>events.jsonl</code> のレコードスキーマ</td><td><strong>一部判明</strong></td><td>16 種 / 77 レコードを分類。利用枠到達イベントは未観測</td></tr>
+<tr><td><span class="chip id">OQ-01</span></td><td><code>events.jsonl</code> のレコードスキーマ</td><td><strong>一部判明</strong></td><td>20 種 / 1,041 レコードを分類 (2026-09-12 追測)。<strong>利用枠到達イベントは実データでも未観測</strong></td></tr>
 <tr><td><span class="chip id">OQ-02</span></td><td>1 レコード = 1 行か</td><td><strong>確定</strong></td><td>成立。バイトオフセット方式を続行してよい (ADR-0003)</td></tr>
 <tr><td><span class="chip id">OQ-03</span></td><td>VS Code の <code>chatSessions</code> とハッシュ</td><td><strong>一部判明</strong></td><td>ハッシュ再計算は 20 中 6 しか当たらない</td></tr>
 <tr><td><span class="chip id">OQ-04</span></td><td>稼働中セッションの検出</td><td><strong>一部判明</strong></td><td><code>ide/*.lock</code> は CLI の生死と対応しない (決定的な否定)</td></tr>
@@ -40,11 +40,14 @@
 <tr><td><span class="chip id">OQ-08</span></td><td>SDK / REST の認証</td><td><strong>一部判明</strong></td><td>SDK は解決。REST は <code>gh</code> のトークンで通るが <code>user</code> スコープが無い</td></tr>
 <tr><td><span class="chip id">OQ-09</span></td><td>古いセッションの自動削除</td><td><strong>未調査</strong></td><td>据え置き。観測期間が 1 時間では何も言えない</td></tr>
 <tr><td><span class="chip id">OQ-10</span></td><td>実データ量</td><td><strong>一部判明</strong></td><td>3 セッションで 1.0 MB。数百 MB 規模は未再現</td></tr>
-<tr><td><span class="chip id">OQ-11</span></td><td>拒否 / 非同期委任の表現</td><td><strong>未調査</strong></td><td>新規。T-4.9 / T-4.10 がここで止まる</td></tr>
+<tr><td><span class="chip id">OQ-11</span></td><td>拒否 / 非同期委任の表現</td><td><strong>調査中</strong></td><td>実データ 46 セッションでも拒否 0 件 / 非同期 0 件。<strong>T-4.9 / T-4.10 は引き続き保留</strong></td></tr>
 <tr><td><span class="chip id">OQ-12</span></td><td>経路 B (REST) が個人アカウントで返すもの</td><td><strong>一部判明</strong></td><td>公開課金 API は 10/10 が 404 (5 件は <code>user</code> スコープ不足)。組織 / Enterprise は未検証</td></tr>
 </tbody></table></div>
 <hr />
 <h2 id="測定環境-数字を読む前に-2026-09-08">測定環境 — 数字を読む前に (2026-09-08)</h2>
+<div class="warning"><span class="note-title">2026-09-12 追記</span>
+<p><strong>この節の「実 <code>~/.copilot</code> にセッションが無い」という前提は、もう成り立たない。</strong> 46 セッション / 1,041 レコード / 3.0 MB がある。OQ-01 の「追測 (2026-09-12)」を参照。以下の 2026-09-08 時点の記述はそのまま残す (当時の数字の読み方を保つため)。</p>
+</div>
 <p><strong>ユーザーの実 <code>~/.copilot</code> は、測定の前後を通してセッションを 1 件も持っていない。</strong> 9 ファイルのみで、内訳は <code>config.json</code> + <code>ide/</code> (lock 3 件) + <code>logs/</code> (<code>process-*.log</code> 5 件)。<strong><code>session-state/</code> も <code>session-store.db</code> も存在しない。</strong> 測定によってこの状態は変わっていない (INV-1 / N-5 を崩していない)。</p>
 <p>そのため、セッションログを要する OQ-01 / 02 / 05 / 07 / 10 は、<strong><code>COPILOT_HOME</code> をスクラッチパッド配下の隔離ディレクトリに向けて</strong> Copilot CLI 1.0.83 を 4 回起動し、3 セッションを生成して測定した。消費は <strong>1.552 AI Credits / API 呼び出し 11 回</strong>。<code>COPILOT_HOME</code> で設定と状態の保存先を丸ごと差し替えられることは OQ-08 の副産物として確認しており、以後のテストでも実データを汚さずに済む。</p>
 <p>OQ-03 (VS Code <code>workspaceStorage</code>) と OQ-04 の <code>ide/*.lock</code> / <code>logs/</code> は、<strong>ユーザーの実データ</strong>での測定。</p>
@@ -164,6 +167,31 @@ updated_at: 2026-09-07T17:14:22.666Z</code></pre>
 <li>VS Code 拡張 / coding agent が生成する <code>events.jsonl</code> は 1 件も見ていない。<code>client_name</code> は <code>github/cli</code> の 1 値しか観測できていない</li>
 <li>16 種で全部という保証はない。<code>copilotVersion</code> は <code>1.0.83</code> の 1 バージョンのみ</li>
 </ul>
+<h3 id="追測-2026-09-12-ユーザーの実データ-46-セッション">追測 (2026-09-12、ユーザーの実データ 46 セッション)</h3>
+<p><strong>2026-09-08 の「ユーザーの実 <code>~/.copilot</code> はセッションを 1 件も持っていない」は、もう成り立たない。</strong> T-4.2〜4.11 の着手前に読み取り専用で走査したところ、<code>session-state/</code> に <strong>46 セッション / 1,041 レコード / 3,028,890 バイト</strong>があった。以下はその走査 (JSON parse 失敗 0 件) と、実装した索引を実データに通した結果。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>隔離環境 (2026-09-08)</th><th>実データ (2026-09-12)</th></tr></thead>
+<tbody>
+<tr><td>レコード種別</td><td>16 種</td><td><strong>20 種</strong></td></tr>
+<tr><td>規模</td><td>3 セッション / 77 レコード</td><td>46 セッション / 1,041 レコード / 3.0 MB</td></tr>
+<tr><td><code>client_name</code></td><td><code>github/cli</code> のみ</td><td><strong><code>sdk</code> 45 件</strong> / <code>github/cli</code> 1 件</td></tr>
+<tr><td><code>agentId</code> の値</td><td><code>toolCallId</code> と別の UUID</td><td><strong><code>toolCallId</code> と同一の文字列</strong></td></tr>
+<tr><td><code>session.shutdown.data.agentMetrics</code></td><td>4 / 4 にあり</td><td><strong>50 件すべてに無し</strong></td></tr>
+<tr><td><code>session.shutdown.data.tokenDetails</code></td><td>4 / 4 にあり</td><td><strong>45 / 50</strong> (5 件に無し)</td></tr>
+<tr><td>物理最終行</td><td>shutdown / usage_checkpoint</td><td><strong>46 / 46 が <code>session.shutdown</code></strong> (FR-C-49 を再確認)</td></tr>
+</tbody></table></div>
+<p><strong>新たに観測した 4 種</strong> (隔離環境では出なかったもの):</p>
+<ul>
+<li><code>permission.requested</code> (82) / <code>permission.completed</code> (82) — <code>data</code> = <code>{requestId, toolCallId, result:{kind, feedback?}}</code>。<code>result.kind</code> は <strong><code>approved</code> 79 / <code>denied-interactively-by-user</code> 3</strong>。<code>toolCallId</code> でツール呼び出しに紐づく</li>
+<li><code>abort</code> (16) — <code>data</code> = <code>{reason}</code>。観測値は <code>user_initiated</code> のみ</li>
+<li><code>subagent.selected</code> (46) — <code>data</code> = <code>{agentName, agentDisplayName, tools}</code>。<strong><code>toolCallId</code> を持たない</strong>ので実行行のキーにはできない</li>
+<li><code>session.workspace_file_changed</code> (1)</li>
+</ul>
+<p>逆に、<strong>隔離環境で観測できた <code>subagent.configured</code> は実データに 1 件も無い</strong>。<strong>どちらの環境でも観測できる種別・フィールドだけに依存する設計でなければならない</strong>ことが、両方向の実例で確認された (FR-C-13 / NFR-23)。</p>
+<p><code>assistant.message.data.outputTokens</code> は 114/114 (100%) にある。<strong>レコード単位で取れるトークンはこれだけ</strong>で、入力・キャッシュはセッション単位の <code>tokenDetails</code> にしかない。<strong>レコード単位の AI Credits 消費はどの種別にも存在しない</strong> (<code>totalNanoAiu</code> は累計値)。</p>
+<h3 id="t-4.11-の結論-利用枠到達レコードは実データでも未観測">T-4.11 の結論 — 利用枠到達レコードは実データでも未観測</h3>
+<p><strong>FR-C-28 のレコード種別は、実データ 1,041 レコードを走査しても確認できなかった (OQ-01 のまま)。</strong> <code>quota</code> / <code>rate limit</code> / <code>credit</code> / <code>exceeded</code> / <code>usage limit</code> / 「上限に達」等で <code>type</code> 値と本文系フィールド (<code>data.content</code> / <code>data.result.content</code> / <code>data.result.detailedContent</code> / <code>data.reasoningText</code>) を走査して <strong>0 件</strong>。キーワードに一致した 19 の <code>data</code> パスはすべて UUID の部分一致 (<code>…429…</code> 等) による誤検出だった。</p>
+<p>したがって <strong><code>quota_events</code> への書き込み経路 (<code>store::insert_quota_event</code> と <code>indexer</code> の呼び出し口) は用意したが、抽出関数 <code>parser::parse_quota_event</code> は常に <code>None</code> を返す空実装</strong>にしてある。<strong>推測した種別名をコードに埋め込んでいない</strong> — 決め打ちした名前は実物と一致しなければ永久に 0 件のままで、しかも「実装済み」に見えてしまう。実物を観測したら <code>parse_quota_event</code> に条件を 1 つ足せば通る。</p>
 <hr />
 <h2 id="oq-02-1-レコード-1-行か-設計の分水嶺">OQ-02 — 1 レコード = 1 行か (設計の分水嶺)</h2>
 <p><strong>状態</strong>: <strong>確定</strong> — 成立する</p>
@@ -674,7 +702,7 @@ quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
 </ul>
 <hr />
 <h2 id="oq-11-拒否された委任と非同期委任の表現-新規">OQ-11 — 拒否された委任と非同期委任の表現 (新規)</h2>
-<p><strong>状態</strong>: 未調査</p>
+<p><strong>状態</strong>: 調査中 (2026-09-12 に実データを走査したが、拒否・非同期とも 0 件で埋まらなかった)</p>
 <div class="table-wrap"><table>
 <thead><tr><th>項目</th><th>内容</th></tr></thead>
 <tbody>
@@ -683,6 +711,19 @@ quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
 <tr><td>影響範囲</td><td><strong>FR-C-24 / 25 / 26 / 27</strong>、タスク T-4.9 / T-4.10</td></tr>
 </tbody></table></div>
 <p>OQ-07 で観測できたのは <code>mode: "sync"</code> の委任 1 件だけで、<strong>拒否も非同期も 1 件も見ていない</strong>。</p>
+<h3 id="追測-2026-09-12-実データ-46-セッション-でも埋まらなかった">追測 (2026-09-12、実データ 46 セッション) — 埋まらなかった</h3>
+<p>T-4.8 の着手前に実データ 1,041 レコードを走査した。<strong>委任は 2 件に増えたが、拒否も非同期も依然として 0 件。</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>知りたいこと</th><th>実データで分かったこと</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>(a) 拒否された委任の表現</td><td><code>task</code> 呼び出し 2 件は<strong>どちらも <code>permission.*</code> レコードを持たない</strong> (承認を求められていない)。<strong>拒否された <code>task</code> は 1 件も無い</strong></td><td><strong>未解決</strong></td></tr>
+<tr><td>(b) 非同期 / バックグラウンド委任</td><td><code>arguments.mode</code> は <strong>1 件が <code>sync</code>、もう 1 件は <code>mode</code> キー自体が無い</strong>。<code>executionMode</code> は実データに存在しない</td><td><strong>未解決</strong></td></tr>
+<tr><td>(c) 失敗 / 中断した委任</td><td><code>abort</code> レコード 16 件はすべて <code>reason: "user_initiated"</code> で、<strong><code>toolCallId</code> を持たない</strong>ため実行行に紐づけられない</td><td><strong>未解決</strong></td></tr>
+</tbody></table></div>
+<p><strong>手がかりは 1 つ増えた</strong>: ツール呼び出しの拒否そのものは <code>permission.completed.data.result.kind = "denied-interactively-by-user"</code> (3 件、いずれも <code>task</code> 以外) として記録され、<code>data.toolCallId</code> で対象の呼び出しに紐づく。<strong>もし <code>task</code> の拒否も同じ形なら</strong>、ADR-0016 の <code>toolCallId</code> 主キーで拒否ケースのキーを作れることになる (FR-C-22 の理由 (a) が解ける)。</p>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>この「もし」を根拠に T-4.9 / T-4.10 を実装しない。</strong> <code>task</code> は他のツールと違って承認を求められていない (2/2 件とも <code>permission.*</code> が無い) ので、<strong><code>task</code> の拒否が <code>permission.completed</code> として現れる保証はむしろ薄い</strong>。実際に委任を拒否するセッションを 1 回作れば決着する。<strong>それまでは <code>status</code> は <code>'running'</code> のまま、<code>ended_at</code> は <code>NULL</code> のまま</strong> (ADR-0023)。</p>
+</div>
 <div class="warning"><span class="note-title">注意</span>
 <p><strong>FR-C-24〜26 は「非同期委任が存在する」ことを前提にした要求である。</strong> その前提自体がまだ実測されていない。 <strong>推測でゲートを組まない。</strong> 実測できるまで T-4.9 / T-4.10 に着手せず、FR-C-27 の「拒否」状態は<strong>値としては定義するが、遷移させる経路を持たない</strong>実装にしておく (ADR-0016)。</p>
 </div>

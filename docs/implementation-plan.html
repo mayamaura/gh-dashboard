@@ -119,18 +119,18 @@
 <thead><tr><th>ID</th><th>タスク</th><th>要求</th><th>状態</th></tr></thead>
 <tbody>
 <tr><td><span class="chip id">T-4.1</span></td><td><code>copilot::delta</code> — 差分判定 + 末尾断片の切り捨て (純粋) + テスト</td><td>FR-C-03/05/06/15</td><td>完了</td></tr>
-<tr><td><span class="chip id">T-4.2</span></td><td><code>copilot::record</code> — 防御的パース (全フィールド欠落しうる前提)</td><td>FR-C-12 / 13 / NFR-23</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.3</span></td><td>索引テーブルへの書き込み (UNIQUE + <code>INSERT OR IGNORE</code>)</td><td>FR-C-02 / 07</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.4</span></td><td>バッチコミット (3,000 行) + 15ms スリープ + オフセット更新の順序</td><td>FR-C-04 / 09</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.5</span></td><td>バックグラウンド実行 + 多重起動防止</td><td><span class="chip id">FR-C-10</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.6</span></td><td>進捗通知 (250〜300ms 間引き)</td><td><span class="chip id">FR-C-11</span></td><td>未着手</td></tr>
-<tr><td>T-4.2a</td><td><code>copilot::workspace_meta</code> — <code>session-state/&lt;id&gt;/workspace.yaml</code> のパース (cwd / <code>client_name</code> / <code>name</code> / <code>created_at</code> / <code>updated_at</code>)。純粋関数 + テスト</td><td>FR-P-51 / FR-C-40 / FR-C-54 / ADR-0003</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.7</span></td><td>セッション集計 (主ソースは session.shutdown.data。session-store.db に依存しない)</td><td>FR-C-20 / ADR-0013</td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.8</span></td><td>サブエージェント行のマージ (親子両側にあるキー)</td><td>FR-C-21〜23 / 29 / ADR-0016</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.2</span></td><td><code>copilot::record</code> — 防御的パース (全フィールド欠落しうる前提)</td><td>FR-C-12 / 13 / NFR-23</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.3</span></td><td>索引テーブルへの書き込み (UNIQUE + <code>INSERT OR IGNORE</code>)</td><td>FR-C-02 / 07</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.4</span></td><td>バッチコミット (3,000 行) + 15ms スリープ + オフセット更新の順序</td><td>FR-C-04 / 09</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.5</span></td><td>バックグラウンド実行 + 多重起動防止</td><td><span class="chip id">FR-C-10</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.6</span></td><td>進捗通知 (250〜300ms 間引き)</td><td><span class="chip id">FR-C-11</span></td><td>完了</td></tr>
+<tr><td>T-4.2a</td><td><code>copilot::workspace_meta</code> — <code>session-state/&lt;id&gt;/workspace.yaml</code> のパース (cwd / <code>client_name</code> / <code>name</code> / <code>created_at</code> / <code>updated_at</code>)。純粋関数 + テスト</td><td>FR-P-51 / FR-C-40 / FR-C-54 / ADR-0003</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.7</span></td><td>セッション集計 (主ソースは session.shutdown.data。session-store.db に依存しない)</td><td>FR-C-20 / ADR-0013</td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.8</span></td><td>サブエージェント行のマージ (親子両側にあるキー)</td><td>FR-C-21〜23 / 29 / ADR-0016</td><td>完了</td></tr>
 <tr><td><span class="chip id">T-4.9</span></td><td>完了通知の 2 段階ゲート + 暫定応答を完了扱いしない (OQ-11 待ち)</td><td>FR-C-24〜26</td><td>保留(OQ-11 待ち)</td></tr>
 <tr><td><span class="chip id">T-4.10</span></td><td>拒否と失敗の区別 (OQ-11 待ち)</td><td><span class="chip id">FR-C-27</span></td><td>保留(OQ-11 待ち)</td></tr>
-<tr><td><span class="chip id">T-4.11</span></td><td>利用枠到達イベントの抽出</td><td><span class="chip id">FR-C-28</span></td><td>未着手</td></tr>
-<tr><td><span class="chip id">T-4.12</span></td><td><code>turn_body_get</code> — 1 レコードのシーク読み (上限 512KB)</td><td>IR-15 / FR-C-120</td><td>未着手</td></tr>
+<tr><td><span class="chip id">T-4.11</span></td><td>利用枠到達イベントの抽出</td><td><span class="chip id">FR-C-28</span></td><td>完了</td></tr>
+<tr><td><span class="chip id">T-4.12</span></td><td><code>turn_body_get</code> — 1 レコードのシーク読み (上限 512KB)</td><td>IR-15 / FR-C-120</td><td>完了</td></tr>
 </tbody></table></div>
 <p><strong>気をつける点</strong></p>
 <ul>
@@ -243,7 +243,7 @@
 <tr><td>1. プロジェクト基盤</td><td>10 / 10</td></tr>
 <tr><td>2. git + 利用状況</td><td>7 / 7</td></tr>
 <tr><td>3. dev サーバー</td><td>7 / 7</td></tr>
-<tr><td>4. 差分インデックス</td><td>1 / 13</td></tr>
+<tr><td>4. 差分インデックス</td><td>11 / 13</td></tr>
 <tr><td>5. ライブ監視</td><td>1 / 14</td></tr>
 <tr><td>6. 利用枠</td><td>2 / 13</td></tr>
 <tr><td>7. 振り返り UI</td><td>1 / 14</td></tr>

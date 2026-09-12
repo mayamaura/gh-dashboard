@@ -523,6 +523,32 @@
 <li><strong><code>docs/source/*.html</code> を原本にし、<code>docs/*.html</code> へコピーする二層構成を維持</strong> — ディレクトリが増えるだけで変換器が単純なコピーになり、二層構成そのものが持つ「原本/生成物のどちらを見るか」という判断コストは解消しない</li>
 </ul>
 <p><strong>代償</strong>: Markdown のテーブル記法や箇条書きが使えなくなり、表・チップ・見出し ID は素の HTML タグで書く必要がある。ページ数が今後大きく増える場合は、この判断を再検討する。</p>
+<hr />
+<h2 id="adr-0023-差分インデックスの集計は-累積せず数え直す-オフセットは-1-箇所でだけ進める">ADR-0023 — 差分インデックスの集計は「累積せず数え直す」、オフセットは 1 箇所でだけ進める</h2>
+<p><strong>状態</strong>: 採用 (2026-09-12、T-4.2〜4.8 / 4.11 の実装で決定)</p>
+<p><strong>文脈</strong>: 差分インデックスは「同じファイルを何度読み直しても結果が同じ」でなければならない。追記・truncate・クラッシュ・多重起動のどれが起きても、<code>sessions</code> / <code>turn_index</code> / <code>subagent_runs</code> が一意に定まる必要がある (FR-C-03〜07 / 14)。</p>
+<p><strong>判断</strong>:</p>
+<ul>
+<li><strong>件数列 (<code>turn_count</code> / <code>agent_count</code> / <code>quota_event_count</code>) は加算しない。</strong> バッチごとに <code>COUNT(*)</code> で数え直す (<code>store::refresh_session_counts</code>)。集合が正で、件数はその長さ (FR-C-51 と同じ理屈)</li>
+<li><strong>集計はバッチごとに書く。</strong> ファイル末尾でまとめて書くと、途中で落ちたときに「オフセットだけ進んで集計は空」という<strong>再実行しても直らない</strong>状態ができる (次回は保存済みオフセットから読むので <code>session.shutdown</code> を二度と見ない)</li>
+<li><strong>オフセットを進める場所は <code>flush_batch</code> の最後 1 箇所だけ。</strong> レコード挿入・サブエージェントのマージ・集計・オフセット更新を同一トランザクションに入れ、オフセットを最後に置く (FR-C-04)</li>
+<li><strong>差分実行の <code>NULL</code> で既存値を消さない。</strong> <code>sessions</code> の upsert は <code>COALESCE</code> を通す。差分実行では「今回のバッチに <code>session.shutdown</code> が入っていない」ことが普通に起きる</li>
+<li><strong>全再パース時は先に行を消す。</strong> <code>UNIQUE(file_path, byte_offset)</code> は二重挿入を防ぐが、入れ替わったファイルの<strong>古い行を古いまま残す</strong>。<code>Delta::Reparse</code> ではその <code>file_path</code> の <code>turn_index</code> を削ってから 0 に戻す</li>
+<li><strong>実行中フラグは <code>Drop</code> ガードで戻す</strong> (<code>IndexingGuard</code>)。<code>end_indexing()</code> を手で呼ぶ形だと、早期 <code>return</code> を 1 本足した瞬間にフラグが立ちっぱなしになり、<strong>再起動するまでインデックスが二度と動かなくなる</strong></li>
+<li><strong>ストリーミング側の末尾断片判定も <code>delta</code> に置く</strong> (<code>delta::committed_line</code>)。<code>split_committed</code> はファイル全体を要求するため差分インデックス (FR-C-08) では使えないが、<strong>規則を 2 箇所に書かない</strong>。両者が同じ行に分解することをテストで固定した</li>
+</ul>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong>件数をバッチごとに加算する</strong> — 再パースや二重適用のたびにずれる。ずれたことに気付く手段が無く、<strong>直すには全削除して作り直すしかない</strong>。数え直しは <code>idx_turn_session</code> があるので実測でも安い (46 セッション / 1,041 レコードの初回が 344ms)</li>
+<li><strong><code>turn_index.nano_aiu</code> にレコード単位のクレジット消費を入れる</strong> — <strong>そんな値はログに存在しない</strong>。<code>totalNanoAiu</code> は累計値なので、これを各レコードに入れると <code>SUM</code> した瞬間に多重計上になる。セッション単位の値だけを <code>sessions.total_nano_aiu</code> に持ち、<code>turn_index.nano_aiu</code> は 0 のままにする</li>
+<li><strong><code>subagent.completed.data.totalTokens</code> を <code>input_tokens</code> / <code>output_tokens</code> のどちらかに入れる</strong> — 内訳が無い 1 つの合計値であり、どちらに入れても嘘になる (INV-7)。列が無いので<strong>保持しない</strong></li>
+<li><strong><code>session.shutdown.data.agentMetrics</code> からサブエージェントのトークンを補う</strong> — 実データ (46 セッション) の shutdown <strong>50 件すべてに <code>agentMetrics</code> が無かった</strong>。隔離環境の 4/4 とは逆。<strong>片方の環境でしか観測できていない構造に依存しない</strong>。加えて ADR-0016 が完了判定のソースとして明示的に却下している</li>
+<li><strong><code>sessions.git_branch</code> を索引時に埋める</strong> — 埋めるにはセッションの <code>cwd</code> ごとに <code>git</code> を起動することになり、インデックス 1 回で数十プロセスが立つ。プロジェクト一覧側が実時間で持っているので <code>NULL</code> のままにする</li>
+<li><strong><code>entrypoint</code> 列に分類済みの値を保存する</strong> — 実データの <code>client_name</code> は 45/46 が <code>sdk</code> で、これがどの経路かを示す根拠が無い。<strong>生の値を列に残し、表示用の写像は読み出し時に行う</strong> (未知は <code>Unknown</code>)。分類を保存すると、後で写像を直しても再インデックスするまで直らない (NFR-40 / NFR-43)</li>
+</ul>
+<div class="warning"><span class="note-title">注意</span>
+<p><strong>T-4.9 / T-4.10 は実装していない。</strong> <code>subagent_runs.status</code> に書き込む値は <code>'running'</code> だけで、<code>'completed'</code> / <code>'declined'</code> へ遷移させる経路を持たない。<code>subagent.completed</code> が来ても <code>ended_at</code> を埋めない — 終了時刻を確定させることが FR-C-24〜26 のゲートそのものだから。根拠は ADR-0016 の注記と OQ-11 (2026-09-12 の実データでも<strong>拒否された委任・非同期委任とも 0 件</strong>)。</p>
+</div>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
       <span>gh-dashboard</span>

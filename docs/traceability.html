@@ -56,17 +56,18 @@
 <div class="table-wrap"><table>
 <thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td>FR-C-01〜02</td><td>全期間 / 本文を複製しない</td><td><code>copilot/indexer.rs</code></td><td><code>tools/probe/jsonl-shape.mjs</code></td><td>ADR-0003 / ADR-0013</td></tr>
+<tr><td>FR-C-01〜02</td><td>全期間 / 本文を複製しない</td><td><code>copilot/indexer.rs</code></td><td><code>indexer::tests</code></td><td>済</td></tr>
 <tr><td>FR-C-02〜08</td><td>セッション記録の形式と変分</td><td></td><td><code>tools/probe/jsonl-shape.mjs</code></td><td></td></tr>
 <tr><td>FR-C-03/05/06</td><td>差分判定・末尾断片 (純粋)</td><td><code>copilot/delta.rs</code></td><td><code>delta::tests</code></td><td>済</td></tr>
-<tr><td><span class="chip id">FR-C-04</span></td><td>オフセット更新はトランザクション最後</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-C-07</span></td><td>UNIQUE で二重適用を防ぐ</td><td><code>db/migrations.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-08〜09</td><td>ストリーミング / バッチコミット</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-10〜11</td><td>バックグラウンド / 進捗通知</td><td><code>copilot/indexer.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-12〜13</td><td>防御的パース</td><td><code>copilot/record.rs</code></td><td><code>tools/probe/record-kinds.mjs</code></td><td></td></tr>
-<tr><td><span class="chip id">FR-C-14</span></td><td>無期限保持</td><td><code>db/migrations.rs</code></td><td></td><td></td></tr>
-<tr><td><span class="chip id">FR-C-20</span></td><td>セッション集計</td><td><code>copilot/aggregate.rs</code></td><td><code>tools/probe/record-kinds.mjs</code></td><td></td></tr>
-<tr><td>FR-C-21〜29</td><td>サブエージェント系統</td><td><code>copilot/aggregate.rs</code></td><td></td><td><span class="chip id">ADR-0016</span></td></tr>
+<tr><td><span class="chip id">FR-C-04</span></td><td>オフセット更新はトランザクション最後</td><td><code>copilot/indexer.rs</code></td><td><code>indexer::tests</code></td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-07</span></td><td>UNIQUE で二重適用を防ぐ</td><td><code>db/migrations.rs</code></td><td><code>migrations::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-08〜09</td><td>ストリーミング / バッチコミット</td><td><code>copilot/indexer.rs</code></td><td><code>indexer::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-10〜11</td><td>バックグラウンド / 進捗通知</td><td><code>copilot/indexer.rs</code></td><td><code>indexer::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-12〜13</td><td>防御的パース</td><td><code>copilot/parser.rs (parse_record)</code></td><td><code>parser::tests</code></td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-14</span></td><td>無期限保持</td><td><code>db/migrations.rs</code></td><td><code>migrations::tests</code></td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-20</span></td><td>セッション集計</td><td><code>copilot/store.rs (upsert_session / refresh_session_counts)</code></td><td><code>store::tests</code></td><td>済</td></tr>
+<tr><td>FR-C-21〜23, 29</td><td>サブエージェント行のマージ</td><td><code>copilot/indexer.rs (merge_subagent)</code></td><td><code>indexer::tests</code></td><td>済</td></tr>
+<tr><td><span class="chip id">FR-C-28</span></td><td>利用枠到達イベント抽出</td><td><code>copilot/store.rs (insert_quota_event) / copilot/parser.rs (parse_quota_event 空実装)</code></td><td><code>store::tests</code></td><td>部分</td></tr>
 <tr><td>FR-C-40〜43</td><td>ライブ監視の起動と停止</td><td><code>copilot/live.rs</code>, <code>hooks/useLivePoll.ts</code></td><td></td><td><span class="chip id">ADR-0014</span></td></tr>
 <tr><td>FR-C-44〜46</td><td>活動状態の合成 (純粋)</td><td><code>copilot/activity.rs</code></td><td><code>activity::tests</code></td><td>済</td></tr>
 <tr><td>FR-C-47〜49</td><td>末尾シーク読みとキャッシュ</td><td><code>copilot/live.rs</code>, <code>util/tail.rs</code></td><td></td><td></td></tr>
@@ -117,7 +118,10 @@
 <thead><tr><th>要求</th><th>内容</th><th>実装</th><th>テスト</th><th>状態</th></tr></thead>
 <tbody>
 <tr><td>IR-01 / 02 / 03</td><td>プロジェクト系コマンド</td><td><code>projects/commands.rs</code></td><td><code>store.rs</code> tests (重複メッセージ)、実機</td><td>済</td></tr>
-<tr><td>IR-10〜19</td><td>Copilot 系コマンド</td><td><code>copilot/commands.rs</code>, <code>ipc/commands.ts</code></td><td></td><td></td></tr>
+<tr><td>IR-11</td><td><code>snapshot_get</code> — スナップショット取得</td><td><code>copilot/commands.rs</code></td><td><code>commands::tests</code></td><td>済</td></tr>
+<tr><td>IR-12</td><td><code>index_refresh</code> — インデックス再実行</td><td><code>copilot/commands.rs</code></td><td><code>commands::tests</code></td><td>済</td></tr>
+<tr><td>IR-13〜14, 16〜19</td><td>その他 Copilot 系コマンド</td><td><code>copilot/commands.rs</code>, <code>ipc/commands.ts</code></td><td></td><td></td></tr>
+<tr><td><span class="chip id">IR-15</span></td><td><code>turn_body_get</code> — レコード本文取得 (シーク読み)</td><td><code>copilot/commands.rs</code></td><td><code>commands::tests</code></td><td>済</td></tr>
 <tr><td><span class="chip id">IR-30</span></td><td>引数名のケース固定</td><td>全コマンドの <code>rename_all</code></td><td><code>tests/ipc_naming.rs</code></td><td></td></tr>
 <tr><td><span class="chip id">IR-31</span></td><td>型付きラッパーに集約</td><td><code>ipc/commands.ts</code></td><td></td><td>部分</td></tr>
 <tr><td>IR-32 / IR-40</td><td>プロジェクトスナップショット emit と取得</td><td><code>projects/commands.rs</code>, <code>hooks/useProjectsSnapshotBridge.ts</code></td><td>実機</td><td>済</td></tr>
@@ -127,8 +131,8 @@
 <div class="table-wrap"><table>
 <thead><tr><th>要求</th><th>内容</th><th>どう確かめるか</th><th>状態</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">NFR-01</span></td><td>初回インデックス 5 秒以内</td><td>実データで計測 (段階 4 の完了条件)</td><td></td></tr>
-<tr><td><span class="chip id">NFR-02</span></td><td>2 回目 1 秒未満・新規 0 件</td><td>同上 + DB テスト</td><td></td></tr>
+<tr><td><span class="chip id">NFR-01</span></td><td>初回インデックス 5 秒以内</td><td>実データで計測 (段階 4 の完了条件) — 実測: 344ms / 1,041 件</td><td>済</td></tr>
+<tr><td><span class="chip id">NFR-02</span></td><td>2 回目 1 秒未満・新規 0 件</td><td>同上 + DB テスト — 実測: 2.1ms / 新規 0 件</td><td>済</td></tr>
 <tr><td><span class="chip id">NFR-03</span></td><td>2 秒ポーリングのコスト</td><td>コードレビュー (INV-4) + 実測</td><td></td></tr>
 <tr><td><span class="chip id">NFR-04</span></td><td>インデックス中 CPU 15% 以下</td><td>実測</td><td></td></tr>
 <tr><td><span class="chip id">NFR-05</span></td><td>アニメーション時 CPU +2pt 以内</td><td>実測</td><td></td></tr>
