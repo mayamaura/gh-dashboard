@@ -5,6 +5,12 @@
 
 import type { AppError, Entrypoint, QuotaGauge, QuotaSource } from '../types/dto'
 
+/** 時刻を絶対時刻の短い文字列にする (タイムライン・ガント表示用)。 */
+export function absoluteTime(ms: number | null): string {
+  if (ms === null) return '不明'
+  return new Date(ms).toLocaleString('ja-JP')
+}
+
 /** 相対時刻。`null` は「一度も無い」であって「0 秒前」ではない。 */
 export function relativeTime(ms: number | null, now: number): string {
   if (ms === null) return 'なし'
@@ -90,6 +96,19 @@ export function sourceLabel(origin: QuotaSource): string {
     case 'unavailable':
       return '取得不可'
   }
+}
+
+/**
+ * ヘッダーに出す「利用枠の取得経路」(FR-C-160)。
+ *
+ * 個々のゲージは枠ごとに出所が独立している (FR-C-84) が、ヘッダーは要約として
+ * 1 つのラベルを出す。実際に率を持つ枠 (`has_quota`) を優先し、無ければ先頭を使う。
+ */
+export function quotaRouteLabel(quota: QuotaGauge[] | null): string {
+  if (quota === null || quota.length === 0) return '取得不可'
+  const applicable = quota.find((g) => g.has_quota) ?? quota[0]
+  if (!applicable) return '取得不可'
+  return sourceLabel(applicable.origin)
 }
 
 /** 「推定」の但し書き。ラベルだけでは足りない (FR-C-82)。 */

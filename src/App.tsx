@@ -3,7 +3,7 @@
 // ★ タブ状態は appStore に置く (FR-C-161 / 164)。ページのローカル state に
 // 置くと、切り替えたときに進行中の処理が「消えて」見える。
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { CopilotPage } from './pages/CopilotPage'
 import { ProjectsPage } from './pages/ProjectsPage'
@@ -12,8 +12,10 @@ import { useWindowVisibilityBridge } from './hooks/useWindowVisible'
 import { useProjectsSnapshotBridge } from './hooks/useProjectsSnapshotBridge'
 import { useDevStatusBridge } from './hooks/useDevStatusBridge'
 import { useIndexBridge } from './hooks/useIndexBridge'
-import { relativeTime } from './lib/format'
+import { quotaRouteLabel, relativeTime } from './lib/format'
 import { scanProjects, stopAllDevServers } from './lib/projectsActions'
+import { animationPrefGet, animationPrefSet } from './ipc/commands'
+import type { AnimationPref } from './types/dto'
 
 const TABS = [
   { id: 'copilot', label: 'Copilot' },
@@ -36,10 +38,22 @@ export function App() {
     indexingManual,
     lastIndexedAt,
     quotaFetchedAt,
+    quota,
     projects,
     projectsScanning,
+    animation,
   } = useAppStore()
   const now = Date.now()
+
+  // T-7.14: 起動時に永続化済みのアニメーション設定を読み込む (FR-C-162)
+  useEffect(() => {
+    void animationPrefGet().then((pref) => appStore.set({ animation: pref }))
+  }, [])
+
+  const onAnimationChange = (pref: AnimationPref) => {
+    appStore.set({ animation: pref })
+    void animationPrefSet(pref)
+  }
 
   // 「すべて停止」の二段階確認 (FR-P-67)
   const [confirmingStopAll, setConfirmingStopAll] = useState(false)
@@ -59,7 +73,7 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-animation={animation === 'auto' ? undefined : animation}>
       <header className="app-header">
         <nav className="tabs" role="tablist">
           {TABS.map((t) => (
@@ -87,7 +101,10 @@ export function App() {
                   最終インデックス: {relativeTime(lastIndexedAt, now)}
                 </span>
               )}
-              <span className="muted">利用枠: {relativeTime(quotaFetchedAt, now)}</span>
+              {/* FR-C-160: 取得経路と最終取得時刻の両方を出す */}
+              <span className="muted">
+                利用枠: {quotaRouteLabel(quota)} / {relativeTime(quotaFetchedAt, now)}
+              </span>
             </>
           ) : (
             <>
@@ -104,6 +121,19 @@ export function App() {
               </button>
             </>
           )}
+          {/* T-7.14: アニメーション設定 (FR-C-162)。`自動` は属性を付けず CSS の
+              prefers-reduced-motion に任せる */}
+          <label className="animation-pref">
+            アニメーション
+            <select
+              value={animation}
+              onChange={(e) => onAnimationChange(e.target.value as AnimationPref)}
+            >
+              <option value="auto">自動</option>
+              <option value="on">入</option>
+              <option value="off">切</option>
+            </select>
+          </label>
         </div>
       </header>
 

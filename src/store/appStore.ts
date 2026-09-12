@@ -49,6 +49,9 @@ export interface AppStoreState {
   /** 詳細パネルで選択中のプロジェクト。タブを往復しても残る */
   projectsSelectedKey: string | null
 
+  /** セッション詳細パネルで選択中の session_id。タブを往復しても残る (FR-C-161) */
+  copilotSelectedSessionId: string | null
+
   animation: AnimationPref
 }
 
@@ -67,6 +70,7 @@ const initial: AppStoreState = {
   projectsScanning: false,
   projectsError: null,
   projectsSelectedKey: null,
+  copilotSelectedSessionId: null,
   animation: 'auto',
 }
 

@@ -15,6 +15,7 @@ import {
   isStale,
   matchedByLabel,
   quotaNotApplicableText,
+  quotaRouteLabel,
   relativeTime,
   severity,
   sourceLabel,
@@ -271,5 +272,20 @@ describe('matchedByLabel', () => {
 
   it('完全一致には余計なラベルを出さない', () => {
     expect(matchedByLabel('exact')).toBeNull()
+  })
+})
+
+describe('quotaRouteLabel (FR-C-160)', () => {
+  it('取得前は「取得不可」', () => {
+    expect(quotaRouteLabel(null)).toBe('取得不可')
+    expect(quotaRouteLabel([])).toBe('取得不可')
+  })
+
+  it('has_quota な枠の出所を優先して要約する', () => {
+    const quota = [
+      gauge({ has_quota: false, origin: { source: 'estimated', basis: '過去 7 日', observed_at: NOW } }),
+      gauge({ has_quota: true, origin: { source: 'actual', via: 'sdk', observed_at: NOW } }),
+    ]
+    expect(quotaRouteLabel(quota)).toBe('実値 (SDK)')
   })
 })

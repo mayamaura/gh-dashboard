@@ -376,3 +376,96 @@ button.danger { border-color: var(--danger); color: var(--danger); }
   gap: 6px 14px;
   padding: 8px 2px 0;
 }
+
+/* ---------- ヘッダー: アニメーション設定 (T-7.14) ---------- */
+
+.animation-pref { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+
+/* ---------- セッション検索 (T-7.4) ---------- */
+
+.session-search-row { cursor: pointer; border-radius: 6px; }
+.session-search-row:hover { background: var(--sunken); }
+.session-search-row.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* ---------- 系統図 (T-7.6〜7.9) ---------- */
+
+.lineage-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lineage-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.lineage-node:hover { background: var(--sunken); }
+/* 選択/ホバーの強調は opacity だけで表す (FR-C-163 / NFR-05) */
+.lineage-node.selected { border-color: var(--accent); }
+.lineage-node.hovered { opacity: .85; }
+.lineage-agent { font-weight: 600; }
+.lineage-desc { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- ガント (T-7.7) ---------- */
+
+.gantt-bar { fill: var(--accent); cursor: pointer; }
+.gantt-bar.selected { stroke: var(--fg); stroke-width: 1.5; }
+.gantt-bar.hovered { opacity: .8; }
+.gantt-quota-mark { stroke: var(--danger); stroke-width: 1; }
+.gantt-axis { display: flex; justify-content: space-between; font-size: 11px; margin-top: 4px; }
+
+/* ---------- 本文タイムライン (T-7.10) ---------- */
+
+.turn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.turn-row { border-bottom: 1px solid var(--line); }
+.turn-row:last-child { border-bottom: 0; }
+.turn-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.turn-row-main:hover { background: var(--sunken); }
+.turn-preview { flex: 1 1 auto; max-width: none; }
+.turn-body { padding: 4px 4px 10px; }
+.turn-body-pre {
+  margin: 0;
+  padding: 8px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+/* ---------- モデル別内訳テーブル ---------- */
+
+.model-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.model-table th, .model-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.model-table th:first-child, .model-table td:first-child { text-align: left; }
+.model-table th { color: var(--muted); font-weight: 600; }

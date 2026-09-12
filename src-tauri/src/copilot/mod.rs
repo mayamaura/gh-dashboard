@@ -22,6 +22,7 @@ pub mod quota_fetch;
 pub mod sessions;
 pub mod store;
 pub mod tree;
+pub mod usage;
 
 use serde::{Deserialize, Serialize};
 
@@ -134,7 +135,7 @@ pub struct DbSnapshot {
     pub recent_sessions: Vec<SessionSummary>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
     pub session_id: String,
     pub folder_name: Option<String>,
@@ -180,21 +181,197 @@ pub struct TurnBody {
 /// 本文読み取りの上限 (FR-C-120)
 pub const TURN_BODY_MAX_BYTES: u64 = 512 * 1024;
 
+// ---------------------------------------------------------------- IR-14 (T-7.5〜7.10)
+
+/// モデル別内訳の出所 (FR-C-81 の考え方を内訳にも適用する / INV-7)。
+///
+/// **どちらの出所かで「取れる項目」が違う。**フロントは必ずこれを見て
+/// 「—」と「0」を描き分けること。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelUsageSource {
+    /// `session.shutdown.data.modelMetrics` 由来。**トークン 4 種 + クレジットが揃う実値**
+    ShutdownMetrics,
+    /// `turn_index` を `model` で畳んだもの。**出力トークンと件数しか無い** —
+    /// レコード単位に載るトークンは `assistant.message.outputTokens` だけだから
+    /// (実測 1,041 レコード)。入力・キャッシュ・クレジットは `None` になる
+    TurnIndex,
+}
+
+/// モデル別のトークン・クレジット内訳 1 行 (FR-C-105 / FR-C-112)。
+///
+/// **取れなかった項目は `None`。0 で埋めない** (NFR-43 / INV-7)。
+/// 単価はモデルごとに違うので、トークン数とクレジットの両方を出す (FR-C-105)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelUsage {
+    /// 実モデル名 (`gpt-5-mini` / `claude-haiku-4.5` 等)。
+    /// **合成モデル (`auto`) はここに来ない** — 集計前に除外する (FR-C-104)
+    pub model: String,
+    /// キャッシュを含まない純粋な入力 (`tokenDetails.input.tokenCount`)。
+    /// `usage.inputTokens` ではない — あちらはキャッシュ分を含む上位集計で、
+    /// 足すと二重加算になる (FR-C-104 / ADR-0029)
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
+    pub cache_write_tokens: Option<i64>,
+    /// このモデルの消費 (nano AIU)。`ShutdownMetrics` 由来のときだけ入る
+    pub nano_aiu: Option<i64>,
+    /// `nano_aiu / 10^9`。**除数を TS 側に複製しないためにここで割る**
+    pub credits: Option<f64>,
+    /// `TurnIndex` 由来のときの索引レコード件数。`ShutdownMetrics` では `None`
+    pub record_count: Option<i64>,
+    pub source: ModelUsageSource,
+}
+
+/// 系統図 1 ノード = ガント 1 行 (FR-C-112〜118)。
+///
+/// **系統図とガントは同じこの配列を使う。**別々に集計しないこと (FR-C-114)。
+/// 配列はすでに表示順 (親のすぐ下に子) で並んでいる。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SubagentNode {
+    /// `subagent_runs.run_key` = `toolCallId`。**親側と子側の両方に存在する識別子**
+    /// (FR-C-22 / ADR-0016)。ライブ集合の要素と直接照合できる
+    pub run_key: String,
+    /// `None` = セッション直下
+    pub parent_key: Option<String>,
+    /// 親子関係から導いた深さ。生データの `spawn_depth` は使わない (FR-C-114)
+    pub depth: usize,
+    /// 親が見つからずルート直下に置かれた (FR-C-113)。UI で「推測で置いた」と示す
+    pub orphaned: bool,
+    pub child_keys: Vec<String>,
+    pub agent_id: Option<String>,
+    pub agent_type: Option<String>,
+    pub description: Option<String>,
+    pub model: Option<String>,
+    /// DB の状態列。**現状は全行 `running`** — 完了/拒否への遷移は OQ-11 待ちで
+    /// 保留中 (T-4.9 / T-4.10 / ADR-0016)。ライブ集合と照合できない行の
+    /// フォールバックにだけ使う (FR-C-115)
+    pub status: String,
+    pub started_at: Option<i64>,
+    pub last_activity_at: Option<i64>,
+    /// **稼働中 / 未確定は `None`。**フロントは現在時刻で描く (FR-C-118)
+    pub ended_at: Option<i64>,
+    pub tool_call_count: i64,
+    /// **ライブ集合に居るか** (FR-C-115)。非稼働セッションでは常に `false`
+    pub running: bool,
+    /// 今この行を表示すべきか (FR-C-116 / 117)。
+    ///
+    /// - セッションが稼働中: `tree::visible_for_live` の結果 (完了済みを畳み、
+    ///   稼働中の祖先は畳まない)
+    /// - 非稼働 (振り返り): **全行 `true`** = 全件表示
+    pub visible: bool,
+}
+
+/// ガントの横軸 (FR-C-118)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GanttWindow {
+    pub start_at: Option<i64>,
+    /// **稼働中なら `None`。**フロントが現在時刻を使う (FR-C-118)
+    pub end_at: Option<i64>,
+}
+
+/// ガントに重ねる利用枠到達マーカー (FR-C-118)。
+///
+/// **0 件は「無かった」。取得不可ではない** — 空配列で返す。
+/// 実データでは現状 0 件 (レコード種別が未観測 / OQ-01)。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuotaEventMark {
+    pub occurred_at: i64,
+    /// `credit_exhausted` / `rate_limit` / `session_limit` / `unknown`
+    pub kind: String,
+    pub reset_text: Option<String>,
+}
+
+/// 本文タイムラインの 1 行 (FR-C-119)。**本文は入らない** (INV-6)。
+///
+/// 行クリック時に `turn_id` を `turn_body_get` (IR-15) に渡して 1 レコードだけ
+/// シーク読みする。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TurnMeta {
+    /// `turn_index.id`。`turn_body_get` の引数
+    pub turn_id: i64,
+    pub timestamp_ms: Option<i64>,
+    pub record_type: Option<String>,
+    pub role: Option<String>,
+    pub model: Option<String>,
+    /// サブエージェント配下のレコードにだけ付く。`SubagentNode::run_key` と
+    /// 同じ値なので、系統図の選択でタイムラインを絞り込める (FR-C-121)
+    pub agent_id: Option<String>,
+    pub is_sidechain: bool,
+    /// 140 字プレビュー (FR-C-02)
+    pub preview: Option<String>,
+    pub output_tokens: i64,
+    /// 元レコードのバイト長。512KB を超えると本文が切り詰められる (FR-C-120)
+    pub byte_length: i64,
+}
+
+/// タイムラインの 1 ページ件数 (FR-C-119)。
+pub const TIMELINE_PAGE_SIZE: i64 = 150;
+/// タイムラインの総件数上限 (FR-C-119)。
+pub const TIMELINE_MAX: i64 = 1000;
+
+/// IR-14 の戻り値 (FR-C-112)。**未インデックスは `None`** (正常系 / FR-C-57)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionDetail {
+    /// タイトル・基本情報。一覧行 (IR-11 / IR-13) と同じ型
+    pub session: SessionSummary,
+    /// `session.total_nano_aiu / 10^9` (FR-C-89 の金額併記用)
+    pub credits: f64,
+    /// モデル別内訳 (FR-C-105)。**空配列 = 内訳が取れなかった。**
+    /// 消費が 0 だったという意味ではない (NFR-43)
+    pub models: Vec<ModelUsage>,
+    /// 系統図 = ガントの行。表示順に並ぶ (FR-C-114)
+    pub subagents: Vec<SubagentNode>,
+    /// このセッションが**今この瞬間**稼働中か (段階 5 の判定 / ADR-0014)。
+    /// `false` なら `subagents` は全行 `visible: true` (全件表示 / FR-C-117)
+    pub is_live: bool,
+    pub gantt: GanttWindow,
+    /// 縦マーカー。**0 件でも空配列** (FR-C-118)
+    pub quota_events: Vec<QuotaEventMark>,
+    /// 本文タイムラインの 1 ページ (FR-C-119)
+    pub timeline: Vec<TurnMeta>,
+    /// このページの先頭位置
+    pub timeline_offset: i64,
+    /// **上限 1000 でキャップ済みの総件数** (FR-C-119)。進捗表示に使う
+    pub timeline_total: i64,
+    /// 「もっと見る」で次に渡すオフセット。`None` = これ以上無い
+    pub timeline_next_offset: Option<i64>,
+}
+
 /// IR-16 の戻り値 (FR-C-100〜105)。
+///
+/// # 集計の基準が 2 つあること (実データの制約)
+///
+/// レコード単位に載るトークンは `assistant.message.outputTokens` だけで、
+/// 入力・キャッシュは `session.shutdown.tokenDetails` にしか無い (実測 1,041
+/// レコード)。そのため:
+///
+/// - `input_tokens` / `output_tokens` / `cache_read_tokens` / `total_nano_aiu`
+///   は**本日活動のあったセッションの集計を丸ごと**計上する (日をまたぐ
+///   セッションは分割できない)
+/// - `hourly_tokens` だけは `turn_index` のレコード単位 (= 実質出力のみ)
+///
+/// **合計と時間帯別グラフの縦軸は一致しない。**UI に注記すること (NFR-40)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageToday {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
+    /// `turn_index` の本日分レコード件数。`sessions.turn_count` と同じ数え方
     pub turn_count: i64,
+    /// **本日活動のあったセッション数。**「今この瞬間稼働中」の件数ではない
+    /// (そちらは `LiveStatus::running_session_count` / FR-C-61)
     pub session_count: i64,
+    /// 本日起動したサブエージェント実行の件数。同上
     pub subagent_count: i64,
     pub total_nano_aiu: i64,
-    /// 時間帯別 (入出力のみ。キャッシュは含めない。FR-C-101)
+    /// 時間帯別 (入出力のみ。キャッシュは含めない。FR-C-101)。
+    /// ローカル日 0:00 起点の 24 要素。**レコード単位なので実質は出力トークン**
     pub hourly_tokens: Vec<i64>,
-    /// フォルダ別の上位 5 件 (FR-C-102)
+    /// フォルダ別の上位 5 件 (FR-C-102)。セッション集計の入出力トークン合計
     pub top_folders: Vec<(String, i64)>,
-    /// 集計から除外した件数。**無言で欠落させない** (NFR-43)
+    /// 合成モデル (`auto`) として集計から除外したレコード件数 (FR-C-104)。
+    /// **無言で欠落させない** (NFR-43)
     pub excluded_records: i64,
 }
 

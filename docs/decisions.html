@@ -689,6 +689,57 @@
 <li>この経路は <strong>2 秒ポーリングに絶対に載らない</strong> (FR-C-135 / INV-4)。呼び出し口は <code>quota_get</code> だけで、下限間隔 5 分・上限時間 25 秒を持つ</li>
 <li><strong>OQ-08 の「Rust からどう呼ぶか」は解決した。</strong> 代わりに「<strong>Node 不在環境・組織アカウント・別 OS でも同じ配置か</strong>」が残る (OQ-08 に追記)</li>
 </ul>
+<hr />
+<h2 id="adr-0029-合成モデルは-auto-だけ-モデル別内訳は-modelmetrics-の-tokendetails-を採る">ADR-0029 — 合成モデルは <code>auto</code> だけ。モデル別内訳は <code>modelMetrics</code> の <code>tokenDetails</code> を採る</h2>
+<p><strong>状態</strong>: 採用</p>
+<p><strong>日付</strong>: 2026-09-12 (T-7.1〜7.10 の実測)</p>
+<p><strong>文脈</strong>: FR-C-104 は「<strong>合成モデルのレコードを除外する</strong>」「<strong>usage の内訳フィールドを二重加算しない</strong>」と書いているが、<strong>合成モデルの具体名も、どのフィールドが二重になるのかも要求には書かれていない</strong>。FR-C-105 (モデル別のクレジット比較) の出所も決まっていなかった。ユーザーの実 <code>~/.copilot</code> (51 セッション / 1,041 レコード / 3.0 MB) を<strong>読み取り専用</strong>で走査して決めた。</p>
+<h3 id="adr-0029-実測-合成モデル">実測 ①: 合成モデルは <code>auto</code></h3>
+<div class="table-wrap"><table>
+<thead><tr><th>観測点</th><th>値</th></tr></thead>
+<tbody>
+<tr><td><code>session.model_change.data.newModel</code></td><td><strong><code>"auto"</code> のみ</strong> (ユーザーが選ぶ値)</td></tr>
+<tr><td><code>session.auto_mode_resolved.data.chosenModel</code></td><td><code>gpt-5-mini</code> / <code>claude-haiku-4.5</code> (<code>routingMethod: "hydra"</code>、<code>candidateModels</code> つき)</td></tr>
+<tr><td><code>assistant.message</code> / <code>tool.*</code> / <code>subagent.*</code> の <code>data.model</code></td><td><code>gpt-5-mini</code> 146 件 / <code>claude-haiku-4.5</code> 125 件。<strong><code>auto</code> は 0 件</strong></td></tr>
+<tr><td><code>session.shutdown.data.modelMetrics</code> のキー</td><td>実モデル名のみ (<code>gpt-5-mini</code> 28 / <code>claude-haiku-4.5</code> 18)</td></tr>
+</tbody></table></div>
+<p><code>auto</code> は「ルーターに任せる」という指定であって、課金されるモデルではない。ADR-0010 で <code>models.list()</code> が <code>auto</code> 1 件だけを返したのと同じものである。<strong>課金の実体は <code>auto_mode_resolved</code> が選んだ実モデル側に載る。</strong></p>
+<h3 id="adr-0029-実測-二重加算">実測 ②: 二重になるのは <code>usage.*</code> と <code>tokenDetails.*</code></h3>
+<p><code>modelMetrics</code> の 1 モデルぶんは、<strong>同じ数字を 2 通りの切り口で持っている</strong>。</p>
+<pre><code>"gpt-5-mini": {
+  "usage":        {"inputTokens":22775,"outputTokens":1208,"cacheReadTokens":22016,"cacheWriteTokens":0},
+  "tokenDetails": {"input":{"tokenCount":759},"cache_read":{"tokenCount":22016},
+                   "cache_write":{"tokenCount":0},"output":{"tokenCount":1208}},
+  "totalNanoAiu": 315615000
+}</code></pre>
+<p><code>759 + 22016 = 22775</code> — <strong><code>usage.inputTokens</code> はキャッシュ分を含んだ上位集計</strong>である (キャッシュ書き込みがある場合は <code>input + cache_read + cache_write</code>)。45 セッション / 46 モデル行の<strong>すべてでこの関係が成立した</strong>。したがって両方を足すと入力が二重に乗る。<strong>互いに素なのは <code>tokenDetails</code> の 4 枠だけ。</strong></p>
+<p>あわせて <code>sum(modelMetrics[*].totalNanoAiu) == data.totalNanoAiu</code> が <strong>45/45 で一致</strong>した。<code>session.shutdown</code> が複数あるセッションが 4 件あり、<strong>後の shutdown が前のものを含む累計値</strong>だった (例: 1,326,890,000 → 2,682,765,000)。</p>
+<p><strong>段階 4 の側は既に正しかった</strong>ことも確認した。<code>parser::parse_record</code> はレコード単位に <code>totalNanoAiu</code> も <code>tokenDetails</code> も載せない (<code>nano_aiu</code> は常に 0、トークンは <code>assistant.message.outputTokens</code> だけ) ため、<strong><code>turn_index</code> の側には二重加算の余地がそもそも無い</strong>。</p>
+<p><strong>判断</strong>:</p>
+<ol>
+<li><strong>合成モデルの除外リストは <code>["auto"]</code> の 1 件だけ</strong> (<code>copilot::usage::SYNTHETIC_MODELS</code>)。増やすときは観測を添える</li>
+<li><strong>モデル別内訳の正は <code>session.shutdown.data.modelMetrics</code>。</strong> <code>tokenDetails</code> を採り、<code>usage.*</code> は読まない</li>
+<li><strong>最新の <code>session.shutdown</code> 1 件だけを読む。</strong> 複数あっても合算しない</li>
+<li><strong>索引に複製せず、<code>session_detail_get</code> の時点で 1 レコードだけシーク読みする</strong> (INV-6)。<code>turn_index</code> が全レコードのオフセットを持っているので、<code>record_type = 'session.shutdown'</code> を引けば位置が分かる</li>
+<li><strong><code>UsageToday</code> の合計はセッション単位、<code>hourly_tokens</code> はレコード単位。</strong> 基準が 2 つあることを DTO のコメントに明記し、UI に注記させる</li>
+</ol>
+<p><strong>却下した案</strong>:</p>
+<ul>
+<li><strong><code>modelMetrics</code> を段階 4 で per-model テーブルに索引する</strong> — <strong>1 セッションを開くときにしか要らない値</strong>であり、DR-03 の「一覧性のための索引」に当たらない。テーブル追加 + マイグレーション + 全再索引の対価に対して、得られるのは <strong>1.7KB のシーク読み 1 回</strong>の節約だけ</li>
+<li><strong><code>usage.inputTokens</code> を入力トークンとして採る</strong> — 実データでキャッシュ分を含む上位集計。<strong>FR-C-104 が名指ししている二重加算そのもの</strong>。名前が素直なぶん、こちらを採る間違いは起きやすい</li>
+<li><strong>複数の <code>session.shutdown</code> の <code>modelMetrics</code> を合算する</strong> — 累計値なので実データ 4 セッションでちょうど 2 倍になる</li>
+<li><strong><code>turn_index.model</code> だけでモデル別内訳を作る</strong> — 入力・キャッシュ・クレジットが<strong>全部 0 になる</strong> (レコード単位に載るのは出力トークンだけ)。NFR-43 違反。<strong>フォールバックとしてのみ残し、<code>ModelUsage::source</code> に出所を必ず載せる</strong> (INV-7)</li>
+<li><strong>合成モデルの候補に <code>default</code> / <code>copilot</code> 等を推測で足す</strong> — 観測していない名前を除外リストに入れると、<strong>実在するモデルの消費が黙って消える</strong>。しかも消えたことに気づく手段が無い</li>
+<li><strong><code>UsageToday::session_count</code> / <code>subagent_count</code> をライブ集合から取る</strong> — 日次カードの他の項目と基準が食い違う。<strong>「今この瞬間の稼働数」は <code>LiveStatus</code> が既に持っている</strong> (FR-C-61)。同じ画面に基準の違う 2 つの件数を混ぜない</li>
+<li><strong><code>hourly_tokens</code> をセッション合計から時間按分する</strong> — グラフの見栄えは整うが、<strong>存在しない数字を作ることになる</strong> (NFR-40)</li>
+</ul>
+<p><strong>帰結</strong>:</p>
+<ul>
+<li><strong>OQ-01 の「合成モデルが何を指すか」は解決した</strong> (OQ-01 に追記)。残るのは「VS Code / coding agent 由来のログでも <code>auto</code> だけか」</li>
+<li><code>session_detail_get</code> は <code>serde_json::Value</code> ではなく<strong>型付き <code>SessionDetail</code></strong> を返す (ADR-0006 に揃える)</li>
+<li><strong>実機確認</strong> (<code>cargo test --lib probe_real_session_detail -- --ignored</code>): 46 ファイル / 1,041 レコードを 88ms で索引し、3 セッションで<strong>モデル別クレジットの合計がセッション総量と 1e-6 未満で一致</strong> (14.675150 / 0.791325 / 5.416185)。2 モデルに分かれるセッションでも一致した</li>
+<li><strong>時間帯別グラフは実質「出力トークンの推移」になる。</strong> CLI 側がレコード単位の入力トークンを載せるようになれば、集計式 (<code>input + output</code>) を変えずにそのまま効く</li>
+</ul>
     <div class="footer-nav">
       <span><a href="index.html">&larr; ドキュメント一覧</a></span>
       <span>gh-dashboard</span>

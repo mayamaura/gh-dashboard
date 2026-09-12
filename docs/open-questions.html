@@ -30,7 +30,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>OQ</th><th>題目</th><th>状態</th><th>一言</th></tr></thead>
 <tbody>
-<tr><td><span class="chip id">OQ-01</span></td><td><code>events.jsonl</code> のレコードスキーマ</td><td><strong>一部判明</strong></td><td>20 種 / 1,041 レコードを分類 (2026-09-12 追測)。<strong>利用枠到達イベントは実データでも未観測</strong></td></tr>
+<tr><td><span class="chip id">OQ-01</span></td><td><code>events.jsonl</code> のレコードスキーマ</td><td><strong>一部判明</strong></td><td>20 種 / 1,041 レコードを分類 (2026-09-12 追測)。<strong>利用枠到達イベントは実データでも未観測</strong>。合成モデル (<code>auto</code>) とモデル別内訳は確定 (ADR-0029)</td></tr>
 <tr><td><span class="chip id">OQ-02</span></td><td>1 レコード = 1 行か</td><td><strong>確定</strong></td><td>成立。バイトオフセット方式を続行してよい (ADR-0003)</td></tr>
 <tr><td><span class="chip id">OQ-03</span></td><td>VS Code の <code>chatSessions</code> とハッシュ</td><td><strong>一部判明</strong></td><td>ハッシュ再計算は 20 中 6 しか当たらない</td></tr>
 <tr><td><span class="chip id">OQ-04</span></td><td>稼働中セッションの検出</td><td><strong>一部判明</strong></td><td><code>ide/*.lock</code> は CLI の生死と対応しない (決定的な否定)</td></tr>
@@ -189,6 +189,15 @@ updated_at: 2026-09-07T17:14:22.666Z</code></pre>
 </ul>
 <p>逆に、<strong>隔離環境で観測できた <code>subagent.configured</code> は実データに 1 件も無い</strong>。<strong>どちらの環境でも観測できる種別・フィールドだけに依存する設計でなければならない</strong>ことが、両方向の実例で確認された (FR-C-13 / NFR-23)。</p>
 <p><code>assistant.message.data.outputTokens</code> は 114/114 (100%) にある。<strong>レコード単位で取れるトークンはこれだけ</strong>で、入力・キャッシュはセッション単位の <code>tokenDetails</code> にしかない。<strong>レコード単位の AI Credits 消費はどの種別にも存在しない</strong> (<code>totalNanoAiu</code> は累計値)。</p>
+<h3 id="段階-7-の追測-2026-09-12-合成モデルとモデル別内訳">段階 7 の追測 (2026-09-12) — FR-C-104 の「合成モデル」は <code>auto</code> で確定</h3>
+<p>FR-C-104 が言う<strong>合成モデルの具体名</strong>と、<strong>どの内訳フィールドが二重になるのか</strong>を同じ 1,041 レコードで特定した。結論と根拠は <strong>ADR-0029</strong>。要点だけ:</p>
+<ul>
+<li><strong><code>auto</code> が唯一の合成モデル。</strong> <code>session.model_change.data.newModel</code> に <code>"auto"</code> だけが現れ、<code>session.auto_mode_resolved.data.chosenModel</code> が実モデル (<code>gpt-5-mini</code> / <code>claude-haiku-4.5</code>) に解決する。<strong>課金されるレコードの <code>data.model</code> に <code>auto</code> は 0 件</strong> (実モデル 271 件)</li>
+<li><strong><code>session.shutdown.data.modelMetrics</code> がモデル別内訳の正</strong> (45/50 件にあり、5 件は無し)。<code>usage.inputTokens</code> は <code>tokenDetails</code> のキャッシュ分を含む上位集計で、<strong>両方足すと入力が二重に乗る</strong> (46 モデル行すべてで <code>usage.inputTokens == input + cache_read (+ cache_write)</code>)</li>
+<li><code>sum(modelMetrics[*].totalNanoAiu) == data.totalNanoAiu</code> が <strong>45/45 で一致</strong>。<code>session.shutdown</code> が 2 件あるセッションが 4 件あり、<strong>後のものが前のものを含む累計値</strong> — 合算すると倍になる</li>
+<li><strong><code>agentMetrics</code> は 50 件すべてでキーごと存在しない。</strong> サブエージェント別のトークン内訳は実データから作れない</li>
+</ul>
+<p><strong>この数字から言えないこと</strong>: VS Code 拡張 / coding agent が書く <code>events.jsonl</code> でも合成モデルが <code>auto</code> だけかは<strong>未確認</strong> (そもそも 1 件も見ていない)。除外リストは 1 件のまま据え置き、増やすときは観測を添える。</p>
 <h3 id="t-4.11-の結論-利用枠到達レコードは実データでも未観測">T-4.11 の結論 — 利用枠到達レコードは実データでも未観測</h3>
 <p><strong>FR-C-28 のレコード種別は、実データ 1,041 レコードを走査しても確認できなかった (OQ-01 のまま)。</strong> <code>quota</code> / <code>rate limit</code> / <code>credit</code> / <code>exceeded</code> / <code>usage limit</code> / 「上限に達」等で <code>type</code> 値と本文系フィールド (<code>data.content</code> / <code>data.result.content</code> / <code>data.result.detailedContent</code> / <code>data.reasoningText</code>) を走査して <strong>0 件</strong>。キーワードに一致した 19 の <code>data</code> パスはすべて UUID の部分一致 (<code>…429…</code> 等) による誤検出だった。</p>
 <p>したがって <strong><code>quota_events</code> への書き込み経路 (<code>store::insert_quota_event</code> と <code>indexer</code> の呼び出し口) は用意したが、抽出関数 <code>parser::parse_quota_event</code> は常に <code>None</code> を返す空実装</strong>にしてある。<strong>推測した種別名をコードに埋め込んでいない</strong> — 決め打ちした名前は実物と一致しなければ永久に 0 件のままで、しかも「実装済み」に見えてしまう。実物を観測したら <code>parse_quota_event</code> に条件を 1 つ足せば通る。</p>

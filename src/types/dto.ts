@@ -223,19 +223,150 @@ export interface TurnBody {
   truncated: boolean
 }
 
+/**
+ * IR-16 (FR-C-100〜105)。
+ *
+ * **集計の基準が 2 つある** (実データの制約):
+ * - `input_tokens` / `output_tokens` / `cache_read_tokens` / `total_nano_aiu` は
+ *   **本日活動のあったセッションの集計を丸ごと**計上する (日をまたぐセッションは
+ *   分割できない。`tokenDetails` はセッションに 1 組しか無いため)
+ * - `hourly_tokens` だけは `turn_index` のレコード単位 = **実質は出力トークンのみ**
+ *
+ * **合計とグラフの縦軸は一致しない。**UI に注記すること (NFR-40)。
+ */
 export interface UsageToday {
   input_tokens: number
   output_tokens: number
   cache_read_tokens: number
+  /** 本日分の索引レコード件数 */
   turn_count: number
+  /** **本日活動のあったセッション数。**「今稼働中」ではない (そちらは LiveStatus) */
   session_count: number
+  /** 本日起動したサブエージェント実行の件数。同上 */
   subagent_count: number
   total_nano_aiu: number
-  /** 時間帯別 (入出力のみ。キャッシュは含めない。FR-C-101) */
+  /** 時間帯別 (入出力のみ。キャッシュは含めない。FR-C-101)。24 要素固定 */
   hourly_tokens: number[]
-  /** フォルダ別の上位 5 件 (FR-C-102) */
+  /** フォルダ別の上位 5 件 (FR-C-102)。`[フォルダ名, 入出力トークン合計]` */
   top_folders: Array<[string, number]>
+  /** 合成モデル (`auto`) として除外したレコード件数 (FR-C-104 / NFR-43) */
   excluded_records: number
+}
+
+// ------------------------------------------------- セッション詳細 (IR-14)
+
+/**
+ * モデル別内訳の出所 (INV-7)。**どちらかで「取れる項目」が違う。**
+ *
+ * - `shutdown_metrics`: `session.shutdown.data.modelMetrics` 由来。トークン 4 種 +
+ *   クレジットが揃う実値
+ * - `turn_index`: 索引を model で畳んだもの。**出力トークンと件数しか無い。**
+ *   他は `null` になる — 0 として描かないこと
+ */
+export type ModelUsageSource = 'shutdown_metrics' | 'turn_index'
+
+/** モデル別のトークン・クレジット内訳 1 行 (FR-C-105)。`null` = 取得不可 */
+export interface ModelUsage {
+  /** 実モデル名。合成モデル (`auto`) は除外済み (FR-C-104) */
+  model: string
+  /** キャッシュを含まない純粋な入力。`usage.inputTokens` ではない (ADR-0029) */
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
+  nano_aiu: number | null
+  /** `nano_aiu / 10^9`。除数を TS 側に持たないため Rust 側で割ってある */
+  credits: number | null
+  /** `turn_index` 由来のときのレコード件数 */
+  record_count: number | null
+  source: ModelUsageSource
+}
+
+/**
+ * 系統図 1 ノード = ガント 1 行 (FR-C-112〜118)。
+ *
+ * **系統図とガントはこの同じ配列を使う。**別々に集計しないこと (FR-C-114)。
+ * 配列はすでに表示順 (親のすぐ下に子) で並んでいる。
+ */
+export interface SubagentNode {
+  /** `toolCallId`。親側と子側の両方に存在する識別子 (FR-C-22) */
+  run_key: string
+  /** `null` = セッション直下 */
+  parent_key: string | null
+  /** 親子関係から導いた深さ。生データの深さは使っていない (FR-C-114) */
+  depth: number
+  /** 親が見つからずルート直下に置かれた (FR-C-113)。UI で「推測」と示す */
+  orphaned: boolean
+  child_keys: string[]
+  agent_id: string | null
+  agent_type: string | null
+  description: string | null
+  model: string | null
+  /** DB の状態列。**現状は全行 `running`** (遷移は OQ-11 待ち) */
+  status: string
+  started_at: number | null
+  last_activity_at: number | null
+  /** **稼働中 / 未確定は `null`。**現在時刻で描く (FR-C-118) */
+  ended_at: number | null
+  tool_call_count: number
+  /** ライブ集合に居るか (FR-C-115)。非稼働セッションでは常に false */
+  running: boolean
+  /** 今この行を表示すべきか。非稼働セッションでは全行 true (FR-C-116 / 117) */
+  visible: boolean
+}
+
+/** ガントの横軸 (FR-C-118)。`end_at: null` = 稼働中 → 現在時刻で描く */
+export interface GanttWindow {
+  start_at: number | null
+  end_at: number | null
+}
+
+/** ガントに重ねる利用枠到達マーカー (FR-C-118)。**0 件は「無かった」** */
+export interface QuotaEventMark {
+  occurred_at: number
+  /** `credit_exhausted` / `rate_limit` / `session_limit` / `unknown` */
+  kind: string
+  reset_text: string | null
+}
+
+/** 本文タイムラインの 1 行 (FR-C-119)。**本文は入らない** (INV-6) */
+export interface TurnMeta {
+  /** `turnBodyGet(turn_id)` に渡す id */
+  turn_id: number
+  timestamp_ms: number | null
+  record_type: string | null
+  role: string | null
+  model: string | null
+  /** サブエージェント配下のレコードにだけ付く。`SubagentNode.run_key` と同じ値 */
+  agent_id: string | null
+  is_sidechain: boolean
+  /** 140 字プレビュー (FR-C-02) */
+  preview: string | null
+  output_tokens: number
+  /** 元レコードのバイト長。512KB 超は本文が切り詰められる (FR-C-120) */
+  byte_length: number
+}
+
+/** IR-14 の戻り値 (FR-C-112)。**未インデックスは `null`** (正常系) */
+export interface SessionDetail {
+  session: SessionSummary
+  /** `total_nano_aiu / 10^9` (FR-C-89 の金額併記用) */
+  credits: number
+  /** モデル別内訳。**空配列 = 内訳が取れなかった。**消費 0 ではない (NFR-43) */
+  models: ModelUsage[]
+  /** 系統図 = ガントの行。表示順 (FR-C-114) */
+  subagents: SubagentNode[]
+  /** このセッションが今稼働中か。false なら subagents は全行 visible */
+  is_live: boolean
+  gantt: GanttWindow
+  /** 縦マーカー。0 件でも空配列 (FR-C-118) */
+  quota_events: QuotaEventMark[]
+  timeline: TurnMeta[]
+  timeline_offset: number
+  /** **上限 1000 でキャップ済みの総件数** (FR-C-119) */
+  timeline_total: number
+  /** 「もっと見る」で次に渡すオフセット。`null` = これ以上無い */
+  timeline_next_offset: number | null
 }
 
 // ---------------------------------------------------------------- 利用枠

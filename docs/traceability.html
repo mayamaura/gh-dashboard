@@ -80,10 +80,10 @@
 <tr><td><span class="chip id">FR-C-85</span></td><td>リセット日判定に <code>quota_reset_date_utc</code> を使う</td><td></td><td></td><td>ADR-0015 / ADR-0017</td></tr>
 <tr><td><span class="chip id">FR-C-86</span></td><td>鮮度判定と警告色</td><td></td><td></td><td><span class="chip id">ADR-0015</span></td></tr>
 <tr><td><span class="chip id">FR-C-89</span></td><td>超過表示</td><td></td><td></td><td><span class="chip id">ADR-0010</span></td></tr>
-<tr><td>FR-C-100〜105</td><td>本日の使用状況</td><td><code>copilot/aggregate.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-110〜111</td><td>セッション検索</td><td><code>copilot/commands.rs</code></td><td></td><td></td></tr>
-<tr><td>FR-C-112〜118</td><td>系統図・ガント (木構築は純粋)</td><td><code>copilot/tree.rs</code></td><td><code>tree::tests</code></td><td>部分</td></tr>
-<tr><td>FR-C-119〜121</td><td>本文ビューア</td><td><code>components/TurnViewer.tsx</code></td><td></td><td></td></tr>
+<tr><td>FR-C-100〜105</td><td>本日の使用状況</td><td><code>copilot/usage.rs</code> (新規) / <code>copilot/commands.rs::usage_today_get</code> / <code>copilot/parser.rs::parse_model_metrics</code></td><td>vitest + cargo test</td><td>済</td></tr>
+<tr><td>FR-C-110〜111</td><td>セッション検索</td><td><code>copilot/store.rs::search_sessions</code> / <code>components/SessionSearch.tsx</code></td><td>vitest</td><td>済</td></tr>
+<tr><td>FR-C-112〜118</td><td>系統図・ガント (木構築は純粋)</td><td><code>copilot/tree.rs</code> / <code>copilot/mod.rs::ModelUsage/GanttWindow/QuotaEventMark/TurnMeta</code> / <code>components/SessionDetailPanel.tsx</code> / <code>lib/lineage.ts</code> / <code>components/LineageGraph.tsx</code> / <code>components/GanttChart.tsx</code> / <code>components/TurnTimeline.tsx</code></td><td><code>tree::tests</code> / vitest (lineage.test.ts)</td><td>済</td></tr>
+<tr><td>FR-C-119〜121</td><td>本文ビューア</td><td><code>components/TurnTimeline.tsx</code> / 既存 <code>turn_body_get</code> 再利用 / <code>run_key</code> キーの連動</td><td>vitest / 実機確認 (行クリックでのシーク読み)</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-130</span></td><td>経路 A: クォータ枠の取得</td><td><code>quota_fetch.rs</code>, <code>quota.rs</code></td><td><code>tools/probe/quota-sdk.mjs</code>, 実機確認</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-131</span></td><td>適用外の枠は <code>has_quota === false</code> で判定</td><td><code>quota.rs</code>, <code>QuotaGaugeRow.tsx</code></td><td><code>quota::tests</code>, 実機確認</td><td>済</td></tr>
 <tr><td><span class="chip id">FR-C-134</span></td><td>モデル別単価</td><td></td><td></td><td>ADR-0010 / ADR-0015</td></tr>
@@ -92,7 +92,7 @@
 <tr><td><span class="chip id">FR-C-140</span></td><td>Enterprise 組織の月次消費</td><td></td><td></td><td>取得不可 / 未検証 (ADR-0018)</td></tr>
 <tr><td>FR-C-83 / FR-P-73</td><td>エラー表示の形式化</td><td><code>lib/format.ts::describeError</code></td><td><code>format.test.ts</code></td><td>済</td></tr>
 <tr><td>FR-C-161 (プロジェクト側)</td><td>プロジェクトスキャン状態管理</td><td><code>store/appStore.ts</code> (<code>projectsScanning</code> / <code>projectsError</code> / <code>projectsSelectedKey</code>)</td><td>—</td><td>済</td></tr>
-<tr><td>FR-C-160〜164</td><td>表示・設定</td><td><code>App.tsx</code>, <code>store/appStore.ts</code></td><td></td><td></td></tr>
+<tr><td>FR-C-160〜164</td><td>表示・設定</td><td><code>App.tsx</code> (取得経路表示追加) / <code>store/appStore.ts::copilotSelectedSessionId</code> / <code>animation_pref_get/set</code> + <code>data-animation</code> DOM 反映 / 自前 SVG (外部ライブラリ不使用)</td><td>vitest / 実機確認 (セッション検索・系統図・タイムラインのGUI動作)</td><td>済</td></tr>
 </tbody></table></div>
 <h2 id="データ要求-dr">データ要求 (DR)</h2>
 <div class="table-wrap"><table>

@@ -9,7 +9,7 @@
 use rusqlite::{Connection, OptionalExtension, Transaction};
 
 use crate::copilot::parser::{RecordFacts, SubagentFacts};
-use crate::copilot::{DbSnapshot, Entrypoint, SessionSummary};
+use crate::copilot::{DbSnapshot, Entrypoint, SessionQuery, SessionSummary};
 use crate::error::AppResult;
 
 /// `index_files` に記録済みの進捗。差分判定の入力はこの 2 つと現在サイズだけ (FR-C-06)。
@@ -350,6 +350,85 @@ pub fn snapshot(conn: &Connection) -> AppResult<DbSnapshot> {
         turn_count: count("SELECT COUNT(*) FROM turn_index")?,
         recent_sessions,
     })
+}
+
+/// IR-13: セッション検索 (FR-C-110 / 111)。
+///
+/// `text` は `folder_name` / `title` / `cwd` の部分一致 (大小文字を問わない)。
+/// `LIKE` の `%` / `_` はユーザー入力にそのまま出ても壊れないよう、パターン内の
+/// 特殊文字は `\` でエスケープしプレースホルダでバインドする (SQL 文字列連結はしない)。
+pub fn search_sessions(conn: &Connection, query: &SessionQuery) -> AppResult<Vec<SessionSummary>> {
+    let text_pattern = query
+        .text
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(like_pattern);
+    let subagents_only = query.with_subagents_only.unwrap_or(false);
+    let limit = query.effective_limit() as i64;
+
+    let sql = "SELECT session_id, folder_name, title, cwd, entrypoint, started_at, \
+               last_activity_at, turn_count, total_nano_aiu, agent_count \
+               FROM sessions \
+               WHERE (?1 IS NULL OR folder_name LIKE ?1 ESCAPE '\\' \
+                      OR title LIKE ?1 ESCAPE '\\' OR cwd LIKE ?1 ESCAPE '\\') \
+                 AND (?2 = 0 OR agent_count > 0) \
+               ORDER BY last_activity_at DESC NULLS LAST \
+               LIMIT ?3";
+
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(
+        rusqlite::params![text_pattern, subagents_only, limit],
+        |r| {
+            let client_name: Option<String> = r.get(4)?;
+            Ok(SessionSummary {
+                session_id: r.get(0)?,
+                folder_name: r.get(1)?,
+                title: r.get(2)?,
+                cwd: r.get(3)?,
+                entrypoint: entrypoint_from_client_name(client_name.as_deref()),
+                started_at: r.get(5)?,
+                last_activity_at: r.get(6)?,
+                turn_count: r.get(7)?,
+                total_nano_aiu: r.get(8)?,
+                agent_count: r.get(9)?,
+            })
+        },
+    )?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+/// `LIKE` 用パターンを組み立てる。`%` / `_` / `\` をエスケープしてから前後に `%` を付ける。
+fn like_pattern(text: &str) -> String {
+    let escaped = text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    format!("%{escaped}%")
+}
+
+/// IR-19 の設定キー (FR-C-162)。**このキー名を変えると既存の保存値が読めなくなる。**
+const ANIMATION_PREF_KEY: &str = "animation_pref";
+
+/// `settings` から `animation_pref` を読む。未設定は `None` (呼び出し側が既定値を当てる)。
+pub fn animation_pref_get(conn: &Connection) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [ANIMATION_PREF_KEY],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
+/// `settings` に `animation_pref` を書く (`INSERT OR REPLACE`)。
+pub fn animation_pref_set(conn: &Connection, value: &str) -> AppResult<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params![ANIMATION_PREF_KEY, value],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -775,5 +854,116 @@ mod tests {
         assert_eq!(left, 1);
         assert_eq!(file_progress(&conn, "a").unwrap().last_parsed_offset, 0);
         assert_eq!(file_progress(&conn, "b").unwrap().last_parsed_offset, 10);
+    }
+
+    fn seed_session(
+        conn: &Connection,
+        session_id: &str,
+        folder_name: &str,
+        title: &str,
+        cwd: &str,
+        agent_count: i64,
+        last_activity_at: i64,
+    ) {
+        conn.execute(
+            "INSERT INTO sessions \
+               (session_id, cwd, folder_name, title, agent_count, last_activity_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+            rusqlite::params![session_id, cwd, folder_name, title, agent_count, last_activity_at],
+        )
+        .unwrap();
+    }
+
+    /// T-7.4: `text` はフォルダ名・タイトル・作業ディレクトリの部分一致 (大小文字を問わない)
+    #[test]
+    fn search_sessions_matches_folder_title_or_cwd_case_insensitively() {
+        let conn = open_in_memory().unwrap();
+        seed_session(&conn, "s1", "gh-dashboard", "初期設定", "d:\\proj\\gh-dashboard", 0, 1);
+        seed_session(&conn, "s2", "other-repo", "OTHER TASK", "d:\\proj\\other-repo", 0, 2);
+
+        let q = SessionQuery {
+            text: Some("dashboard".into()),
+            limit: None,
+            with_subagents_only: None,
+        };
+        let hits = search_sessions(&conn, &q).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].session_id, "s1");
+
+        let q = SessionQuery {
+            text: Some("OTHER".into()),
+            limit: None,
+            with_subagents_only: None,
+        };
+        let hits = search_sessions(&conn, &q).unwrap();
+        assert_eq!(hits.len(), 1, "大小文字を問わず一致する");
+        assert_eq!(hits[0].session_id, "s2");
+    }
+
+    /// FR-C-111: サブエージェントを使ったセッションのみに絞る
+    #[test]
+    fn search_sessions_can_filter_to_sessions_with_subagents_only() {
+        let conn = open_in_memory().unwrap();
+        seed_session(&conn, "s1", "a", "t", "c", 0, 1);
+        seed_session(&conn, "s2", "b", "t", "c", 3, 2);
+
+        let q = SessionQuery {
+            text: None,
+            limit: None,
+            with_subagents_only: Some(true),
+        };
+        let hits = search_sessions(&conn, &q).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].session_id, "s2");
+    }
+
+    /// FR-C-110: 既定 100 / 上限 1000。ここでは小さい limit で切り詰めを確認する
+    #[test]
+    fn search_sessions_respects_effective_limit() {
+        let conn = open_in_memory().unwrap();
+        for i in 0..5 {
+            seed_session(&conn, &format!("s{i}"), "f", "t", "c", 0, i);
+        }
+        let q = SessionQuery {
+            text: None,
+            limit: Some(2),
+            with_subagents_only: None,
+        };
+        let hits = search_sessions(&conn, &q).unwrap();
+        assert_eq!(hits.len(), 2);
+        // last_activity_at 降順: 一番大きい値が先頭 (s4, s3)
+        assert_eq!(hits[0].session_id, "s4");
+        assert_eq!(hits[1].session_id, "s3");
+    }
+
+    /// `%` / `_` を含む入力がそのまま渡ってもクラッシュせず、リテラルとして扱われる
+    #[test]
+    fn search_sessions_treats_like_special_chars_literally() {
+        let conn = open_in_memory().unwrap();
+        seed_session(&conn, "s1", "100%_done", "t", "c", 0, 1);
+        seed_session(&conn, "s2", "100Xdone", "t", "c", 0, 2);
+
+        let q = SessionQuery {
+            text: Some("100%_done".into()),
+            limit: None,
+            with_subagents_only: None,
+        };
+        let hits = search_sessions(&conn, &q).unwrap();
+        assert_eq!(hits.len(), 1, "%/_ をワイルドカードとして展開してはいけない");
+        assert_eq!(hits[0].session_id, "s1");
+    }
+
+    /// T-7.14: 未設定は既定値 (`None` を呼び出し側で `Auto` に落とす)
+    #[test]
+    fn animation_pref_round_trips_through_settings_table() {
+        let conn = open_in_memory().unwrap();
+        assert_eq!(animation_pref_get(&conn).unwrap(), None);
+
+        animation_pref_set(&conn, "on").unwrap();
+        assert_eq!(animation_pref_get(&conn).unwrap(), Some("on".to_string()));
+
+        // 2 回目の書き込みは上書きされる (INSERT OR REPLACE)
+        animation_pref_set(&conn, "off").unwrap();
+        assert_eq!(animation_pref_get(&conn).unwrap(), Some("off".to_string()));
     }
 }

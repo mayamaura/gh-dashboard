@@ -17,6 +17,7 @@ import type {
   ProjectsSnapshot,
   QuotaGauge,
   QuotaSourceStatus,
+  SessionDetail,
   SessionQuery,
   SessionSummary,
   TurnBody,
@@ -95,8 +96,8 @@ export const sessionsListGet = (query: SessionQuery) =>
  * **未インデックスは `null` が返る (正常系)。**エラーとして扱わず、
  * 「まだ記録がありません」と表示して 1 回だけ `indexRefresh()` を呼ぶ (FR-C-57)。
  */
-export const sessionDetailGet = (session_id: string) =>
-  invoke<unknown | null>('session_detail_get', { session_id })
+export const sessionDetailGet = (session_id: string, timeline_offset?: number) =>
+  invoke<SessionDetail | null>('session_detail_get', { session_id, timeline_offset })
 
 /** IR-15: 本文を 1 レコードだけシーク読み。上限 512KB */
 export const turnBodyGet = (turn_id: number) => invoke<TurnBody>('turn_body_get', { turn_id })

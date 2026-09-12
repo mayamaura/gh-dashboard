@@ -568,6 +568,85 @@ pub fn classify_tail(lines: &[&[u8]]) -> LiveTailFacts {
     facts
 }
 
+// ---------------------------------------------------------------- T-7.3 (FR-C-105)
+
+/// `session.shutdown.data.modelMetrics` をモデル別内訳に開く (FR-C-105 / FR-C-112)。
+///
+/// 引数は `session.shutdown` レコード 1 行の生 JSON。**呼び出し側が
+/// `turn_index` のオフセットでシーク読みしたもの**を渡す — 本文も
+/// `modelMetrics` も DB に複製しない (INV-6)。
+///
+/// # 二重加算を避ける根拠 (FR-C-104、実データ 45 セッションで検証)
+///
+/// 1 モデルぶんの実際の形:
+///
+/// ```text
+/// "gpt-5-mini": {
+///   "requests": {"count":2,"cost":0},
+///   "usage":    {"inputTokens":22775,"outputTokens":1208,"cacheReadTokens":22016,
+///                "cacheWriteTokens":0,"reasoningTokens":896},
+///   "totalNanoAiu": 315615000,
+///   "tokenDetails": {"input":{"tokenCount":759},"cache_read":{"tokenCount":22016},
+///                    "cache_write":{"tokenCount":0},"output":{"tokenCount":1208}}
+/// }
+/// ```
+///
+/// **`usage.inputTokens` は `tokenDetails` のキャッシュ分を含んだ上位集計**である。
+/// 上の例では `759 + 22016 = 22775` がちょうど `usage.inputTokens` に一致する
+/// (キャッシュ書き込みがある場合は `input + cache_read + cache_write`)。
+/// 45 セッション / 46 モデル行すべてでこの関係が成立した。
+/// したがって **`usage.*` と `tokenDetails.*` を足すと入力が二重に乗る。**
+/// ここでは互いに素な `tokenDetails` だけを採る。
+///
+/// `totalNanoAiu` の合計は `data.totalNanoAiu` (セッション総量) と 45/45 で一致した。
+/// 差分実行で加算しないこと — レコード自体が累計値である。
+pub fn parse_model_metrics(line: &str) -> Vec<crate::copilot::ModelUsage> {
+    use crate::copilot::{ModelUsage, ModelUsageSource};
+
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+        return Vec::new();
+    };
+    let Some(metrics) = value
+        .get("data")
+        .and_then(|d| d.get("modelMetrics"))
+        .and_then(|m| m.as_object())
+    else {
+        // modelMetrics を持たない shutdown が実データに 5/50 件ある (NFR-23)
+        return Vec::new();
+    };
+
+    let mut out: Vec<ModelUsage> = metrics
+        .iter()
+        // 合成モデルが混じっても除外する (FR-C-104)。実データでは 0 件だが、
+        // ルーティングの実装が変われば混じりうる
+        .filter(|(model, _)| !crate::copilot::usage::is_synthetic_model(model))
+        .map(|(model, m)| {
+            let details = m.get("tokenDetails");
+            let nano_aiu = i64_of(m.get("totalNanoAiu"));
+            ModelUsage {
+                model: model.clone(),
+                input_tokens: token_count(details, "input"),
+                output_tokens: token_count(details, "output"),
+                cache_read_tokens: token_count(details, "cache_read"),
+                cache_write_tokens: token_count(details, "cache_write"),
+                nano_aiu,
+                credits: nano_aiu.map(crate::copilot::quota::credits_from_nano_aiu),
+                record_count: None,
+                source: ModelUsageSource::ShutdownMetrics,
+            }
+        })
+        .collect();
+
+    // 消費の大きい順。同額はモデル名で固定する (描画順が呼び出しごとに変わらない)
+    out.sort_by(|a, b| {
+        b.nano_aiu
+            .unwrap_or(0)
+            .cmp(&a.nano_aiu.unwrap_or(0))
+            .then_with(|| a.model.cmp(&b.model))
+    });
+    out
+}
+
 /// 利用枠到達イベントの抽出 (FR-C-28 / T-4.11)。**現状は常に `None`**。
 ///
 /// レコード種別が実データでも確認できていない。ユーザーの実 `~/.copilot`
@@ -1129,6 +1208,88 @@ entrypoint: cli_interactive
             .unwrap();
         assert_eq!(c.tool_call_id.as_deref(), Some("c1"));
         assert_eq!(c.tool_name, None);
+    }
+
+    // ---- parse_model_metrics (T-7.3 / FR-C-105) --------------------------
+    //
+    // fixture は実データ (~/.copilot、51 セッション / 1,041 レコード) の
+    // session.shutdown.data.modelMetrics をそのまま縮めたもの (NFR-51)。
+
+    /// FR-C-104: `usage.*` ではなく互いに素な `tokenDetails.*` を採る
+    #[test]
+    fn model_metrics_take_token_details_not_the_overlapping_usage_block() {
+        // 759 + 22016 = 22775 = usage.inputTokens (実データで成立した関係)
+        let line = r#"{"type":"session.shutdown","data":{"totalNanoAiu":315615000,
+            "modelMetrics":{"gpt-5-mini":{
+                "requests":{"count":2,"cost":0},
+                "usage":{"inputTokens":22775,"outputTokens":1208,"cacheReadTokens":22016,
+                         "cacheWriteTokens":0,"reasoningTokens":896},
+                "totalNanoAiu":315615000,
+                "tokenDetails":{"input":{"tokenCount":759},"cache_read":{"tokenCount":22016},
+                                "cache_write":{"tokenCount":0},"output":{"tokenCount":1208}}}}}}"#;
+        let rows = parse_model_metrics(line);
+        assert_eq!(rows.len(), 1);
+        let m = &rows[0];
+        assert_eq!(m.model, "gpt-5-mini");
+        assert_eq!(
+            m.input_tokens,
+            Some(759),
+            "usage.inputTokens (22775) を採ると cache_read が二重に乗る"
+        );
+        assert_eq!(m.cache_read_tokens, Some(22016));
+        assert_eq!(m.output_tokens, Some(1208));
+        assert_eq!(m.cache_write_tokens, Some(0));
+        assert_eq!(m.nano_aiu, Some(315_615_000));
+        assert!((m.credits.unwrap() - 0.315615).abs() < 1e-9);
+        assert_eq!(m.record_count, None);
+    }
+
+    /// 実データ 5/50 件の shutdown は modelMetrics を持たない。
+    /// 0 の行をでっち上げず、空で返す (NFR-43)
+    #[test]
+    fn shutdown_without_model_metrics_yields_no_rows() {
+        assert!(parse_model_metrics(r#"{"type":"session.shutdown","data":{"totalNanoAiu":5}}"#).is_empty());
+        assert!(parse_model_metrics(
+            r#"{"type":"session.shutdown","data":{"modelMetrics":{}}}"#
+        )
+        .is_empty());
+        assert!(parse_model_metrics("not json").is_empty());
+    }
+
+    /// 中身が欠けていても panic せず、その項目が None になるだけ (NFR-23)
+    #[test]
+    fn model_metrics_with_missing_fields_do_not_panic() {
+        let rows = parse_model_metrics(
+            r#"{"type":"session.shutdown","data":{"modelMetrics":{"gpt-5-mini":{}}}}"#,
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].input_tokens, None);
+        assert_eq!(rows[0].nano_aiu, None);
+        assert_eq!(rows[0].credits, None, "0 で埋めない (NFR-43)");
+    }
+
+    /// FR-C-104: 合成モデルのキーが混じっても集計に入れない
+    #[test]
+    fn synthetic_model_key_is_excluded() {
+        let rows = parse_model_metrics(
+            r#"{"type":"session.shutdown","data":{"modelMetrics":{
+                "auto":{"totalNanoAiu":999},
+                "gpt-5-mini":{"totalNanoAiu":1}}}}"#,
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].model, "gpt-5-mini");
+    }
+
+    /// 描画順が呼び出しごとに変わらないこと (消費降順 → モデル名)
+    #[test]
+    fn model_rows_are_sorted_by_consumption_deterministically() {
+        let line = r#"{"type":"session.shutdown","data":{"modelMetrics":{
+            "claude-haiku-4.5":{"totalNanoAiu":100},
+            "gpt-5-mini":{"totalNanoAiu":900}}}}"#;
+        let a: Vec<String> = parse_model_metrics(line).iter().map(|m| m.model.clone()).collect();
+        assert_eq!(a, vec!["gpt-5-mini".to_string(), "claude-haiku-4.5".to_string()]);
+        let b: Vec<String> = parse_model_metrics(line).iter().map(|m| m.model.clone()).collect();
+        assert_eq!(a, b);
     }
 
     /// T-4.11: 実データでも利用枠到達レコードは観測できていない (OQ-01 のまま)

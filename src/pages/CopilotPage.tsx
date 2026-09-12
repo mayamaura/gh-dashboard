@@ -1,11 +1,10 @@
 // Copilot タブ。
-//
-// 実装状況: 段階 5 (ライブ監視) までの表示が入っている。
-// 検索・系統図・ガント・本文ビューアは段階 7 (T-7.4〜7.11) で実装する。
 
 import { useEffect, useRef, useState } from 'react'
 
 import { QuotaGaugeRow } from '../components/QuotaGaugeRow'
+import { SessionSearch } from '../components/SessionSearch'
+import { SessionDetailPanel } from '../components/SessionDetailPanel'
 import { useIsViewing } from '../hooks/useWindowVisible'
 import { shouldAutoIndex, useLivePoll } from '../hooks/useLivePoll'
 import { useQuotaPoll } from '../hooks/useQuotaPoll'
@@ -30,7 +29,15 @@ export function CopilotPage() {
   const { live, failed } = useLivePoll(viewing)
   // T-6.10: 長周期タイマー (目安 5 分)。2 秒ポーリングには絶対に混ぜない (INV-4)
   const { refresh: refreshQuota } = useQuotaPoll(viewing)
-  const { snapshot, quota, usageToday, lastIndexedAt, indexing, indexingManual } = useAppStore()
+  const {
+    snapshot,
+    quota,
+    usageToday,
+    lastIndexedAt,
+    indexing,
+    indexingManual,
+    copilotSelectedSessionId,
+  } = useAppStore()
   const now = Date.now()
 
   // T-5.9: アイドルセッションを隠すトグル。タブ切替で消えても実害の無い UI 好み設定
@@ -258,8 +265,18 @@ export function CopilotPage() {
             {snapshot.subagent_run_count} 件
           </p>
         )}
-        <p className="fineprint">検索・系統図・ガント・本文ビューアは段階 7 (T-7.4〜7.11) で実装。</p>
+        <SessionSearch
+          selectedSessionId={copilotSelectedSessionId}
+          onSelect={(id) => appStore.set({ copilotSelectedSessionId: id })}
+        />
       </section>
+
+      {copilotSelectedSessionId !== null && (
+        <SessionDetailPanel
+          sessionId={copilotSelectedSessionId}
+          onClose={() => appStore.set({ copilotSelectedSessionId: null })}
+        />
+      )}
     </div>
   )
 }
