@@ -41,7 +41,7 @@
 <tr><td><span class="chip id">OQ-09</span></td><td>古いセッションの自動削除</td><td><strong>未調査</strong></td><td>据え置き。観測期間が 1 時間では何も言えない</td></tr>
 <tr><td><span class="chip id">OQ-10</span></td><td>実データ量</td><td><strong>一部判明</strong></td><td>3 セッションで 1.0 MB。数百 MB 規模は未再現</td></tr>
 <tr><td><span class="chip id">OQ-11</span></td><td>拒否 / 非同期委任の表現</td><td><strong>調査中</strong></td><td>実データ 46 セッションでも拒否 0 件 / 非同期 0 件。<strong>T-4.9 / T-4.10 は引き続き保留</strong></td></tr>
-<tr><td><span class="chip id">OQ-12</span></td><td>経路 B (REST) が個人アカウントで返すもの</td><td><strong>一部判明</strong></td><td>公開課金 API は 10/10 が 404 (5 件は <code>user</code> スコープ不足)。組織 / Enterprise は未検証</td></tr>
+<tr><td><span class="chip id">OQ-12</span></td><td>経路 B (REST) が個人アカウントで返すもの</td><td><strong>一部判明</strong></td><td>公開課金 API は 10/10 が 404 (5 件は <code>user</code> スコープ不足)。組織 / Enterprise は未検証。<strong>【2026-09-12】今後この方向での追加検証は見送り (ユーザー判断)</strong></td></tr>
 </tbody></table></div>
 <hr />
 <h2 id="測定環境-数字を読む前に-2026-09-08">測定環境 — 数字を読む前に (2026-09-08)</h2>
@@ -863,6 +863,8 @@ quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
 <li><strong>測定は 1 アカウント・無料プラン (<code>free_limited_copilot</code>) のみ。</strong> 有料プランなら公開課金 API が 200 を返す可能性は否定できない</li>
 <li><code>copilot_internal/user</code> が<strong>いつまで同じ形で返るか</strong>は分からない (非公開エンドポイント)</li>
 </ul>
+<h3 id="2026-09-12-ユーザー判断">【2026-09-12 追記】ユーザー判断による今後の検証予定</h3>
+<p>T-0.8 の測定時点では <code>user</code> スコープ拡大と組織 / Enterprise アカウント検証が再開条件として残っていた (ADR-0018)。2026-09-12、ユーザーに両者を提示したところ、<strong>両方とも見送る</strong>ことが明示的に判断された。<code>gh auth refresh -s user</code> による恒久的なスコープ拡大は実施せず、組織管理下のアカウント検証も行わない。以後、ユーザー自身がスコープを広げるか組織 / Enterprise を使用するようになるまで、経路 B の追加検証予定は無し。</p>
 <hr />
 <h2 id="新しく分かったことの書き方">新しく分かったことの書き方</h2>
 <ol>

@@ -419,7 +419,9 @@
 </ul>
 <p><strong>帰結</strong>:</p>
 <ul>
-<li><strong>T-6.5 (経路 B) は優先度を下げ、<code>保留 (OQ-12 待ち)</code> にする。</strong> 再開条件は「(a) <code>user</code> スコープを持つアカウント、または (b) 組織 / Enterprise 管理下のアカウントで実測できたとき」</li>
+<li><strong>T-6.5 (経路 B) は優先度を下げ、<code>保留 (OQ-12 待ち)</code> にする。</strong> 再開条件は「(a) <code>user</code> スコープを持つアカウント、または (b) 組織 / Enterprise 管理下のアカウントで実測できたとき」
+<p><strong>【2026-09-12 追記】</strong> ユーザーに再開条件 (a) <code>user</code> スコープの拡大、(b) 組織 / Enterprise アカウントでの検証、の 2 つを提示したところ、両方とも見送ることが明示的に判断された。<code>gh auth refresh -s user</code> も組織アカウントでの検証も行わないと決定。以後、ユーザー自身がスコープを広げるか組織アカウントを使うようになるまで、この判断は据え置きのまま。</p>
+</li>
 <li>FR-C-83 の「何をすれば取れるようになるか」に、<strong><code>user</code> スコープが要る旨を出す</strong>。取れないことを黙って隠さない</li>
 <li><strong>FR-C-140 (個人 / 組織で叩くエンドポイントが違う) は未検証のまま残る。</strong> 要求本文は書き換えず、OQ-12 に記録した</li>
 </ul>

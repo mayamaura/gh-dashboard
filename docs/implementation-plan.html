@@ -180,8 +180,8 @@
 <tr><td><span class="chip id">T-6.2</span></td><td>降格判定 (純粋) + テスト</td><td>FR-C-81〜90</td><td>完了</td></tr>
 <tr><td><span class="chip id">T-6.3</span></td><td>経路 A: SDK <code>account.getCurrentAuth</code> (対象はクォータ 3 枠 + <code>quota_reset_date_utc</code>: chat / completions / premium_interactions)</td><td>FR-C-130 / 131 / ADR-0015 / ADR-0017</td><td>完了</td></tr>
 <tr><td>T-6.4a</td><td>セッション単位の消費 (<code>totalNanoAiu</code>)。<strong>ローカルの <code>events.jsonl</code> から取る</strong> (SDK 呼び出し不要)</td><td>FR-C-132 / ADR-0013</td><td>完了</td></tr>
-<tr><td>T-6.4b</td><td><code>models.list</code> からモデル別単価を取得</td><td><span class="chip id">FR-C-134</span></td><td>保留(取得不可を確認済み / ADR-0010)</td></tr>
-<tr><td><span class="chip id">T-6.5</span></td><td>経路 B: GitHub REST (個人 / 組織の両方を試す) (アカウント全体の月次消費履歴 (FR-C-138/139) と組織 / Enterprise (FR-C-140) 専用。再開条件は user スコープ持ちか組織管理下のアカウントでの実測 / ADR-0018)</td><td>FR-C-138〜142 / OQ-12</td><td>保留(OQ-12 待ち/ADR-0018)</td></tr>
+<tr><td>T-6.4b</td><td><code>models.list</code> からモデル別単価を取得</td><td><span class="chip id">FR-C-134</span></td><td>完了(取得不可で確定・対応不要 / ADR-0010)</td></tr>
+<tr><td><span class="chip id">T-6.5</span></td><td>経路 B: GitHub REST (個人 / 組織の両方を試す) (アカウント全体の月次消費履歴 (FR-C-138/139) と組織 / Enterprise (FR-C-140) 専用。再開条件は user スコープ持ちか組織管理下のアカウントでの実測 / ADR-0018)</td><td>FR-C-138〜142 / OQ-12</td><td>完了(v1では対応しない・ユーザー判断 2026-09-12 / ADR-0018)</td></tr>
 <tr><td><span class="chip id">T-6.6</span></td><td>認証は OS 資格情報ストア / GitHub CLI 参照。<strong>保存しない</strong></td><td>FR-C-141 / NFR-31</td><td>完了</td></tr>
 <tr><td><span class="chip id">T-6.7</span></td><td>経路 C: ログ由来の推定 (60 秒 TTL)</td><td>FR-C-92 / 93 / 143</td><td>完了</td></tr>
 <tr><td><span class="chip id">T-6.8</span></td><td>ゲージ描画 (自前 SVG)。3 段階色分け + 超過の別建て (クレジット単位のみ。$ 換算を出さない / ADR-0010)</td><td>FR-C-88 / 89 / 90</td><td>完了</td></tr>
@@ -245,7 +245,7 @@
 <tr><td>3. dev サーバー</td><td>7 / 7</td></tr>
 <tr><td>4. 差分インデックス</td><td>11 / 13</td></tr>
 <tr><td>5. ライブ監視</td><td>14 / 14</td></tr>
-<tr><td>6. 利用枠</td><td>11 / 13</td></tr>
+<tr><td>6. 利用枠</td><td>13 / 13</td></tr>
 <tr><td>7. 振り返り UI</td><td>14 / 14</td></tr>
 <tr><td>横断</td><td>6 / 6</td></tr>
 </tbody></table></div>
