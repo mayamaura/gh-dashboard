@@ -9,7 +9,7 @@ import { useIsViewing } from '../hooks/useWindowVisible'
 import { shouldAutoIndex, useLivePoll } from '../hooks/useLivePoll'
 import { useQuotaPoll } from '../hooks/useQuotaPoll'
 import { indexRefresh, quotaGet, snapshotGet, usageTodayGet } from '../ipc/commands'
-import { appStore, useAppStore } from '../store/appStore'
+import { appStore, pushNotice, useAppStore } from '../store/appStore'
 import {
   activityLabel,
   ACTIVITY_TOOLTIP,
@@ -49,6 +49,14 @@ export function CopilotPage() {
   const attemptedIndexRef = useRef<Set<string>>(new Set())
   // T-5.12: 自動インデックスの下限間隔判定用。消えてよい一時値なのでローカル ref
   const lastAutoIndexAttemptRef = useRef<number | null>(null)
+  // 2 秒ポーリング中は failed が続けて true になりうる。「失敗し始めた」瞬間だけ通知する
+  const wasFailedRef = useRef(false)
+  useEffect(() => {
+    if (failed && !wasFailedRef.current) {
+      pushNotice('warning', '直近の取得に失敗しました。表示は直前の値です。')
+    }
+    wasFailedRef.current = failed
+  }, [failed])
 
   // タブを開いたときの一括取得。
   // ★ ここで取るものを 2 秒ポーリングに混ぜない (FR-C-103 / INV-4)
@@ -135,11 +143,6 @@ export function CopilotPage() {
           <Stat label="稼働中サブエージェント" value={live?.running_subagent_count ?? null} />
           <Stat label="IDE ワークスペース" value={live?.ide_workspaces.length ?? null} />
         </div>
-        {failed && (
-          <p className="note-inline">
-            直近の取得に失敗しました。表示は直前の値です。
-          </p>
-        )}
       </section>
 
       {/* 利用枠 (FR-C-80〜95) */}

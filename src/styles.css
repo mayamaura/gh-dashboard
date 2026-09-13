@@ -463,6 +463,71 @@ button.danger { border-color: var(--danger); color: var(--danger); }
   font-size: inherit;
 }
 
+/* ---------- トースト通知 ---------- */
+
+.toast-host {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+}
+.toast.toast-error { border-left-color: var(--danger); }
+
+/* ---------- モーダル共通 (ログ画面) ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .4);
+  padding: 16px;
+  width: min(560px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.modal-head h2 { margin: 0; font-size: 14px; }
+
+.notice-log-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.notice-log-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 3px solid var(--warn);
+  background: var(--sunken);
+}
+.notice-log-item.notice-error { border-left-color: var(--danger); }
+.notice-log-time { color: var(--muted); font-size: 11px; }
+
 /* ---------- モデル別内訳テーブル ---------- */
 
 .model-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }

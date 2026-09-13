@@ -20,6 +20,17 @@ import type {
 
 export type TabId = 'copilot' | 'projects'
 
+/** 一過性のエラー・警告通知。右下トーストで見せ、履歴はログ画面で確認する */
+export interface Notice {
+  id: number
+  level: 'error' | 'warning'
+  message: string
+  at: number
+}
+
+/** 保持する通知履歴の上限。無限に溜めない */
+const NOTICE_HISTORY_LIMIT = 200
+
 export interface AppStoreState {
   tab: TabId
 
@@ -44,8 +55,6 @@ export interface AppStoreState {
 
   /** スキャン中か。タブを切り替えても「スキャン中…」が消えない (FR-C-161 / FR-P-87) */
   projectsScanning: boolean
-  /** 直近のプロジェクト操作 (スキャン/設定変更/外部ツール等) のエラー文言 */
-  projectsError: string | null
   /** 詳細パネルで選択中のプロジェクト。タブを往復しても残る */
   projectsSelectedKey: string | null
 
@@ -53,6 +62,9 @@ export interface AppStoreState {
   copilotSelectedSessionId: string | null
 
   animation: AnimationPref
+
+  /** エラー・警告通知の履歴。新しい順ではなく発生順に並ぶ (末尾が最新) */
+  notices: Notice[]
 }
 
 const initial: AppStoreState = {
@@ -68,11 +80,13 @@ const initial: AppStoreState = {
   usageToday: null,
   projects: null,
   projectsScanning: false,
-  projectsError: null,
   projectsSelectedKey: null,
   copilotSelectedSessionId: null,
   animation: 'auto',
+  notices: [],
 }
+
+let nextNoticeId = 1
 
 let state: AppStoreState = initial
 const listeners = new Set<() => void>()
@@ -110,6 +124,18 @@ export const appStore = {
     state = initial
     emit()
   },
+}
+
+/**
+ * エラー・警告を通知する。呼び出し側はトースト表示やログ画面を気にせず、
+ * 発生したことをここに投げるだけでよい (右下トースト + ログ画面は appStore.notices を購読する側の仕事)。
+ */
+export function pushNotice(level: Notice['level'], message: string): void {
+  const notices = [
+    ...state.notices,
+    { id: nextNoticeId++, level, message, at: Date.now() },
+  ].slice(-NOTICE_HISTORY_LIMIT)
+  appStore.set({ notices })
 }
 
 /**

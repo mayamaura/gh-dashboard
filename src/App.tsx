@@ -7,7 +7,9 @@ import { useEffect, useRef, useState } from 'react'
 
 import { CopilotPage } from './pages/CopilotPage'
 import { ProjectsPage } from './pages/ProjectsPage'
-import { appStore, useAppStore } from './store/appStore'
+import { appStore, useAppStore, useAppStoreSelector } from './store/appStore'
+import { ToastHost } from './components/ToastHost'
+import { NoticeLogModal } from './components/NoticeLogModal'
 import { useWindowVisibilityBridge } from './hooks/useWindowVisible'
 import { useProjectsSnapshotBridge } from './hooks/useProjectsSnapshotBridge'
 import { useDevStatusBridge } from './hooks/useDevStatusBridge'
@@ -58,6 +60,10 @@ export function App() {
   // 「すべて停止」の二段階確認 (FR-P-67)
   const [confirmingStopAll, setConfirmingStopAll] = useState(false)
   const confirmTimer = useRef<number | undefined>(undefined)
+
+  // エラー・警告ログ画面 (トーストが消えたあとに見返す先)
+  const [showNoticeLog, setShowNoticeLog] = useState(false)
+  const noticeCount = useAppStoreSelector((s) => s.notices.length)
 
   const onStopAllClick = () => {
     if (!confirmingStopAll) {
@@ -134,12 +140,20 @@ export function App() {
               <option value="off">切</option>
             </select>
           </label>
+
+          {/* エラー・警告はトーストで一時表示するだけなので、履歴をここから見返せるようにする */}
+          <button onClick={() => setShowNoticeLog(true)}>
+            ログ{noticeCount > 0 ? ` (${noticeCount})` : ''}
+          </button>
         </div>
       </header>
 
       <main className="app-main">
         {tab === 'copilot' ? <CopilotPage /> : <ProjectsPage />}
       </main>
+
+      <ToastHost />
+      {showNoticeLog && <NoticeLogModal onClose={() => setShowNoticeLog(false)} />}
     </div>
   )
 }

@@ -5,9 +5,9 @@
 // ★ 一覧 + 詳細パネルの 2 ペイン構成 (FR-P-80)。
 // ★ スキャン中フラグ・エラー・選択キーは appStore に置く (FR-C-161)。
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { appStore, useAppStore } from '../store/appStore'
+import { appStore, pushNotice, useAppStore } from '../store/appStore'
 import {
   defaultFilter,
   filterProjects,
@@ -36,7 +36,7 @@ const KIND_OPTIONS: Array<{ value: ProjectKind; label: string }> = [
 
 export function ProjectsPage() {
   const viewing = useIsViewing('projects')
-  const { projects, projectsError, projectsSelectedKey } = useAppStore()
+  const { projects, projectsSelectedKey } = useAppStore()
   const [filter, setFilter] = useState<ProjectFilter>(defaultFilter)
   const [sortKey, setSortKey] = useState<SortKey>('last_used')
   const [newFolderPath, setNewFolderPath] = useState('')
@@ -49,6 +49,23 @@ export function ProjectsPage() {
     if (viewing) void scanProjects()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewing])
+
+  // FR-P-03 / NFR-43: 読めなかったフォルダ等の警告は無言で欠落させない。
+  // ただしタブを行き来するたびに同じ内容を再通知しない (内容が変わったときだけ)
+  const lastWarningKeyRef = useRef('')
+  useEffect(() => {
+    if (!projects) return
+    const key = JSON.stringify([projects.warnings, projects.using_default_folder])
+    if (key === lastWarningKeyRef.current) return
+    lastWarningKeyRef.current = key
+    for (const w of projects.warnings) pushNotice('warning', w)
+    if (projects.using_default_folder) {
+      pushNotice(
+        'warning',
+        'スキャン対象フォルダが未登録のため、既定フォルダを一時的に使っています (保存はしていません)。'
+      )
+    }
+  }, [projects])
 
   const visible = useMemo(
     () => sortProjects(filterProjects(projects?.projects ?? [], filter), sortKey),
@@ -77,9 +94,7 @@ export function ProjectsPage() {
           items.push({
             label: 'ブラウザで開く',
             onSelect: () =>
-              appStore.set({
-                projectsError: '未実装です (T-3.x) — ブラウザで開く機能は段階 3 で実装します',
-              }),
+              pushNotice('error', '未実装です (T-3.x) — ブラウザで開く機能は段階 3 で実装します'),
           })
         }
         return items
@@ -173,18 +188,6 @@ export function ProjectsPage() {
           </div>
         </details>
 
-        {/* FR-P-03 / NFR-43: 読めなかったフォルダを無言で欠落させない */}
-        {projects?.warnings.map((w) => (
-          <p key={w} className="note-inline">
-            {w}
-          </p>
-        ))}
-        {projects?.using_default_folder && (
-          <p className="note-inline">
-            スキャン対象フォルダが未登録のため、既定フォルダを一時的に使っています (保存はしていません)。
-          </p>
-        )}
-        {projectsError && <p className="note-inline error">{projectsError}</p>}
       </section>
 
       <section className="panel list-panel">

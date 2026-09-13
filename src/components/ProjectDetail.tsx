@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import type { Project, ProjectOverrideRequest } from '../types/dto'
 import { projectsDevLogsGet, projectsSettingsUpdate } from '../ipc/commands'
 import { onDevLog } from '../ipc/events'
-import { appStore } from '../store/appStore'
+import { appStore, pushNotice } from '../store/appStore'
 import { launchState } from '../lib/projectList'
 import { describeError, matchedByLabel, relativeTime } from '../lib/format'
 import {
@@ -129,13 +129,13 @@ function ProjectDetailBody({ project: p, now }: { project: Project; now: number 
     try {
       // IR-32: 変更系は戻り値のスナップショットでも即時反映する (イベントとの二重取りは appStore.set が差分無視で吸収する)
       const snapshot = await projectsSettingsUpdate(req)
-      appStore.set({ projects: snapshot, projectsError: null })
+      appStore.set({ projects: snapshot })
     } catch (e) {
       const err = e as { kind?: string; field?: string; message?: string }
       if (err && err.kind === 'invalid_input' && err.field && err.message) {
         setFieldError({ field: err.field, message: err.message })
       } else {
-        appStore.set({ projectsError: describeError(e) })
+        pushNotice('error', describeError(e))
       }
     } finally {
       setSaving(false)

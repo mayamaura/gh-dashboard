@@ -19,16 +19,16 @@ import {
   projectsScanFolderRemove,
 } from '../ipc/commands'
 import { describeError } from './format'
-import { appStore, patchProjectDev } from '../store/appStore'
+import { appStore, patchProjectDev, pushNotice } from '../store/appStore'
 
 /** IR-01: スキャンを実行し、結果を `appStore.projects` に反映する。 */
 export async function scanProjects(): Promise<void> {
-  appStore.set({ projectsScanning: true, projectsError: null })
+  appStore.set({ projectsScanning: true })
   try {
     const snapshot = await projectsScan()
     appStore.set({ projects: snapshot })
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   } finally {
     appStore.set({ projectsScanning: false })
   }
@@ -40,7 +40,7 @@ export async function stopAllDevServers(): Promise<void> {
     const snapshot = await projectsDevStopAll()
     appStore.set({ projects: snapshot })
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
 
@@ -56,7 +56,7 @@ export async function startDevServer(pathKey: string): Promise<void> {
     const dev = await projectsDevStart(pathKey)
     patchProjectDev(pathKey, dev)
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
 
@@ -65,39 +65,39 @@ export async function stopDevServer(pathKey: string): Promise<void> {
     const dev = await projectsDevStop(pathKey)
     patchProjectDev(pathKey, dev)
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
 
-/** IR-03: 失敗 (存在しない/重複) は `projectsError` に出す。 */
+/** IR-03: 失敗 (存在しない/重複) は通知に出す。 */
 export async function addScanFolder(path: string): Promise<void> {
   try {
     const snapshot = await projectsScanFolderAdd(path)
-    appStore.set({ projects: snapshot, projectsError: null })
+    appStore.set({ projects: snapshot })
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
 
 export async function removeScanFolder(path: string): Promise<void> {
   try {
     const snapshot = await projectsScanFolderRemove(path)
-    appStore.set({ projects: snapshot, projectsError: null })
+    appStore.set({ projects: snapshot })
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
 
 /**
  * 外部ツール起動 (FR-P-70)。投げっぱなしで、完了を待たない (FR-P-71)。
  *
- * 失敗は具体的な対処とともに `projectsError` に出す (FR-P-73)。
+ * 失敗は具体的な対処とともに通知に出す (FR-P-73)。
  */
 async function openWith(fn: (path_key: string) => Promise<void>, pathKey: string): Promise<void> {
   try {
     await fn(pathKey)
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
 
@@ -112,6 +112,6 @@ export async function openBrowser(url: string): Promise<void> {
   try {
     await projectsOpenBrowser(url)
   } catch (e) {
-    appStore.set({ projectsError: describeError(e) })
+    pushNotice('error', describeError(e))
   }
 }
