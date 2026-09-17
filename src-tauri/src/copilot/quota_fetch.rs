@@ -49,7 +49,13 @@ const SENTINEL: &str = "@@GHDQ@@";
 /// `analytics_tracking_id` / `endpoints` / `organization_*` は**読まない・出さない**。
 /// 例外メッセージはトークン様の文字列を伏せてから出す。
 const BRIDGE_SCRIPT: &str = r#"
-const mask = (s) => String(s == null ? '' : s).replace(/\b(gh[a-z]?_[A-Za-z0-9]{10,}|[A-Za-z0-9._-]{24,})\b/g, (m) => m.slice(0, 4) + '...(redacted,len=' + m.length + ')');
+const mask = (s) => String(s == null ? '' : s).replace(/\b(gh[a-z]?_[A-Za-z0-9]{10,}|[A-Za-z0-9._-]{24,})\b/g, (m) => {
+  // 識別子チェーン (client.rpc.account.getCurrentAuth = 33 字) を伏せない。
+  // 伏せると "X is not a function" が読めず、API 差分を診断できなくなる。
+  // トークンは区切りを挟まない長い塊なので、最長セグメントで見分ける
+  if (!/^gh[a-z]?_/.test(m) && Math.max(...m.split(/[._-]/).map((p) => p.length)) < 20) return m;
+  return m.slice(0, 4) + '...(redacted,len=' + m.length + ')';
+});
 let done = false;
 const emit = (o) => { if (done) return; done = true; process.stdout.write('@@GHDQ@@' + JSON.stringify(o) + '\n', () => process.exit(0)); };
 const run = async () => {
@@ -67,27 +73,75 @@ const run = async () => {
   }
   const client = new mod.CopilotClient(opts);
   await client.start();
-  const auth = await client.rpc.account.getCurrentAuth();
-  const u = (auth && auth.authInfo && auth.authInfo.copilotUser) || null;
-  try { await client.stop(); } catch (_) { }
-  if (!u) return emit({ ok: false, error: 'copilotUser が返りませんでした' });
-  const snaps = u.quota_snapshots || {};
-  const quotas = {};
-  for (const k of Object.keys(snaps)) {
-    const s = snaps[k] || {};
-    quotas[k] = {
-      quota_id: typeof s.quota_id === 'string' ? s.quota_id : k,
-      entitlement: s.entitlement,
-      quota_remaining: s.quota_remaining,
-      percent_remaining: s.percent_remaining,
-      has_quota: s.has_quota,
-      unlimited: s.unlimited,
-      timestamp_utc: s.timestamp_utc,
-    };
+  const acct = (client.rpc && client.rpc.account) || {};
+  const notes = [];
+  let out = null;
+  // 経路 A-1: getCurrentAuth。情報量が多い (小数の消費 / 本物のリセット日 / quota_id)
+  if (typeof acct.getCurrentAuth === 'function') {
+    try {
+      const auth = await acct.getCurrentAuth();
+      const u = (auth && auth.authInfo && auth.authInfo.copilotUser) || null;
+      if (!u) {
+        notes.push('getCurrentAuth: copilotUser が返りませんでした');
+      } else {
+        const snaps = u.quota_snapshots || {};
+        const quotas = {};
+        for (const k of Object.keys(snaps)) {
+          const s = snaps[k] || {};
+          quotas[k] = {
+            quota_id: typeof s.quota_id === 'string' ? s.quota_id : k,
+            entitlement: s.entitlement,
+            quota_remaining: s.quota_remaining,
+            percent_remaining: s.percent_remaining,
+            has_quota: s.has_quota,
+            unlimited: s.unlimited,
+            timestamp_utc: s.timestamp_utc,
+          };
+        }
+        const rd = u.quota_reset_date_utc;
+        out = {
+          ok: true, api: 'account.getCurrentAuth',
+          copilot_plan: u.copilot_plan || null, access_type_sku: u.access_type_sku || null,
+          quota_reset_at_ms: (typeof rd === 'string' && Number.isFinite(Date.parse(rd))) ? Date.parse(rd) : null,
+          quotas,
+        };
+      }
+    } catch (e) { notes.push('getCurrentAuth: ' + mask((e && e.message) || e)); }
+  } else {
+    notes.push('getCurrentAuth: このSDKには無い');
   }
-  const rd = u.quota_reset_date_utc;
-  const resetMs = (typeof rd === 'string' && Number.isFinite(Date.parse(rd))) ? Date.parse(rd) : null;
-  return emit({ ok: true, copilot_plan: u.copilot_plan || null, access_type_sku: u.access_type_sku || null, quota_reset_at_ms: resetMs, quotas });
+  // 経路 A-2: getQuota (FR-C-130 が第一候補とする公開 API)。getCurrentAuth が
+  // 無い SDK が実在する。劣化射影だが付与額と残率は取れる (OQ-06)
+  if (!out && typeof acct.getQuota === 'function') {
+    try {
+      const q = await acct.getQuota();
+      const snaps = (q && q.quotaSnapshots) || {};
+      const quotas = {};
+      for (const k of Object.keys(snaps)) {
+        const s = snaps[k] || {};
+        const ent = s.entitlementRequests;
+        const pct = s.remainingPercentage;
+        quotas[k] = {
+          quota_id: k,
+          entitlement: ent,
+          // usedRequests は整数丸めで率と整合しない。残率から小数で戻す (ADR-0015)
+          quota_remaining: (typeof ent === 'number' && typeof pct === 'number') ? ent * pct / 100 : undefined,
+          percent_remaining: pct,
+          has_quota: s.hasQuota,
+          unlimited: s.unlimited,
+        };
+      }
+      // resetDate はリセット日ではなく観測時刻 (OQ-06)。リセット日はこの API では取れない
+      out = { ok: true, api: 'account.getQuota', copilot_plan: null, access_type_sku: null, quota_reset_at_ms: null, quotas };
+    } catch (e) { notes.push('getQuota: ' + mask((e && e.message) || e)); }
+  } else if (!out) {
+    notes.push('getQuota: このSDKには無い');
+  }
+  try { await client.stop(); } catch (_) { }
+  if (out) return emit(out);
+  // 何が使えるかを添える。名前だけなので認証情報は含まない (INV-2)
+  const names = Object.keys(acct).filter((k) => typeof acct[k] === 'function');
+  return emit({ ok: false, error: notes.join(' / ') + ' -- account が持つ関数: ' + (names.join(',') || '(なし)') });
 };
 run().catch((e) => emit({ ok: false, error: mask((e && e.message) || e) }));
 "#;
@@ -97,6 +151,9 @@ struct BridgeOutput {
     ok: bool,
     #[serde(default)]
     error: Option<String>,
+    /// 実際に使えた SDK の API 名。SDK のバージョンで変わるので記録する
+    #[serde(default)]
+    api: Option<String>,
     #[serde(default)]
     quota_reset_at_ms: Option<i64>,
     #[serde(default)]
@@ -384,6 +441,13 @@ pub async fn fetch_sdk() -> Result<(HashMap<String, RawObservation>, Option<i64>
         ));
     }
 
+    // どちらの API で取れたかは SDK のバージョン差の手がかりになる (OQ-06)
+    tracing::info!(
+        api = %parsed.api.as_deref().unwrap_or("不明"),
+        quotas = parsed.quotas.len(),
+        "利用枠を取得しました"
+    );
+
     let reset_at = parsed.quota_reset_at_ms;
     let mut observations = HashMap::new();
     for (key, q) in parsed.quotas {
@@ -515,7 +579,9 @@ pub fn build_gauges(
 ) -> Vec<QuotaGauge> {
     match sdk {
         Ok((observations, _reset_at)) => {
-            cache.sdk = RouteStatus::ok("account.getCurrentAuth");
+            // 使えた API は SDK のバージョンで変わる (getCurrentAuth / getQuota)。
+            // ここで名前を騙らない。実際に使った API 名はログに出る
+            cache.sdk = RouteStatus::ok("Copilot SDK");
             // 実値があるので推定は走らせていない。「使えない」と書かない (NFR-43)
             cache.estimate_route = RouteStatus::down(
                 "実値が取れているため使用しません".to_string(),
@@ -841,5 +907,107 @@ mod tests {
             1,
             "結果行は 1 本だけ。2 本出ると読む側が取り違える"
         );
+    }
+
+    /// 偽 SDK を書いて橋渡しを走らせる。ネットワークには出ない。
+    /// node が無い環境では `None` (呼び出し側が読み飛ばす)
+    async fn bridge_with_fake_sdk(name: &str, source: &str) -> Option<BridgeOutput> {
+        let sdk = std::env::temp_dir().join(format!("ghd-fake-sdk-{name}.mjs"));
+        std::fs::write(&sdk, source).expect("偽 SDK を書ける");
+
+        let mut cmd = bridge_command();
+        cmd.env("GHD_SDK_PATH", &sdk).env_remove("GHD_CLI_PATH");
+        let out = run_bridge(cmd).await.ok()?;
+        let _ = std::fs::remove_file(&sdk);
+
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        Some(parse_bridge_stdout(&stdout).unwrap_or_else(|| {
+            panic!(
+                "橋渡しが結果を返しません。stdout={stdout:?} stderr={:?}",
+                String::from_utf8_lossy(&out.stderr)
+            )
+        }))
+    }
+
+    /// **2026-09-17 実測 (Copilot Business 契約 PC)**: `getCurrentAuth` を持たない
+    /// SDK が実在する (`client.rpc.account.getCurrentAuth is not a function`)。
+    /// FR-C-130 が第一候補とする `getQuota` に落ちて取得できること。
+    #[tokio::test]
+    async fn falls_back_to_get_quota_when_get_current_auth_is_absent() {
+        let source = r#"
+export class CopilotClient {
+  constructor() {
+    this.rpc = { account: { getQuota: async () => ({ quotaSnapshots: {
+      chat: { entitlementRequests: 200, remainingPercentage: 99.2, usedRequests: 2, hasQuota: true },
+    } }) } };
+  }
+  async start() {}
+  async stop() {}
+}
+"#;
+        let Some(parsed) = bridge_with_fake_sdk("getquota", source).await else {
+            eprintln!("node が無いので読み飛ばします");
+            return;
+        };
+        assert!(parsed.ok, "getQuota に降りて取得できる: {:?}", parsed.error);
+        assert_eq!(parsed.api.as_deref(), Some("account.getQuota"));
+        let chat = &parsed.quotas["chat"];
+        assert_eq!(chat.entitlement, Some(200.0));
+        assert_eq!(chat.percent_remaining, Some(99.2));
+        assert_eq!(chat.has_quota, Some(true));
+        // 整数丸めの usedRequests (2) を使わず、残率から小数で戻す (ADR-0015)
+        let rem = chat.quota_remaining.expect("残量が率から戻る");
+        assert!((rem - 198.4).abs() < 1e-9, "200 × 99.2% = 198.4 のはず: {rem}");
+        // リセット日は getQuota からは取れない。resetDate は観測時刻 (OQ-06)
+        assert_eq!(parsed.quota_reset_at_ms, None);
+    }
+
+    /// **2026-09-17 実測**: 画面に `clie...(redacted,len=33) is not a function` としか
+    /// 出ず、原因 (`client.rpc.account.getCurrentAuth`) が読めなかった。
+    /// 識別子チェーンは伏せない。トークンは伏せる (INV-2)。
+    #[tokio::test]
+    async fn masking_keeps_identifier_chains_and_hides_tokens() {
+        let source = r#"
+export class CopilotClient {
+  constructor() { this.rpc = { account: {} }; }
+  async start() { throw new Error('client.rpc.account.getCurrentAuth is not a function token=ghp_0123456789abcdefghijABCDEFGHIJ'); }
+  async stop() {}
+}
+"#;
+        let Some(parsed) = bridge_with_fake_sdk("masking", source).await else {
+            eprintln!("node が無いので読み飛ばします");
+            return;
+        };
+        assert!(!parsed.ok);
+        let err = parsed.error.expect("理由が返る");
+        assert!(
+            err.contains("client.rpc.account.getCurrentAuth"),
+            "識別子チェーンを伏せると診断できない: {err}"
+        );
+        assert!(
+            !err.contains("0123456789abcdefghij"),
+            "トークンは伏せる (INV-2): {err}"
+        );
+        assert!(err.contains("redacted"), "伏せた印は残す: {err}");
+    }
+
+    /// どちらの API も無い SDK では、何が使えるかを添えて返す (FR-C-83)。
+    /// 関数名だけなので認証情報は含まない (INV-2)
+    #[tokio::test]
+    async fn unknown_account_api_reports_what_is_available() {
+        let source = r#"
+export class CopilotClient {
+  constructor() { this.rpc = { account: { getAllUsers: async () => ({}) } }; }
+  async start() {}
+  async stop() {}
+}
+"#;
+        let Some(parsed) = bridge_with_fake_sdk("unknown-api", source).await else {
+            eprintln!("node が無いので読み飛ばします");
+            return;
+        };
+        assert!(!parsed.ok);
+        let err = parsed.error.expect("理由が返る");
+        assert!(err.contains("getAllUsers"), "使える関数名を添える: {err}");
     }
 }

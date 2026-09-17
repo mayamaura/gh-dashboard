@@ -35,7 +35,7 @@
 <tr><td><span class="chip id">OQ-03</span></td><td>VS Code の <code>chatSessions</code> とハッシュ</td><td><strong>一部判明</strong></td><td>ハッシュ再計算は 20 中 6 しか当たらない</td></tr>
 <tr><td><span class="chip id">OQ-04</span></td><td>稼働中セッションの検出</td><td><strong>一部判明</strong></td><td><code>ide/*.lock</code> は CLI の生死と対応しない (決定的な否定)</td></tr>
 <tr><td><span class="chip id">OQ-05</span></td><td><code>session-store.db</code> を安全に読めるか</td><td><strong>一部判明</strong></td><td>書き込み中でも 12/12 読めた。ただし writer 不在時は未測定</td></tr>
-<tr><td><span class="chip id">OQ-06</span></td><td>経路 A (Copilot SDK) が返す利用枠</td><td><strong>一部判明</strong></td><td><code>getCurrentAuth</code> なら 3 枠 + 付与額 + 月次リセット日が取れる。<code>getQuota</code> は劣化射影。<strong>2026-09-12 にプラン変更で 3 枠の値が裏返り、<code>unlimited: true</code> を実観測</strong></td></tr>
+<tr><td><span class="chip id">OQ-06</span></td><td>経路 A (Copilot SDK) が返す利用枠</td><td><strong>一部判明</strong></td><td><code>getCurrentAuth</code> なら 3 枠 + 付与額 + 月次リセット日が取れる。<code>getQuota</code> は劣化射影。<strong>2026-09-12 にプラン変更で 3 枠の値が裏返り、<code>unlimited: true</code> を実観測。2026-09-17、<code>getCurrentAuth</code> を持たない SDK が Business 契約 PC で実在した</strong></td></tr>
 <tr><td><span class="chip id">OQ-07</span></td><td>サブエージェント / 委任</td><td><strong>確定</strong></td><td>存在する。親子とも <code>toolCallId</code> を持つ。<strong>縮退不要</strong></td></tr>
 <tr><td><span class="chip id">OQ-08</span></td><td>SDK / REST の認証と<strong>Rust からの呼び出し</strong></td><td><strong>一部判明</strong></td><td><strong>Rust → Node 子プロセス → CLI 同梱 SDK で実機成功 (ADR-0028)。認証情報は扱わない。</strong> REST は <code>gh</code> のトークンで通るが <code>user</code> スコープが無い</td></tr>
 <tr><td><span class="chip id">OQ-09</span></td><td>古いセッションの自動削除</td><td><strong>未調査</strong></td><td>据え置き。観測期間が 1 時間では何も言えない</td></tr>
@@ -625,6 +625,25 @@ quota_reset_date_utc : 2026-10-01T00:00:00.000Z</code></pre>
 <li><strong>同じ枠名の意味がプランで反転する。</strong> T-0.8 の観測だけを根拠に「<code>premium_interactions</code> は適用外の枠」といった特別扱いをコードに書いていたら、4 日で壊れていた。<strong>ADR-0010 / ADR-0015 の「枠の名前・付与額をコードに埋め込まない」がそのまま効いた</strong></li>
 </ul>
 <p><strong>この数字から言えないこと</strong>: <strong>プラン変更の前後で測ったつもりは無く、いつ何が変わったのかを追跡していない</strong> (2 点の観測があるだけ)。<code>entitlement: 1500</code> の単位も相変わらず不明 (ADR-0010)。<strong>超過 (<code>overage_*</code>) は依然として 1 件も観測していない</strong> — FR-C-90 の実データ検証は未達。</p>
+<h3 id="oq-06-2026-09-17-getcurrentauth-を持たない-sdk-が実在した-business-契約">[2026-09-17] <code>getCurrentAuth</code> を持たない SDK が実在した (Copilot Business 契約 PC)</h3>
+<p><strong>ユーザーの Copilot Business 契約 PC で、利用枠が推定にしか降りなかった。</strong> 画面に出た理由は <code>SDK 呼び出しに失敗しました: clie...(redacted,len=33) is not a function</code>。伏せられた 33 字は <code>client.rpc.account.getCurrentAuth</code> (ちょうど 33 字) である。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>分かったこと</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td><strong><code>account.getCurrentAuth</code> を持たない SDK が実在する</strong></td><td>実機のエラーが <code>... is not a function</code>。<code>client.rpc.account</code> 自体は存在する (undefined なら <code>Cannot read properties of undefined</code> になる)</td></tr>
+<tr><td>原因は組織 / Enterprise 管理下かどうかではなく<strong>SDK のバージョン差</strong>である可能性が高い</td><td><code>rpc.account</code> は SDK の JS に<strong>静的に定義されたオブジェクト</strong> (1.0.79 の <code>index.js</code> 3630 行付近)。認証状態やプランで生えたり消えたりしない</td></tr>
+<tr><td>測定機 (個人 / <code>individual</code>) の 3 版にはいずれも <code>getCurrentAuth</code> と <code>getQuota</code> の両方がある</td><td><code>pkg/win32-x64/1.0.79</code> / <code>1.0.79-9</code> / <code>Programs/GitHub Copilot</code> を <code>grep</code></td></tr>
+<tr><td><strong>マスク処理が診断を潰していた</strong></td><td><code>[A-Za-z0-9._-]{24,}</code> が識別子チェーンを誤爆する。<strong>トークンでない文字列を伏せると、原因が読めなくなる</strong></td></tr>
+</tbody></table></div>
+<p><strong>対処 (2026-09-17)</strong>: マスクの判定を「区切り (<code>.</code> / <code>_</code> / <code>-</code>) を除いた最長セグメントが 20 字以上」に変更し、<code>gh*_</code> 接頭辞は従来どおり伏せる。あわせて <strong>FR-C-130 が第一候補として名指ししている <code>account.getQuota</code> へのフォールバック</strong>を実装した。<code>usedRequests</code> は整数丸めなので使わず、<strong><code>entitlementRequests × remainingPercentage ÷ 100</code> で小数の残量を戻す</strong> (ADR-0015)。</p>
+<h3 id="oq-06-2026-09-17-この対処から言えないこと">この対処から言えないこと</h3>
+<ul>
+<li><strong>その PC の SDK で <code>getQuota</code> が使えるかは未確認。</strong> 実装したのは「<code>getCurrentAuth</code> が無ければ <code>getQuota</code> を試す」であって、<strong><code>getQuota</code> が存在する保証はどこにも無い</strong>。両方無ければ <code>account</code> が持つ関数名を添えて取得不可を返す (FR-C-83)</li>
+<li><strong>その PC の SDK のバージョンも、配置も分かっていない。</strong> 「バージョン差である可能性が高い」は測定機の SDK 構造からの推論で、当該 PC では 1 バイトも読んでいない</li>
+<li><strong><code>getQuota</code> 経路ではリセット日が取れない。</strong> <code>resetDate</code> は観測時刻であってリセット日ではない (上記)。したがって <strong>FR-C-85 のロールオーバー除外が効かない</strong> — 期限切れの値をそのまま出す窓が開く</li>
+<li><strong><code>getQuota</code> が <code>unlimited</code> を返すかは未確認</strong> (10 フィールドの内訳を実測していない)。返らなければ <code>entitlement: 0</code> + <code>unlimited: true</code> の枠が「付与 0」として出る</li>
+<li>組織 / Enterprise 管理下で <code>quota_snapshots</code> のキーや <code>entitlement</code> の意味が同じかは、<strong>依然として 1 件も実測していない</strong> (OQ-12 の「(c) 組織 / Enterprise は試行対象そのものが無かった」と同じ状態)</li>
+</ul>
 <hr />
 <h2 id="oq-07-サブエージェント-委任タスクの概念があるか">OQ-07 — サブエージェント / 委任タスクの概念があるか</h2>
 <p><strong>状態</strong>: <strong>確定</strong> — 存在する。<strong>縮退不要</strong></p>
