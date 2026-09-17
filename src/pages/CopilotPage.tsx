@@ -8,7 +8,13 @@ import { SessionDetailPanel } from '../components/SessionDetailPanel'
 import { useIsViewing } from '../hooks/useWindowVisible'
 import { shouldAutoIndex, useLivePoll } from '../hooks/useLivePoll'
 import { useQuotaPoll } from '../hooks/useQuotaPoll'
-import { indexRefresh, quotaGet, snapshotGet, usageTodayGet } from '../ipc/commands'
+import {
+  indexRefresh,
+  quotaGet,
+  quotaSourceStatusGet,
+  snapshotGet,
+  usageTodayGet,
+} from '../ipc/commands'
 import { appStore, pushNotice, useAppStore } from '../store/appStore'
 import {
   activityLabel,
@@ -32,6 +38,7 @@ export function CopilotPage() {
   const {
     snapshot,
     quota,
+    quotaSourceStatus,
     usageToday,
     lastIndexedAt,
     indexing,
@@ -80,6 +87,13 @@ export function CopilotPage() {
       if (usage.status === 'fulfilled') {
         appStore.set({ usageToday: usage.value })
       }
+      // 経路 A/B/C がなぜ使えないかは quota には残らない (FR-C-144)。別途読む (FR-C-83)。
+      // 失敗しても他の取得は止めない (NFR-24)
+      void quotaSourceStatusGet()
+        .then((status) => {
+          if (!cancelled) appStore.set({ quotaSourceStatus: status })
+        })
+        .catch(() => {})
     })()
     return () => {
       cancelled = true
@@ -160,6 +174,14 @@ export function CopilotPage() {
               <QuotaGaugeRow key={g.kind} gauge={g} now={now} />
             ))}
           </div>
+        )}
+        {/* FR-C-83: 経路 A (SDK) が使えないときの理由。推定/取得不可に降格した時点で
+            quota ゲージ自体からは失敗理由が失われる (FR-C-144) ので、別経路で補う */}
+        {quotaSourceStatus && !quotaSourceStatus.sdk.available && (
+          <p className="note-inline">
+            実値 (SDK) が使えません: {quotaSourceStatus.sdk.reason}
+            {quotaSourceStatus.sdk.how_to_fix && ` — ${quotaSourceStatus.sdk.how_to_fix}`}
+          </p>
         )}
         {/* NFR-45: 金額は概算であることを必ず添える (該当するのは $ 換算を出す場合のみ。
             現状 monthly_credits は $ を表示しないため、単位について誤解させない注記にする) */}

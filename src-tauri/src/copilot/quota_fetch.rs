@@ -365,10 +365,13 @@ pub async fn fetch_sdk() -> Result<(HashMap<String, RawObservation>, Option<i64>
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     let parsed = parse_bridge_stdout(&stdout).ok_or_else(|| {
+        // stderr は BRIDGE_SCRIPT の mask() を経由していない生ログ (INV-2)。
+        // 画面向けの reason に含めず、ログにだけ残す
         let stderr = String::from_utf8_lossy(&out.stderr);
         let tail: String = stderr.lines().rev().take(3).collect::<Vec<_>>().join(" / ");
+        tracing::warn!(stderr_tail = %truncate(&tail, 300), "橋渡しの出力を読めません");
         RouteStatus::down(
-            format!("橋渡しの出力を読めません: {}", truncate(&tail, 300)),
+            "橋渡しの出力を読めませんでした (詳細はログを参照)".to_string(),
             Some("copilot コマンドが動作するか確認してください".to_string()),
         )
     })?;

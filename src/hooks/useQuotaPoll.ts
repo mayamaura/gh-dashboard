@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 
-import { quotaGet } from '../ipc/commands'
+import { quotaGet, quotaSourceStatusGet } from '../ipc/commands'
 import { appStore } from '../store/appStore'
 
 export const QUOTA_POLL_INTERVAL_MS = 5 * 60_000
@@ -32,6 +32,15 @@ export function useQuotaPoll(enabled: boolean): QuotaPollResult {
     try {
       const next = await quotaGet(force)
       appStore.set({ quota: next, quotaFetchedAt: Date.now() })
+      // quota_get の直後に読む。新規取得は起こさない読み取り専用コマンドなので
+      // ここで追加のネットワークアクセスにはならない (INV-4)。
+      // 失敗しても quota 本体の表示は止めない (NFR-24)
+      try {
+        const status = await quotaSourceStatusGet()
+        appStore.set({ quotaSourceStatus: status })
+      } catch {
+        // 理由の表示が出ないだけ。quota 本体は既に反映済み
+      }
     } finally {
       inFlight.current = false
     }

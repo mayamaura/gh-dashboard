@@ -15,6 +15,7 @@ import type {
   IndexProgress,
   ProjectsSnapshot,
   QuotaGauge,
+  QuotaSourceStatus,
   UsageToday,
 } from '../types/dto'
 
@@ -50,6 +51,8 @@ export interface AppStoreState {
   // --- タブ切替時に即描画するためのスナップショット (FR-C-164 / FR-P-86) ---
   snapshot: DbSnapshot | null
   quota: QuotaGauge[] | null
+  /** 経路 A/B/C それぞれがなぜ使えないか (FR-C-83)。経路 C への降格自体には理由が残らないので、これで補う */
+  quotaSourceStatus: QuotaSourceStatus | null
   usageToday: UsageToday | null
   projects: ProjectsSnapshot | null
 
@@ -77,6 +80,7 @@ const initial: AppStoreState = {
   quotaFetchedAt: null,
   snapshot: null,
   quota: null,
+  quotaSourceStatus: null,
   usageToday: null,
   projects: null,
   projectsScanning: false,
